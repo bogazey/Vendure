@@ -21,10 +21,12 @@ from yt_dlp.utils import DownloadCancelled
 
 from app.config.logging_config import get_logger
 from app.database import history_repo
+from app.database.commercial_db import session_scope
 from app.models.enums import ContainerMode, DownloadStage, MediaType, Platform
 from app.models.schemas import AppSettings, CreateDownloadRequest, DownloadJobOut
 from app.services import ytdlp_service
 from app.services.settings_service import get_settings
+from app.services.usage_service import usage_service
 from app.utils.exceptions import (
     FfmpegMissingError,
     FfmpegProcessingError,
@@ -51,6 +53,8 @@ class DownloadJob:
     id: str
     request: CreateDownloadRequest
     platform: Platform
+    user_id: Optional[str] = None
+    reservation_id: Optional[str] = None
     title: Optional[str] = None
     uploader: Optional[str] = None
     thumbnail: Optional[str] = None
@@ -106,16 +110,21 @@ class DownloadManager:
         with self._lock:
             return self._revision
 
-    def list_jobs(self) -> list[DownloadJobOut]:
+    def list_jobs(self, user_id: Optional[str] = None) -> list[DownloadJobOut]:
         with self._lock:
             jobs = list(self._jobs.values())
+        if user_id is not None:
+            jobs = [j for j in jobs if j.user_id == user_id]
         jobs.sort(key=lambda j: j.created_at, reverse=True)
         return [j.to_out() for j in jobs]
 
-    def get_job(self, job_id: str) -> DownloadJob:
+    def get_job(self, job_id: str, user_id: Optional[str] = None) -> DownloadJob:
         with self._lock:
             job = self._jobs.get(job_id)
-        if job is None:
+        # Scoped lookups treat "exists but belongs to someone else" the same
+        # as "doesn't exist" - never leak another user's job via a 403 vs 404
+        # distinction.
+        if job is None or (user_id is not None and job.user_id != user_id):
             raise JobNotFoundError("Download job not found.")
         return job
 
@@ -126,21 +135,37 @@ class DownloadManager:
             self._semaphore_limit = settings.max_concurrent_downloads
         return self._semaphore
 
-    def create_job(self, request: CreateDownloadRequest) -> DownloadJob:
+    def create_job(
+        self,
+        request: CreateDownloadRequest,
+        job_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        reservation_id: Optional[str] = None,
+    ) -> DownloadJob:
         platform = detect_platform(request.url)
-        job = DownloadJob(id=str(uuid.uuid4()), request=request, platform=platform)
+        job = DownloadJob(
+            id=job_id or str(uuid.uuid4()),
+            request=request,
+            platform=platform,
+            user_id=user_id,
+            reservation_id=reservation_id,
+        )
         with self._lock:
             self._jobs[job.id] = job
             self._revision += 1
         asyncio.create_task(self._run_job(job.id))
         return job
 
-    def cancel_job(self, job_id: str) -> None:
-        job = self.get_job(job_id)
+    def cancel_job(self, job_id: str, user_id: Optional[str] = None) -> None:
+        job = self.get_job(job_id, user_id=user_id)
         job.cancel_event.set()
         logger.info("Cancellation requested for job %s", job_id)
 
     def retry_job(self, history_id: str) -> DownloadJob:
+        """Lower-level retry with no gating/ownership check - kept for
+        programmatic/test use. routes_downloads.retry_download re-implements
+        this with an ownership-scoped lookup and a fresh entitlement check
+        instead of calling this directly."""
         record = history_repo.get(history_id)
         if record is None:
             raise JobNotFoundError("History record not found.")
@@ -369,12 +394,35 @@ class DownloadManager:
                 technical=(stderr_output or "").strip()[-4000:] or None,
             )
 
+    def _finalize_usage(self, job: DownloadJob, committed: bool) -> None:
+        """Settle this job's credit reservation: commit it on a genuine
+        success, or give it back on failure/cancellation. Runs against the
+        commercial DB directly (session_scope) since a background job has no
+        FastAPI request-scoped session to reuse."""
+        if not job.reservation_id:
+            return
+        session = session_scope()
+        try:
+            if committed:
+                usage_service.commit(session, job.reservation_id)
+            else:
+                usage_service.refund(session, job.reservation_id)
+            session.commit()
+        except Exception:
+            session.rollback()
+            logger.exception(
+                "Failed to finalize usage for job %s (reservation %s)", job.id, job.reservation_id
+            )
+        finally:
+            session.close()
+
     def _finish_as_completed(self, job: DownloadJob) -> None:
         job.stage = DownloadStage.COMPLETED
         job.progress_percent = 100.0
         job.completed_at = _now_iso()
         self._bump_revision()
         self._save_history(job)
+        self._finalize_usage(job, committed=True)
         logger.info("Job %s completed", job.id)
 
     def _finish_as_cancelled(self, job: DownloadJob) -> None:
@@ -383,6 +431,7 @@ class DownloadManager:
         job.error_message = "Cancelled by user."
         self._bump_revision()
         self._save_history(job)
+        self._finalize_usage(job, committed=False)
         logger.info("Job %s cancelled", job.id)
 
     def _finish_as_failed(self, job: DownloadJob, exc: Exception) -> None:
@@ -392,6 +441,7 @@ class DownloadManager:
         job.error_technical = getattr(exc, "technical", None)
         self._bump_revision()
         self._save_history(job)
+        self._finalize_usage(job, committed=False)
         logger.error("Job %s failed: %s", job.id, job.error_message)
 
     def _save_history(self, job: DownloadJob) -> None:
@@ -433,6 +483,7 @@ class DownloadManager:
                 "status": job.stage.value,
                 "error_message": job.error_message,
                 "request_json": job.request.model_dump_json(),
+                "user_id": job.user_id,
             }
         )
 

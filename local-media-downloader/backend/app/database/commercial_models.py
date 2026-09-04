@@ -1,0 +1,173 @@
+"""SQLAlchemy ORM models for the commercial layer.
+
+Column types are chosen to be portable between SQLite (local dev) and
+PostgreSQL (production): primary keys are UUID strings (String(36)) rather
+than a DB-specific UUID type, timestamps are timezone-aware, and JSON columns
+use SQLAlchemy's generic JSON type (TEXT-backed on SQLite, native on
+Postgres).
+"""
+from __future__ import annotations
+
+import uuid
+from datetime import datetime, timezone
+
+from sqlalchemy import (
+    Boolean,
+    ForeignKey,
+    Integer,
+    JSON,
+    String,
+    UniqueConstraint,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.database.commercial_db import Base
+from app.database.sa_types import UTCDateTime
+
+
+def _uuid() -> str:
+    return str(uuid.uuid4())
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    email: Mapped[str] = mapped_column(String(320), unique=True, index=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), default=_now, onupdate=_now, nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
+    role: Mapped[str] = mapped_column(String(20), default="user", nullable=False)
+
+    subscriptions: Mapped[list["Subscription"]] = relationship(back_populates="user")
+    usage_periods: Mapped[list["UsagePeriod"]] = relationship(back_populates="user")
+
+
+class Subscription(Base):
+    __tablename__ = "subscriptions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True, nullable=False)
+    provider: Mapped[str] = mapped_column(String(30), default="paddle", nullable=False)
+    provider_customer_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    provider_subscription_id: Mapped[str | None] = mapped_column(String(120), index=True, nullable=True)
+    plan: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="none", nullable=False)
+    current_period_start: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    current_period_end: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), default=_now, onupdate=_now, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="subscriptions")
+
+
+class UsagePeriod(Base):
+    """The user's current billing/usage window: how many credits (or free
+    downloads) they have, and how many they've used. One active row per user
+    at a time in practice, but kept as a history table (not upserted) so past
+    periods remain auditable."""
+
+    __tablename__ = "usage_periods"
+    __table_args__ = (UniqueConstraint("user_id", "period_start", name="uq_usage_period_user_start"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True, nullable=False)
+    period_start: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    period_end: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    credits_included: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    credits_used: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    daily_free_downloads_used: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_free_reset: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+
+    user: Mapped["User"] = relationship(back_populates="usage_periods")
+
+
+class UsageEvent(Base):
+    """Append-only audit log of every credit lifecycle transition (reserve /
+    commit / refund / admin grant / reward grant)."""
+
+    __tablename__ = "usage_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True, nullable=False)
+    type: Mapped[str] = mapped_column(String(20), nullable=False)
+    credits: Mapped[int] = mapped_column(Integer, nullable=False)
+    download_job_id: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
+    event_metadata: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+
+
+class Entitlement(Base):
+    """Ad-hoc feature grants layered on top of the plan (e.g. an admin grant,
+    a promo, a future rewarded-ad unlock) - most feature checks go through
+    PlanPolicy instead; this is for exceptions to the plan's normal rules."""
+
+    __tablename__ = "entitlements"
+    __table_args__ = (UniqueConstraint("user_id", "feature", name="uq_entitlement_user_feature"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True, nullable=False)
+    feature: Mapped[str] = mapped_column(String(60), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    source: Mapped[str] = mapped_column(String(60), nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+
+
+class BillingEvent(Base):
+    """Every processed (or rejected) Paddle webhook event, keyed by the
+    provider's own event id, so duplicate deliveries are a safe no-op."""
+
+    __tablename__ = "billing_events"
+
+    provider_event_id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    event_type: Mapped[str] = mapped_column(String(60), nullable=False)
+    processed_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+
+
+class RefreshToken(Base):
+    """Server-side record of issued refresh tokens, so a single session can
+    be revoked (logout, password reset) without invalidating every session."""
+
+    __tablename__ = "refresh_tokens"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True, nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True, nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+
+
+class EmailVerificationToken(Base):
+    __tablename__ = "email_verification_tokens"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True, nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)

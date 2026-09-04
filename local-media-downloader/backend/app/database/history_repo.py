@@ -33,17 +33,17 @@ def _row_to_record(row: sqlite3.Row) -> HistoryRecordOut:
 
 
 def upsert(record: dict) -> None:
-    record = {"request_json": None, **record}
+    record = {"request_json": None, "user_id": None, **record}
     with get_cursor() as cur:
         cur.execute(
             """
             INSERT INTO history (
                 id, url, platform, title, uploader, thumbnail, format_label,
                 resolution, filepath, filesize, created_at, completed_at,
-                status, error_message, request_json
+                status, error_message, request_json, user_id
             ) VALUES (:id, :url, :platform, :title, :uploader, :thumbnail,
                 :format_label, :resolution, :filepath, :filesize, :created_at,
-                :completed_at, :status, :error_message, :request_json)
+                :completed_at, :status, :error_message, :request_json, :user_id)
             ON CONFLICT(id) DO UPDATE SET
                 url=excluded.url, platform=excluded.platform, title=excluded.title,
                 uploader=excluded.uploader, thumbnail=excluded.thumbnail,
@@ -51,7 +51,8 @@ def upsert(record: dict) -> None:
                 filepath=excluded.filepath, filesize=excluded.filesize,
                 completed_at=excluded.completed_at, status=excluded.status,
                 error_message=excluded.error_message,
-                request_json=COALESCE(excluded.request_json, history.request_json)
+                request_json=COALESCE(excluded.request_json, history.request_json),
+                user_id=COALESCE(history.user_id, excluded.user_id)
             """,
             record,
         )
@@ -69,9 +70,13 @@ def list_records(
     platform: Optional[str] = None,
     status: Optional[str] = None,
     order: str = "newest",
+    user_id: Optional[str] = None,
 ) -> list[HistoryRecordOut]:
     query = "SELECT * FROM history WHERE 1=1"
     params: list = []
+    if user_id is not None:
+        query += " AND user_id = ?"
+        params.append(user_id)
     if search:
         query += " AND (title LIKE ? OR uploader LIKE ? OR url LIKE ?)"
         like = f"%{search}%"
@@ -90,23 +95,34 @@ def list_records(
     return [_row_to_record(r) for r in rows]
 
 
-def get(record_id: str) -> Optional[HistoryRecordOut]:
+def get(record_id: str, user_id: Optional[str] = None) -> Optional[HistoryRecordOut]:
     with get_cursor() as cur:
-        cur.execute("SELECT * FROM history WHERE id = ?", (record_id,))
+        if user_id is not None:
+            cur.execute("SELECT * FROM history WHERE id = ? AND user_id = ?", (record_id, user_id))
+        else:
+            cur.execute("SELECT * FROM history WHERE id = ?", (record_id,))
         row = cur.fetchone()
     return _row_to_record(row) if row else None
 
 
-def delete(record_id: str) -> None:
+def delete(record_id: str, user_id: Optional[str] = None) -> None:
     with get_cursor() as cur:
-        cur.execute("DELETE FROM history WHERE id = ?", (record_id,))
+        if user_id is not None:
+            cur.execute("DELETE FROM history WHERE id = ? AND user_id = ?", (record_id, user_id))
+        else:
+            cur.execute("DELETE FROM history WHERE id = ?", (record_id,))
 
 
-def clear_all() -> list[HistoryRecordOut]:
+def clear_all(user_id: Optional[str] = None) -> list[HistoryRecordOut]:
     with get_cursor() as cur:
-        cur.execute("SELECT * FROM history")
-        rows = [_row_to_record(r) for r in cur.fetchall()]
-        cur.execute("DELETE FROM history")
+        if user_id is not None:
+            cur.execute("SELECT * FROM history WHERE user_id = ?", (user_id,))
+            rows = [_row_to_record(r) for r in cur.fetchall()]
+            cur.execute("DELETE FROM history WHERE user_id = ?", (user_id,))
+        else:
+            cur.execute("SELECT * FROM history")
+            rows = [_row_to_record(r) for r in cur.fetchall()]
+            cur.execute("DELETE FROM history")
     return rows
 
 

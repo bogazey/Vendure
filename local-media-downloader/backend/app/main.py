@@ -15,7 +15,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api import (
+    routes_account,
+    routes_admin,
     routes_analyze,
+    routes_auth,
+    routes_billing,
     routes_downloads,
     routes_filesystem,
     routes_health,
@@ -68,7 +72,10 @@ LOCAL_ORIGINS = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=LOCAL_ORIGINS,
-    allow_credentials=False,
+    # Auth cookies require credentialed CORS; the origin list above still
+    # pins this to the local frontend only (allow_credentials=True does NOT
+    # imply wildcard origins - FastAPI/Starlette refuses "*" with credentials).
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Content-Type"],
 )
@@ -78,7 +85,7 @@ app.add_middleware(
 async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
-        content={"message": exc.message, "technical": exc.technical},
+        content={"message": exc.message, "technical": exc.technical, "code": exc.code},
     )
 
 
@@ -95,6 +102,10 @@ async def unhandled_error_handler(request: Request, exc: Exception) -> JSONRespo
 
 
 app.include_router(routes_health.router)
+app.include_router(routes_auth.router)
+app.include_router(routes_account.router)
+app.include_router(routes_billing.router)
+app.include_router(routes_admin.router)
 app.include_router(routes_analyze.router)
 app.include_router(routes_downloads.router)
 app.include_router(routes_history.router)
