@@ -29,6 +29,22 @@ REM 3. Install backend requirements if needed
 echo -^> Installing backend dependencies...
 pip install --disable-pip-version-check -q -r "%BACKEND_DIR%\requirements.txt"
 
+REM 3b. Commercial layer: generate backend\.env with a real SECRET_KEY on
+REM first run (otherwise a random per-process secret invalidates sessions on
+REM every restart), then apply DB migrations.
+if not exist "%BACKEND_DIR%\.env" (
+  echo -^> First run: creating backend\.env with a generated SECRET_KEY...
+  for /f "delims=" %%S in ('python -c "import secrets; print(secrets.token_hex(32))"') do set "GENERATED_SECRET=%%S"
+  > "%BACKEND_DIR%\.env" (
+    echo SECRET_KEY=!GENERATED_SECRET!
+    echo PADDLE_ENV=sandbox
+  )
+)
+echo -^> Applying commercial database migrations...
+pushd "%BACKEND_DIR%"
+python -m alembic upgrade head
+popd
+
 REM 4. Verify FFmpeg
 where ffmpeg >nul 2>nul
 if errorlevel 1 (

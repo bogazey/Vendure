@@ -4,6 +4,16 @@ A local-only web app for downloading publicly accessible media from YouTube,
 TikTok, Instagram, and Facebook by pasting a URL. Everything runs on your own
 machine — there is no cloud service, no account, and no paid API involved.
 
+> **This is the `commercial-v1` branch.** It adds an account/billing/plans
+> layer (Free/Pro/Creator, Paddle Sandbox checkout, credit-based usage
+> limits) on top of everything below, which still describes the core
+> downloader itself. For the commercial layer specifically, see
+> [`COMMERCIAL_ARCHITECTURE.md`](./COMMERCIAL_ARCHITECTURE.md) and
+> [`PADDLE_SANDBOX_TESTING.md`](./PADDLE_SANDBOX_TESTING.md). The original
+> single-user, no-account version of this app lives on the
+> `personal-stable` branch (tag `personal-v1-working`) and is unaffected by
+> any of this.
+
 > **Use responsibly.** This tool is for downloading content you are lawfully
 > allowed to access and save (your own uploads, public domain media, content
 > whose creator permits downloading, etc.). It does not circumvent DRM,
@@ -242,16 +252,40 @@ don't have access to.
 ## Testing
 
 ```bash
-# Backend (121 tests; yt-dlp and ffmpeg are mocked, no network access needed)
+# Backend (207 tests: 121 for the downloader itself - yt-dlp/ffmpeg mocked,
+# no network access needed - plus 86 for the commercial layer: auth, plan
+# gating, usage/credit reservation including a real concurrency test, Paddle
+# webhook signature/idempotency, and HTTP-level route/authorization checks)
 cd backend && source .venv/bin/activate && python -m pytest -q
 
-# Frontend
+# Frontend (39 tests: utility functions plus component tests for auth
+# context, protected routes, the header's signed-in/out states, and pricing)
 cd frontend
 npm run typecheck   # tsc, no emit
 npm run lint        # eslint
-npm run test        # vitest (pure utility functions: timecode, formatting, theme resolution)
+npm run test        # vitest + jsdom + React Testing Library
 npm run build       # production build
 ```
+
+## Commercial layer quick start
+
+`./scripts/start.sh` (or `start.bat`) handles this automatically — on first
+run it generates `backend/.env` with a random `SECRET_KEY` and applies the
+commercial database's Alembic migrations before starting both servers. To
+do it by hand:
+
+```bash
+cd backend
+cp .env.example .env   # then fill in SECRET_KEY at minimum
+source .venv/bin/activate
+python -m alembic upgrade head
+```
+
+Billing runs against **Paddle Sandbox only** — see
+[`PADDLE_SANDBOX_TESTING.md`](./PADDLE_SANDBOX_TESTING.md) before setting
+`PADDLE_*` variables. Without them, everything except checkout/billing
+works normally (Free-plan signup, downloads within the Free limits, and the
+whole commercial UI render fine with billing simply unconfigured).
 
 ## Updating yt-dlp
 
