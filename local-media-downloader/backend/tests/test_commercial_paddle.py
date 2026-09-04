@@ -12,6 +12,7 @@ from app.database.commercial_models import BillingEvent, Subscription
 from app.models.commercial_enums import BillingEventStatus, Plan, SubscriptionStatus
 from app.services import paddle_service
 from app.services.auth_service import auth_service
+from app.services.usage_service import usage_service
 
 SECRET = "whsec_test_secret"
 
@@ -123,3 +124,65 @@ class TestWebhookIdempotency:
             select(Subscription).where(Subscription.provider_subscription_id == "sub_orphan")
         ).scalars().first()
         assert sub is None
+
+
+class TestMidCyclePlanChangeCreditSync:
+    """A mid-cycle upgrade/downgrade keeps the same current_period_start, so
+    the UsagePeriod row usage_service looks up is the SAME row created under
+    the old plan - found in acceptance testing against a real Paddle Sandbox
+    account (Pro -> Creator left credits_included stuck at 150 instead of
+    500) and fixed via paddle_service._sync_usage_period_credits_for_plan_change."""
+
+    def test_upgrade_bumps_credits_included_by_the_plan_delta(self, db_session, monkeypatch):
+        monkeypatch.setattr(
+            "app.services.paddle_service.get_commercial_settings",
+            lambda: type(
+                "S",
+                (),
+                {
+                    "paddle_pro_monthly_price_id": "pri_pro_monthly",
+                    "paddle_pro_annual_price_id": "pri_pro_annual",
+                    "paddle_creator_monthly_price_id": "pri_creator_monthly",
+                    "paddle_creator_annual_price_id": "pri_creator_annual",
+                },
+            )(),
+        )
+        result = auth_service.signup(db_session, f"paddle-{uuid.uuid4().hex[:10]}@example.com", "correcthorse9!")
+        db_session.flush()
+
+        period = {"starts_at": "2026-01-01T00:00:00Z", "ends_at": "2026-02-01T00:00:00Z"}
+        sub_id = f"sub_{uuid.uuid4().hex}"
+
+        activate_data = {
+            "id": sub_id,
+            "custom_data": {"user_id": result.user.id},
+            "items": [{"price": {"id": "pri_pro_monthly"}}],
+            "status": "active",
+            "current_billing_period": period,
+        }
+        paddle_service.process_webhook_event(
+            db_session, f"evt_{uuid.uuid4().hex}", "subscription.activated", activate_data, "h1"
+        )
+        db_session.commit()
+
+        sub = db_session.execute(
+            select(Subscription).where(Subscription.provider_subscription_id == sub_id)
+        ).scalars().first()
+        usage_period = usage_service.get_or_create_current_period(db_session, result.user, Plan.PRO, sub)
+        db_session.commit()
+        assert usage_period.credits_included == 150
+
+        update_data = {
+            "id": sub_id,
+            "custom_data": {"user_id": result.user.id},
+            "items": [{"price": {"id": "pri_creator_monthly"}}],
+            "status": "active",
+            "current_billing_period": period,
+        }
+        paddle_service.process_webhook_event(
+            db_session, f"evt_{uuid.uuid4().hex}", "subscription.updated", update_data, "h2"
+        )
+        db_session.commit()
+
+        db_session.refresh(usage_period)
+        assert usage_period.credits_included == 500
