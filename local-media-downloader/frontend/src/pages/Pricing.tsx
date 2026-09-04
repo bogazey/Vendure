@@ -108,19 +108,19 @@ export default function Pricing() {
   const currentPlan = account?.subscription.plan;
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-10 px-6 py-14">
+    <div className="relative z-10 mx-auto flex max-w-5xl flex-col gap-10 px-6 py-14">
       <div className="flex flex-col items-center gap-3 text-center">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-50">Simple, transparent pricing</h1>
+        <h1 className="font-display text-3xl font-bold tracking-tight text-slate-50">Simple, transparent pricing</h1>
         <p className="max-w-xl text-sm text-slate-400">
           Start free. Upgrade when you need higher quality, more downloads, or creator tools.
         </p>
 
-        <div className="mt-2 flex items-center gap-1 rounded-lg border border-surface-border bg-surface-raised/50 p-1">
+        <div className="mt-2 flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] p-1 backdrop-blur-xl">
           <button
             type="button"
             onClick={() => setPeriod("monthly")}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              period === "monthly" ? "bg-surface-raised text-slate-50" : "text-slate-400 hover:text-slate-200"
+            className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+              period === "monthly" ? "bg-brand-gradient text-white shadow-glow" : "text-slate-400 hover:text-slate-200"
             }`}
           >
             Monthly
@@ -128,8 +128,8 @@ export default function Pricing() {
           <button
             type="button"
             onClick={() => setPeriod("annual")}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              period === "annual" ? "bg-surface-raised text-slate-50" : "text-slate-400 hover:text-slate-200"
+            className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+              period === "annual" ? "bg-brand-gradient text-white shadow-glow" : "text-slate-400 hover:text-slate-200"
             }`}
           >
             Annual <span className="text-emerald-400">save ~18%</span>
@@ -139,7 +139,7 @@ export default function Pricing() {
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
       {confirming && (
-        <p className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-4 py-2 text-center text-sm text-indigo-300">
+        <p className="rounded-2xl border border-brand-aqua/30 bg-brand-aqua/10 px-4 py-2 text-center text-sm text-brand-aqua backdrop-blur-xl">
           Payment received — confirming your upgrade…
         </p>
       )}
@@ -148,19 +148,25 @@ export default function Pricing() {
         {PLAN_ROWS.map((row) => {
           const price = row.plan === "free" ? 0 : PLAN_PRICES[row.plan][period];
           const isCurrent = currentPlan === row.plan;
+          const isRecommended = row.plan === "pro";
           return (
             <div
               key={row.plan}
-              className={`flex flex-col gap-5 rounded-xl border p-6 ${
-                row.plan === "pro" ? "border-indigo-500/60 bg-surface-raised" : "border-surface-border bg-surface-raised/60"
+              className={`glass-panel-raised relative flex flex-col gap-5 p-6 ${
+                isRecommended ? "gradient-border shadow-glow-lg" : ""
               }`}
             >
+              {isRecommended && (
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-brand-gradient px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white shadow-glow">
+                  Most popular
+                </span>
+              )}
               <div>
-                <h2 className="text-lg font-semibold text-slate-50">{row.name}</h2>
-                <p className="text-sm text-slate-500">{row.tagline}</p>
+                <h2 className="font-display text-lg font-semibold text-slate-50">{row.name}</h2>
+                <p className="text-sm text-slate-400">{row.tagline}</p>
               </div>
               <div>
-                <span className="text-3xl font-bold text-slate-50">${price}</span>
+                <span className="font-display text-3xl font-bold text-slate-50">${price}</span>
                 {row.plan !== "free" && (
                   <span className="text-sm text-slate-500">/{period === "monthly" ? "mo" : "yr"}</span>
                 )}
@@ -168,7 +174,7 @@ export default function Pricing() {
               <ul className="flex flex-1 flex-col gap-2 text-sm text-slate-300">
                 {row.features.map((f) => (
                   <li key={f} className="flex items-start gap-2">
-                    <span className="mt-0.5 text-emerald-400">✓</span>
+                    <span className="mt-0.5 text-brand-aqua">✓</span>
                     <span>{f}</span>
                   </li>
                 ))}
@@ -177,11 +183,7 @@ export default function Pricing() {
                 type="button"
                 disabled={isCurrent || checkingOut === row.plan}
                 onClick={() => handleSelect(row.plan)}
-                className={`rounded-md px-4 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                  row.plan === "pro"
-                    ? "bg-indigo-500 text-white hover:bg-indigo-400"
-                    : "border border-surface-border text-slate-200 hover:border-slate-500"
-                }`}
+                className={isRecommended ? "btn-gradient w-full" : "btn-glass w-full"}
               >
                 {isCurrent
                   ? "Current plan"

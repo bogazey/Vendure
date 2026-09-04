@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ReactElement } from "react";
 import { Route, Routes } from "react-router-dom";
+import AuroraBackground from "./components/AuroraBackground";
 import FirstRunSetup from "./components/FirstRunSetup";
 import Header from "./components/Header";
 import ProtectedRoute, { AdminRoute } from "./components/ProtectedRoute";
@@ -72,28 +73,33 @@ function AppShell() {
     showFfmpegGate ? <FirstRunSetup onRecheck={checkHealth} checking={checking} /> : element;
 
   return (
-    <div className="min-h-screen bg-surface">
-      <Header health={health} healthError={healthError} />
-      <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/pricing" element={<Pricing />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/verify-email" element={<VerifyEmail />} />
-        <Route path="/terms" element={<Terms />} />
-        <Route path="/privacy" element={<Privacy />} />
-        <Route path="/copyright" element={<Copyright />} />
+    <div className="relative min-h-screen bg-surface">
+      <AuroraBackground />
+      <div className="relative z-10 flex min-h-screen flex-col">
+        <Header health={health} healthError={healthError} />
+        <div className="flex flex-1 flex-col">
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/pricing" element={<Pricing />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/copyright" element={<Copyright />} />
 
-        <Route path="/dashboard" element={<ProtectedRoute>{gated(<Dashboard />)}</ProtectedRoute>} />
-        <Route path="/history" element={<ProtectedRoute>{gated(<HistoryPage />)}</ProtectedRoute>} />
-        <Route path="/settings" element={<ProtectedRoute>{gated(<SettingsPage />)}</ProtectedRoute>} />
-        <Route path="/account" element={<ProtectedRoute><Account /></ProtectedRoute>} />
-        <Route path="/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
-        <Route path="/usage" element={<ProtectedRoute><Usage /></ProtectedRoute>} />
-        <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
-      </Routes>
+            <Route path="/dashboard" element={<ProtectedRoute>{gated(<Dashboard />)}</ProtectedRoute>} />
+            <Route path="/history" element={<ProtectedRoute>{gated(<HistoryPage />)}</ProtectedRoute>} />
+            <Route path="/settings" element={<ProtectedRoute>{gated(<SettingsPage />)}</ProtectedRoute>} />
+            <Route path="/account" element={<ProtectedRoute><Account /></ProtectedRoute>} />
+            <Route path="/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
+            <Route path="/usage" element={<ProtectedRoute><Usage /></ProtectedRoute>} />
+            <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
+          </Routes>
+        </div>
+      </div>
     </div>
   );
 }

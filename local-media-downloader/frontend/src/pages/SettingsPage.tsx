@@ -16,7 +16,7 @@ const COOKIE_SOURCES: { value: CookieSource; label: string }[] = [
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="flex flex-col gap-3 rounded-xl border border-surface-border bg-surface-raised p-5">
+    <section className="glass-panel flex flex-col gap-3 p-5">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">{title}</h2>
       <div className="flex flex-col gap-4">{children}</div>
     </section>
@@ -32,8 +32,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-const inputClass =
-  "rounded-md border border-surface-border bg-surface px-3 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none";
+const inputClass = "input-glass py-2";
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -85,13 +84,13 @@ export default function SettingsPage() {
   };
 
   if (!settings || !preferences) {
-    return <div className="mx-auto max-w-3xl px-6 py-10 text-sm text-slate-500">Loading settings…</div>;
+    return <div className="relative z-10 mx-auto max-w-3xl px-6 py-10 text-sm text-slate-500">Loading settings…</div>;
   }
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-10">
+    <div className="relative z-10 mx-auto flex max-w-3xl flex-col gap-6 px-6 py-10">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-slate-50">Settings</h1>
+        <h1 className="font-display text-xl font-bold text-slate-50">Settings</h1>
         {saveMessage && <span className="text-xs text-emerald-400">{saveMessage}</span>}
       </div>
 
@@ -106,11 +105,7 @@ export default function SettingsPage() {
             >
               {settings.download_dir}
             </span>
-            <button
-              type="button"
-              onClick={() => api.openPath(settings.download_dir).catch(() => undefined)}
-              className="rounded-md border border-surface-border px-3 py-2 text-sm text-slate-300 hover:border-slate-500"
-            >
+            <button type="button" onClick={() => api.openPath(settings.download_dir).catch(() => undefined)} className="btn-glass px-3 py-2">
               Open Downloads Folder
             </button>
           </div>
@@ -181,7 +176,7 @@ export default function SettingsPage() {
             type="checkbox"
             checked={settings.embed_metadata}
             onChange={(e) => persist({ embed_metadata: e.target.checked })}
-            className="h-4 w-4 accent-indigo-500"
+            className="h-4 w-4 rounded border-white/20 bg-transparent accent-brand-aqua"
           />
           Embed metadata (title, uploader) into the file
         </label>
@@ -191,7 +186,7 @@ export default function SettingsPage() {
             type="checkbox"
             checked={settings.save_thumbnail}
             onChange={(e) => persist({ save_thumbnail: e.target.checked })}
-            className="h-4 w-4 accent-indigo-500"
+            className="h-4 w-4 rounded border-white/20 bg-transparent accent-brand-aqua"
           />
           Save thumbnail alongside downloaded files
         </label>
@@ -229,7 +224,7 @@ export default function SettingsPage() {
             type="checkbox"
             checked={settings.embed_thumbnail_in_audio}
             onChange={(e) => persist({ embed_thumbnail_in_audio: e.target.checked })}
-            className="h-4 w-4 accent-indigo-500"
+            className="h-4 w-4 rounded border-white/20 bg-transparent accent-brand-aqua"
           />
           Embed thumbnail into downloaded audio files
         </label>

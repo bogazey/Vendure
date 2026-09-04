@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import AdSlot from "../components/AdSlot";
 import DownloadQueue from "../components/DownloadQueue";
 import ErrorBanner from "../components/ErrorBanner";
@@ -13,6 +14,8 @@ import type { AnalyzeResponse, CreateDownloadRequest, DownloadStage } from "../t
 const UPGRADE_ERROR_CODES = new Set(["PLAN_LIMIT_REACHED", "DAILY_LIMIT_REACHED", "FEATURE_NOT_INCLUDED", "UPGRADE_REQUIRED"]);
 
 export default function Dashboard() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [media, setMedia] = useState<AnalyzeResponse | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -20,6 +23,19 @@ export default function Dashboard() {
   const [queuedMessage, setQueuedMessage] = useState<string | null>(null);
   const { jobs, connected } = useDownloadProgress();
   const previousStages = useRef<Map<string, DownloadStage>>(new Map());
+
+  // A URL pasted into the hero input before signing up (or while logged
+  // out) arrives here via router state - pick it up once and run it
+  // through the normal analyze flow, then clear the state so a refresh or
+  // back-navigation doesn't silently re-trigger it.
+  useEffect(() => {
+    const initialUrl = (location.state as { initialUrl?: string } | null)?.initialUrl;
+    if (initialUrl) {
+      handleAnalyze(initialUrl);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     for (const job of jobs) {
@@ -81,10 +97,10 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-8 px-6 py-10">
+    <div className="relative z-10 mx-auto flex max-w-3xl flex-col gap-8 px-6 py-10">
       <div className="flex flex-col gap-3 text-center">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-50">Download media from a URL</h1>
-        <p className="text-sm text-slate-500">
+        <h1 className="font-display text-2xl font-bold tracking-tight text-slate-50">Download media from a URL</h1>
+        <p className="text-sm text-slate-400">
           Supports YouTube, TikTok, Instagram, and Facebook. Only content you're lawfully allowed to access.
         </p>
       </div>
@@ -99,7 +115,7 @@ export default function Dashboard() {
           <MediaCard media={media} />
           <FormatSelector media={media} onStartDownload={handleStartDownload} submitting={submitting} />
           {queuedMessage && (
-            <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300">
+            <p className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 backdrop-blur-xl">
               {queuedMessage}
             </p>
           )}
@@ -109,7 +125,7 @@ export default function Dashboard() {
 
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Active &amp; Recent Downloads</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Active &amp; Recent Downloads</h2>
           <span className="flex items-center gap-1.5 text-xs text-slate-500">
             <span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-emerald-400" : "bg-amber-400"}`} />
             {connected ? "Live" : "Reconnecting…"}

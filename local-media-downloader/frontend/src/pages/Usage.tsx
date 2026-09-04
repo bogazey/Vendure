@@ -4,9 +4,9 @@ import { useAuth } from "../context/AuthContext";
 function ProgressBar({ used, total }: { used: number; total: number }) {
   const pct = total > 0 ? Math.min(100, (used / total) * 100) : 0;
   return (
-    <div className="h-2 w-full overflow-hidden rounded-full bg-surface">
+    <div className="h-2 w-full overflow-hidden rounded-full bg-white/[0.06]">
       <div
-        className={`h-full rounded-full ${pct >= 90 ? "bg-amber-400" : "bg-indigo-500"}`}
+        className={`h-full rounded-full ${pct >= 90 ? "bg-amber-400" : "bg-brand-gradient"}`}
         style={{ width: `${pct}%` }}
       />
     </div>
@@ -26,10 +26,10 @@ export default function Usage() {
   const remaining = isFree ? usage.daily_free_downloads_remaining ?? 0 : usage.credits_remaining ?? 0;
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6 px-6 py-10">
-      <h1 className="text-xl font-bold text-slate-50">Usage</h1>
+    <div className="relative z-10 mx-auto flex max-w-2xl flex-col gap-6 px-6 py-10">
+      <h1 className="font-display text-xl font-bold text-slate-50">Usage</h1>
 
-      <section className="flex flex-col gap-4 rounded-xl border border-surface-border bg-surface-raised p-5">
+      <section className="glass-panel flex flex-col gap-4 p-5">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
             {isFree ? "Free downloads today" : "Credits this period"}
@@ -45,7 +45,7 @@ export default function Usage() {
         </p>
       </section>
 
-      <section className="flex flex-col gap-3 rounded-xl border border-surface-border bg-surface-raised p-5">
+      <section className="glass-panel flex flex-col gap-3 p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Plan limits</h2>
         <div className="grid grid-cols-2 gap-y-2 text-sm text-slate-400">
           <span>Max resolution</span>
@@ -66,10 +66,7 @@ export default function Usage() {
       </section>
 
       {isFree && (
-        <Link
-          to="/pricing"
-          className="self-start rounded-md bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
-        >
+        <Link to="/pricing" className="btn-gradient self-start">
           Upgrade for more
         </Link>
       )}

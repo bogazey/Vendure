@@ -10,7 +10,7 @@ export default function ErrorBanner({ message, technical, onDismiss }: ErrorBann
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+    <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200 backdrop-blur-xl">
       <div className="flex items-start justify-between gap-3">
         <p>{message}</p>
         {onDismiss && (

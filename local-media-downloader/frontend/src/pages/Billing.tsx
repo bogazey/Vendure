@@ -43,12 +43,12 @@ export default function Billing() {
   };
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6 px-6 py-10">
-      <h1 className="text-xl font-bold text-slate-50">Billing</h1>
+    <div className="relative z-10 mx-auto flex max-w-2xl flex-col gap-6 px-6 py-10">
+      <h1 className="font-display text-xl font-bold text-slate-50">Billing</h1>
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
-      <section className="flex flex-col gap-3 rounded-xl border border-surface-border bg-surface-raised p-5">
+      <section className="glass-panel flex flex-col gap-3 p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Current plan</h2>
         <div className="flex items-center justify-between text-sm">
           <span className="text-slate-400">Plan</span>
@@ -77,7 +77,7 @@ export default function Billing() {
         )}
       </section>
 
-      <section className="flex flex-col gap-3 rounded-xl border border-surface-border bg-surface-raised p-5">
+      <section className="glass-panel flex flex-col gap-3 p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Usage this period</h2>
         {usage.plan === "free" ? (
           <div className="flex items-center justify-between text-sm">
@@ -98,26 +98,15 @@ export default function Billing() {
 
       <div className="flex flex-wrap gap-3">
         {isFree ? (
-          <Link
-            to="/pricing"
-            className="rounded-md bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
-          >
+          <Link to="/pricing" className="btn-gradient">
             Upgrade plan
           </Link>
         ) : (
           <>
-            <Link
-              to="/pricing"
-              className="rounded-md border border-surface-border px-4 py-2 text-sm font-semibold text-slate-200 hover:border-slate-500"
-            >
+            <Link to="/pricing" className="btn-glass">
               Change plan
             </Link>
-            <button
-              type="button"
-              onClick={handleManageBilling}
-              disabled={openingPortal}
-              className="rounded-md bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-60"
-            >
+            <button type="button" onClick={handleManageBilling} disabled={openingPortal} className="btn-gradient">
               {openingPortal ? "Opening…" : "Manage billing"}
             </button>
           </>

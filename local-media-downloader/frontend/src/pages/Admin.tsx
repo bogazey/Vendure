@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import ErrorBanner from "../components/ErrorBanner";
 import { ApiError, api } from "../services/api";
+import { brandLink } from "../styles/ui";
 import type { AdminUserOut } from "../types/commercial";
 import { PLAN_LABELS } from "../types/commercial";
 
@@ -54,8 +55,8 @@ export default function Admin() {
   };
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6 px-6 py-10">
-      <h1 className="text-xl font-bold text-slate-50">Admin · Users</h1>
+    <div className="relative z-10 mx-auto flex max-w-4xl flex-col gap-6 px-6 py-10">
+      <h1 className="font-display text-xl font-bold text-slate-50">Admin · Users</h1>
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
@@ -70,16 +71,16 @@ export default function Admin() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by email or user id"
-          className="flex-1 rounded-md border border-surface-border bg-surface px-3 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
+          className="input-glass flex-1 py-2"
         />
-        <button type="submit" className="rounded-md border border-surface-border px-3 py-2 text-sm text-slate-300 hover:border-slate-500">
+        <button type="submit" className="btn-glass px-3 py-2">
           Search
         </button>
       </form>
 
-      <div className="overflow-x-auto rounded-xl border border-surface-border">
+      <div className="glass-panel overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <thead className="bg-surface-raised text-xs uppercase tracking-wide text-slate-500">
+          <thead className="bg-white/[0.03] text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-2">Email</th>
               <th className="px-4 py-2">Plan</th>
@@ -105,7 +106,7 @@ export default function Admin() {
               </tr>
             )}
             {users.map((u) => (
-              <tr key={u.id} className="border-t border-surface-border">
+              <tr key={u.id} className="border-t border-white/[0.06]">
                 <td className="px-4 py-2 text-slate-200">{u.email}</td>
                 <td className="px-4 py-2 text-slate-400">{PLAN_LABELS[u.plan]}</td>
                 <td className="px-4 py-2 text-slate-400">{u.subscription_status}</td>
@@ -120,7 +121,7 @@ export default function Admin() {
                   <button
                     type="button"
                     onClick={() => setGrantTarget(u)}
-                    className="text-xs text-indigo-400 underline decoration-dotted underline-offset-2 hover:text-indigo-300"
+                    className={`text-xs ${brandLink} underline decoration-dotted underline-offset-2`}
                   >
                     Grant credits
                   </button>
@@ -139,9 +140,9 @@ export default function Admin() {
       </div>
 
       {grantTarget && (
-        <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/50 px-4">
-          <div className="flex w-full max-w-sm flex-col gap-4 rounded-xl border border-surface-border bg-surface-raised p-5">
-            <h2 className="text-sm font-semibold text-slate-50">Grant credits to {grantTarget.email}</h2>
+        <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
+          <div className="glass-panel-raised flex w-full max-w-sm flex-col gap-4 p-5">
+            <h2 className="font-display text-sm font-semibold text-slate-50">Grant credits to {grantTarget.email}</h2>
             <label className="flex flex-col gap-1.5 text-sm">
               <span className="text-slate-400">Credits</span>
               <input
@@ -150,7 +151,7 @@ export default function Admin() {
                 max={100000}
                 value={grantCredits}
                 onChange={(e) => setGrantCredits(Number(e.target.value))}
-                className="rounded-md border border-surface-border bg-surface px-3 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
+                className="input-glass py-2"
               />
             </label>
             <label className="flex flex-col gap-1.5 text-sm">
@@ -160,23 +161,14 @@ export default function Admin() {
                 value={grantReason}
                 onChange={(e) => setGrantReason(e.target.value)}
                 placeholder="e.g. support case #123"
-                className="rounded-md border border-surface-border bg-surface px-3 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
+                className="input-glass py-2"
               />
             </label>
             <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setGrantTarget(null)}
-                className="rounded-md border border-surface-border px-3 py-1.5 text-sm text-slate-300 hover:border-slate-500"
-              >
+              <button type="button" onClick={() => setGrantTarget(null)} className="btn-glass px-3 py-1.5">
                 Cancel
               </button>
-              <button
-                type="button"
-                onClick={handleGrant}
-                disabled={!grantReason.trim()}
-                className="rounded-md bg-indigo-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-60"
-              >
+              <button type="button" onClick={handleGrant} disabled={!grantReason.trim()} className="btn-gradient px-3 py-1.5">
                 Grant
               </button>
             </div>

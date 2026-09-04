@@ -2,7 +2,9 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import ErrorBanner from "../../components/ErrorBanner";
+import LoadyLogo from "../../components/LoadyLogo";
 import { ApiError, api } from "../../services/api";
+import { brandLink } from "../../styles/ui";
 import { authCardClass, inputClass, primaryButtonClass } from "./formStyles";
 
 export default function ResetPassword() {
@@ -31,9 +33,9 @@ export default function ResetPassword() {
 
   if (!token) {
     return (
-      <div className="mx-auto flex max-w-md flex-col gap-6 px-6 py-16">
+      <div className="relative z-10 mx-auto flex max-w-md flex-col gap-6 px-6 py-16">
         <ErrorBanner message="This reset link is missing its token." />
-        <Link to="/forgot-password" className="text-center text-sm text-indigo-400 hover:text-indigo-300">
+        <Link to="/forgot-password" className={`text-center text-sm ${brandLink}`}>
           Request a new reset link
         </Link>
       </div>
@@ -41,9 +43,10 @@ export default function ResetPassword() {
   }
 
   return (
-    <div className="mx-auto flex max-w-md flex-col gap-6 px-6 py-16">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold text-slate-50">Choose a new password</h1>
+    <div className="relative z-10 mx-auto flex max-w-md flex-col gap-6 px-6 py-16">
+      <div className="flex flex-col items-center gap-4 text-center">
+        <LoadyLogo size={36} withWordmark={false} />
+        <h1 className="font-display text-2xl font-bold text-slate-50">Choose a new password</h1>
       </div>
 
       {done ? (

@@ -8,7 +8,7 @@ interface PlaylistChooserProps {
 
 export default function PlaylistChooser({ media, mode, onChange }: PlaylistChooserProps) {
   return (
-    <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4">
+    <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] p-4 backdrop-blur-xl">
       <p className="text-sm font-medium text-amber-200">
         {media.playlist_title || "This URL is part of a playlist"}
         {media.playlist_count != null && (

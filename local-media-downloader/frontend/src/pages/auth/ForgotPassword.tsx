@@ -2,7 +2,9 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
 import ErrorBanner from "../../components/ErrorBanner";
+import LoadyLogo from "../../components/LoadyLogo";
 import { ApiError, api } from "../../services/api";
+import { brandLink } from "../../styles/ui";
 import { authCardClass, inputClass, primaryButtonClass } from "./formStyles";
 
 export default function ForgotPassword() {
@@ -28,10 +30,13 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="mx-auto flex max-w-md flex-col gap-6 px-6 py-16">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold text-slate-50">Reset your password</h1>
-        <p className="mt-1 text-sm text-slate-500">We'll email you a link to choose a new one.</p>
+    <div className="relative z-10 mx-auto flex max-w-md flex-col gap-6 px-6 py-16">
+      <div className="flex flex-col items-center gap-4 text-center">
+        <LoadyLogo size={36} withWordmark={false} />
+        <div>
+          <h1 className="font-display text-2xl font-bold text-slate-50">Reset your password</h1>
+          <p className="mt-1 text-sm text-slate-400">We'll email you a link to choose a new one.</p>
+        </div>
       </div>
 
       {sent ? (
@@ -40,7 +45,7 @@ export default function ForgotPassword() {
             If an account exists for <strong className="text-slate-100">{email}</strong>, a reset link is on its way.
             In local development, check the backend log for the link.
           </p>
-          <Link to="/login" className="text-sm text-indigo-400 hover:text-indigo-300">
+          <Link to="/login" className={`text-sm ${brandLink}`}>
             Back to sign in
           </Link>
         </div>
