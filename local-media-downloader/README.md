@@ -34,9 +34,13 @@ Settings page here once you've run the app locally._
 - Optional clip-range downloads (download only part of a video)
 - Optional cookie support for content that needs your logged-in session
   (cookies never leave your computer)
-- Settings for download folder, concurrency, theme, container/format
-  preferences, MP3 bitrate, metadata/thumbnail embedding, network timeout
+- Settings for download folder, concurrency, theme (System/Light/Dark, fully
+  live-applied), container/format preferences, MP3 bitrate, metadata/
+  thumbnail embedding, network timeout
 - First-run FFmpeg check with OS-specific install instructions
+- Downloads interrupted by an app crash or force-quit are recovered as
+  "Failed" (with a Retry button) the next time the backend starts, instead of
+  vanishing silently
 
 ## Architecture
 
@@ -155,6 +159,10 @@ scripts\start.bat
 This opens the app at **http://127.0.0.1:5173**. The backend API listens on
 **http://127.0.0.1:8000** and is bound to localhost only.
 
+For a full manual test checklist (per-platform tests, MP3, 1080p merging,
+cancellation, cookies) and macOS-specific troubleshooting, see
+[`LOCAL_MAC_TESTING.md`](./LOCAL_MAC_TESTING.md).
+
 ### Manual startup
 
 ```bash
@@ -216,6 +224,20 @@ don't have access to.
   that actually exist for that particular video; check "Advanced Formats" to
   see every stream yt-dlp found.
 
+## Testing
+
+```bash
+# Backend (99 tests; yt-dlp is mocked, no network access needed)
+cd backend && source .venv/bin/activate && python -m pytest -q
+
+# Frontend
+cd frontend
+npm run typecheck   # tsc, no emit
+npm run lint        # eslint
+npm run test        # vitest (pure utility functions: timecode, formatting, theme resolution)
+npm run build       # production build
+```
+
 ## Updating yt-dlp
 
 Platforms change frequently, and yt-dlp ships frequent fixes. To update:
@@ -233,9 +255,18 @@ The installed version is shown in Settings → Advanced.
 - This environment's Python is 3.11 rather than the requested 3.12+; the app
   has no 3.12-only dependencies, so it runs correctly on 3.11+, but 3.12+ is
   still recommended for production use.
-- Active download jobs live in memory; if you restart the backend mid-download,
-  in-flight jobs are lost (completed downloads already in history are
-  unaffected). Retry them from the History page.
+- Active download jobs live in memory, not just in SQLite, while running. If
+  the backend is killed mid-download (crash, force-quit, `pkill`), the job
+  itself is gone, but it is **not** silently lost: on the next startup it's
+  automatically marked "Failed" with an explanatory message and a Retry
+  button in History. True byte-level resume isn't attempted, but yt-dlp's
+  own partial-file (`.part`) resume will often kick in transparently if the
+  retry writes to the same filename.
+- Cancelling a download during the final merge/convert step can't interrupt
+  the running FFmpeg process itself (there's no clean way to abort it
+  mid-flight), but the app still honors the cancellation afterwards — the
+  job ends up "Cancelled" and the file that just finished is deleted, rather
+  than silently reporting success.
 - Cookie-based access only works for content your own logged-in account can
   already see in a normal browser — it does not bypass any access control.
 - Platform behavior (available qualities, playlist metadata, private-content
@@ -243,6 +274,13 @@ The installed version is shown in Settings → Advanced.
   platforms change their sites.
 - The clip-range feature re-encodes at cut points for accuracy, which is
   slower than a plain full-file download.
+- `npm audit` flags two moderate/high advisories in Vite's dev server itself
+  (not the production build) and one in react-router; fixing them requires a
+  Vite 5→8 major upgrade we deliberately didn't force in this pass (too risky
+  to land unverified). The dev server already only binds to 127.0.0.1 and
+  isn't reachable from your network; avoid browsing untrusted sites while
+  `npm run dev` is running if you want to fully eliminate the residual risk,
+  or run `npm audit fix --force` yourself and retest.
 
 ## Security & privacy
 
@@ -250,9 +288,17 @@ The installed version is shown in Settings → Advanced.
 - CORS is restricted to the local frontend origins.
 - No endpoint reads arbitrary files or executes arbitrary shell commands; the
   only filesystem operations are: writing inside your configured download
-  folder, and opening a file/folder you already downloaded via the OS's own
+  folder, and opening/deleting a file you already downloaded via the OS's own
   file manager (`open` / `explorer` / `xdg-open`), invoked with argument
   arrays — never a shell string.
+- Every "open" or "delete" filesystem action is checked server-side against
+  the configured download folder (or an exact match to a file this app
+  actually recorded in history) before it runs — the API can't be used to
+  open or delete an arbitrary path elsewhere on disk, even if something other
+  than the bundled frontend calls it directly.
+- `/api/health` never creates directories or writes probe files as a side
+  effect of a GET request; only explicitly saving a new download folder in
+  Settings does.
 - Filenames are sanitized for Windows/macOS/Linux compatibility before
   anything is written to disk.
 - Cookies, authorization headers, and other session data are never logged or
@@ -268,5 +314,5 @@ The installed version is shown in Settings → Advanced.
   independent enough to wrap)
 - Scheduled/recurring downloads (e.g. "watch this channel")
 - Subtitle download/embedding
-- Dark/light theme actually wired to the `theme` setting (currently dark-only
-  in the UI; the setting is stored but not yet applied)
+- Per-row "delete file too" on a single history record (currently only the
+  bulk "Clear History" flow offers that choice)

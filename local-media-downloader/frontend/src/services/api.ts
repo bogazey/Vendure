@@ -9,7 +9,7 @@ import type {
   ValidateFolderResponse,
 } from "../types/api";
 
-const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
 export class ApiError extends Error {
   technical?: string | null;

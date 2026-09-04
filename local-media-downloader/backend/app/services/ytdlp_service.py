@@ -7,6 +7,8 @@ logic lives here.
 """
 from __future__ import annotations
 
+import os
+import re
 import shutil
 from typing import Any, Callable, Optional
 
@@ -26,6 +28,7 @@ from app.models.schemas import (
 )
 from app.utils.exceptions import (
     AgeRestrictedError,
+    AppError,
     DiskFullError,
     ExtractorFailureError,
     FfmpegMissingError,
@@ -48,15 +51,30 @@ def get_ytdlp_version() -> str:
     return yt_dlp.version.__version__
 
 
+# Homebrew doesn't always end up on PATH for GUI-launched processes (Apple
+# Silicon installs to /opt/homebrew, Intel to /usr/local); check the common
+# install locations directly as a fallback so the app doesn't misreport
+# FFmpeg as "missing" on a correctly-set-up Mac.
+_FFMPEG_FALLBACK_PATHS = (
+    "/opt/homebrew/bin/ffmpeg",
+    "/usr/local/bin/ffmpeg",
+    "/usr/bin/ffmpeg",
+)
+
+
 def check_ffmpeg() -> tuple[bool, Optional[str]]:
     path = shutil.which("ffmpeg")
-    return (path is not None, path)
+    if path:
+        return True, path
+
+    for candidate in _FFMPEG_FALLBACK_PATHS:
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return True, candidate
+    return False, None
 
 
 def classify_error(exc: Exception, url: str = "") -> Exception:
     """Map a yt-dlp/OS exception to one of our friendly AppError subclasses."""
-    from app.utils.exceptions import AppError
-
     if isinstance(exc, AppError):
         return exc
 
@@ -79,6 +97,11 @@ def classify_error(exc: Exception, url: str = "") -> Exception:
     if isinstance(exc, PermissionError) or "permission denied" in text or "not writable" in text:
         return PermissionDeniedError(
             "Permission denied writing to the download folder. Choose a different folder in Settings.",
+            technical=str(exc),
+        )
+    if "cookie" in text and any(k in text for k in ("no such file", "not found", "could not open", "unable to open")):
+        return PrivateOrLoginRequiredError(
+            "Could not read the configured cookie file. Check the cookie file path in Settings.",
             technical=str(exc),
         )
     if any(k in text for k in ("private video", "login required", "requires authentication", "rate-limit reached")):
@@ -136,8 +159,26 @@ def _base_opts(settings: AppSettings) -> dict[str, Any]:
         "retries": settings.retries,
         "logger": _YtdlpLogAdapter(),
     }
+    ffmpeg_available, ffmpeg_path = check_ffmpeg()
+    if ffmpeg_available and ffmpeg_path:
+        # Point yt-dlp at the exact binary our own health check found, rather
+        # than letting it re-search PATH (which may resolve differently, e.g.
+        # under a GUI-launched process with a thinner PATH than a terminal).
+        opts["ffmpeg_location"] = ffmpeg_path
     opts.update(_cookie_opts(settings))
     return opts
+
+
+_SENSITIVE_LOG_PATTERN = re.compile(
+    r"(cookie|authorization|set-cookie)\s*:\s*\S+", re.IGNORECASE
+)
+
+
+def _redact(msg: str) -> str:
+    """Defense-in-depth scrub: yt-dlp's normal (non-verbose) logging never
+    includes raw cookie/auth header values, but this strips them if it ever
+    did, so a cookie can never end up in the log file."""
+    return _SENSITIVE_LOG_PATTERN.sub(lambda m: f"{m.group(1)}: [redacted]", msg)
 
 
 class _YtdlpLogAdapter:
@@ -146,16 +187,16 @@ class _YtdlpLogAdapter:
     def debug(self, msg: str) -> None:
         if msg.startswith("[debug] "):
             return
-        logger.debug(msg)
+        logger.debug(_redact(msg))
 
     def info(self, msg: str) -> None:
-        logger.info(msg)
+        logger.info(_redact(msg))
 
     def warning(self, msg: str) -> None:
-        logger.warning(msg)
+        logger.warning(_redact(msg))
 
     def error(self, msg: str) -> None:
-        logger.error(msg)
+        logger.error(_redact(msg))
 
 
 def _format_to_option(fmt: dict[str, Any]) -> FormatOption:
@@ -188,7 +229,7 @@ def _build_presets(formats: list[FormatOption]) -> tuple[list[QualityPreset], li
     has_audio_stream = any(f.has_audio for f in formats)
 
     video_presets = [
-        QualityPreset(key="best", label="Best Available", kind=FormatKind.VIDEO, available=bool(video_heights) or True)
+        QualityPreset(key="best", label="Best Available", kind=FormatKind.VIDEO, available=bool(video_heights))
     ]
     for h in VIDEO_HEIGHT_PRESETS:
         available = any(vh >= h for vh in video_heights) if video_heights else False
@@ -269,10 +310,26 @@ def analyze(url: str, settings: AppSettings) -> AnalyzeResponse:
 
 
 def build_format_selector(
-    media_type: MediaType, quality_key: str, format_id: Optional[str]
+    media_type: MediaType,
+    quality_key: str,
+    format_id: Optional[str],
+    format_has_video: Optional[bool] = None,
+    format_has_audio: Optional[bool] = None,
 ) -> str:
     if format_id:
-        return f"{format_id}+bestaudio/{format_id}/best"
+        if format_has_video and not format_has_audio:
+            # Video-only stream (e.g. a DASH video track): merge with the best
+            # available audio.
+            return f"{format_id}+bestaudio/{format_id}/best"
+        if format_has_audio and not format_has_video:
+            # Audio-only stream: download it directly. Appending "+bestaudio"
+            # here would ask yt-dlp to merge two audio-only streams, which is
+            # invalid and fails.
+            return f"{format_id}/bestaudio/best"
+        # Either already has both video and audio, or we don't know (older
+        # analyze responses / manual format id) — download it as-is and let
+        # yt-dlp fall back to its own best-effort selection if unavailable.
+        return f"{format_id}/best"
 
     if media_type == MediaType.AUDIO:
         return "bestaudio/best"
@@ -299,7 +356,13 @@ def build_download_opts(
         {
             "noplaylist": request.playlist_mode == "single",
             "outtmpl": output_template,
-            "format": build_format_selector(request.media_type, request.quality_key, request.format_id),
+            "format": build_format_selector(
+                request.media_type,
+                request.quality_key,
+                request.format_id,
+                request.format_has_video,
+                request.format_has_audio,
+            ),
             "progress_hooks": [progress_hook],
             "postprocessor_hooks": [postprocessor_hook],
             "windowsfilenames": True,
@@ -315,21 +378,21 @@ def build_download_opts(
     if request.media_type == MediaType.AUDIO:
         audio_format = request.audio_format or "best"
         if audio_format in ("mp3", "m4a"):
-            postprocessors.append(
-                {
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": audio_format,
-                    "preferredquality": str(request.mp3_bitrate or settings.mp3_bitrate)
-                    if audio_format == "mp3"
-                    else None,
-                }
-            )
+            audio_pp: dict[str, Any] = {"key": "FFmpegExtractAudio", "preferredcodec": audio_format}
+            if audio_format == "mp3":
+                audio_pp["preferredquality"] = str(request.mp3_bitrate or settings.mp3_bitrate)
+            postprocessors.append(audio_pp)
         if settings.embed_thumbnail_in_audio:
-            postprocessors.append({"key": "EmbedThumbnail"})
+            # already_have_thumbnail=False tells yt-dlp to delete the temp
+            # thumbnail file after embedding it, unless the user separately
+            # asked to keep thumbnails (save_thumbnail) — otherwise a stray
+            # .jpg/.webp would be left behind next to every audio download.
+            postprocessors.append(
+                {"key": "EmbedThumbnail", "already_have_thumbnail": settings.save_thumbnail}
+            )
     else:
         if settings.preferred_container != "auto":
-            opts["merge_output_format"] = settings.preferred_container.value \
-                if hasattr(settings.preferred_container, "value") else settings.preferred_container
+            opts["merge_output_format"] = settings.preferred_container.value
 
     if settings.embed_metadata:
         postprocessors.append({"key": "FFmpegMetadata", "add_metadata": True})

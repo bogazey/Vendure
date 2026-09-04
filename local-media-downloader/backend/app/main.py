@@ -7,6 +7,8 @@ arbitrary commands.
 from __future__ import annotations
 
 import traceback
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +24,7 @@ from app.api import (
     routes_settings,
 )
 from app.config.logging_config import get_logger, setup_logging
+from app.database import history_repo
 from app.database.db import get_connection
 from app.services import ytdlp_service
 from app.utils.exceptions import AppError
@@ -29,7 +32,31 @@ from app.utils.exceptions import AppError
 setup_logging()
 logger = get_logger("main")
 
-app = FastAPI(title="Local Media Downloader API", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    get_connection()  # creates schema if needed
+
+    # Any history row still "in progress" means the app was killed mid-download
+    # last time it ran (crash, force quit, `pkill`). Mark those failed now so
+    # they don't sit "downloading" forever and so they're retryable.
+    recovered = history_repo.mark_interrupted_as_failed(
+        "Interrupted by application restart. You can retry this download."
+    )
+    if recovered:
+        logger.warning("Recovered %d download(s) interrupted by a previous shutdown", recovered)
+
+    ffmpeg_available, ffmpeg_path = ytdlp_service.check_ffmpeg()
+    logger.info(
+        "Startup: yt-dlp %s, ffmpeg_available=%s (%s)",
+        ytdlp_service.get_ytdlp_version(),
+        ffmpeg_available,
+        ffmpeg_path,
+    )
+    yield
+
+
+app = FastAPI(title="Local Media Downloader API", version="1.0.0", lifespan=lifespan)
 
 LOCAL_ORIGINS = [
     "http://127.0.0.1:5173",
@@ -74,13 +101,6 @@ app.include_router(routes_history.router)
 app.include_router(routes_settings.router)
 app.include_router(routes_filesystem.router)
 app.include_router(routes_progress.router)
-
-
-@app.on_event("startup")
-async def on_startup() -> None:
-    get_connection()  # creates schema if needed
-    ffmpeg_available, ffmpeg_path = ytdlp_service.check_ffmpeg()
-    logger.info("Startup: yt-dlp %s, ffmpeg_available=%s (%s)", ytdlp_service.get_ytdlp_version(), ffmpeg_available, ffmpeg_path)
 
 
 if __name__ == "__main__":

@@ -21,7 +21,7 @@ export default function Header({ health, healthError }: HeaderProps) {
 
   const navClass = ({ isActive }: { isActive: boolean }) =>
     `px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-      isActive ? "bg-surface-raised text-white" : "text-slate-400 hover:text-slate-200"
+      isActive ? "bg-surface-raised text-slate-50" : "text-slate-400 hover:text-slate-200"
     }`;
 
   return (

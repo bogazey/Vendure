@@ -13,7 +13,8 @@ export default function Dashboard() {
   const [analyzing, setAnalyzing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<{ message: string; technical?: string | null } | null>(null);
-  const { jobs } = useDownloadProgress();
+  const [queuedMessage, setQueuedMessage] = useState<string | null>(null);
+  const { jobs, connected } = useDownloadProgress();
 
   const handleAnalyze = async (url: string) => {
     setAnalyzing(true);
@@ -38,6 +39,8 @@ export default function Dashboard() {
     setError(null);
     try {
       await api.createDownload(request);
+      setQueuedMessage("Added to the download queue below.");
+      setTimeout(() => setQueuedMessage(null), 4000);
     } catch (err) {
       if (err instanceof ApiError) {
         setError({ message: err.message, technical: err.technical });
@@ -74,11 +77,22 @@ export default function Dashboard() {
         <div className="flex flex-col gap-4">
           <MediaCard media={media} />
           <FormatSelector media={media} onStartDownload={handleStartDownload} submitting={submitting} />
+          {queuedMessage && (
+            <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300">
+              {queuedMessage}
+            </p>
+          )}
         </div>
       )}
 
       <div className="flex flex-col gap-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Active &amp; Recent Downloads</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Active &amp; Recent Downloads</h2>
+          <span className="flex items-center gap-1.5 text-xs text-slate-500">
+            <span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-emerald-400" : "bg-amber-400"}`} />
+            {connected ? "Live" : "Reconnecting…"}
+          </span>
+        </div>
         <DownloadQueue jobs={jobs} onCancel={handleCancel} />
       </div>
     </div>

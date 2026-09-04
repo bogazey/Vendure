@@ -5,7 +5,7 @@ from fastapi import APIRouter
 from app.models.schemas import CreateDownloadRequest, DownloadJobOut
 from app.services.download_manager import manager
 from app.utils.exceptions import UnsupportedUrlError
-from app.utils.url_detect import is_valid_url
+from app.utils.url_detect import detect_platform, is_supported_platform, is_valid_url
 
 router = APIRouter(prefix="/api/downloads", tags=["downloads"])
 
@@ -14,6 +14,10 @@ router = APIRouter(prefix="/api/downloads", tags=["downloads"])
 async def create_download(request: CreateDownloadRequest) -> DownloadJobOut:
     if not is_valid_url(request.url):
         raise UnsupportedUrlError("That doesn't look like a valid URL.")
+    if not is_supported_platform(detect_platform(request.url)):
+        raise UnsupportedUrlError(
+            "This URL isn't supported. Only YouTube, TikTok, Instagram, and Facebook links are supported."
+        )
     job = manager.create_job(request)
     return job.to_out()
 

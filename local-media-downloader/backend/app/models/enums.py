@@ -14,7 +14,6 @@ class Platform(str, Enum):
 class MediaType(str, Enum):
     VIDEO = "video"
     AUDIO = "audio"
-    PLAYLIST = "playlist"
 
 
 class DownloadStage(str, Enum):

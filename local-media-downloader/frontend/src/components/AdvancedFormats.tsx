@@ -5,7 +5,7 @@ import { formatBytes } from "../utils/format";
 interface AdvancedFormatsProps {
   formats: FormatOption[];
   selectedFormatId: string | null;
-  onSelect: (formatId: string | null) => void;
+  onSelect: (format: FormatOption | null) => void;
 }
 
 export default function AdvancedFormats({ formats, selectedFormatId, onSelect }: AdvancedFormatsProps) {
@@ -46,13 +46,13 @@ export default function AdvancedFormats({ formats, selectedFormatId, onSelect }:
                   className={`cursor-pointer border-t border-surface-border/60 hover:bg-surface-border/30 ${
                     selectedFormatId === f.format_id ? "bg-indigo-500/10" : ""
                   }`}
-                  onClick={() => onSelect(selectedFormatId === f.format_id ? null : f.format_id)}
+                  onClick={() => onSelect(selectedFormatId === f.format_id ? null : f)}
                 >
                   <td className="px-3 py-2">
                     <input
                       type="radio"
                       checked={selectedFormatId === f.format_id}
-                      onChange={() => onSelect(f.format_id)}
+                      onChange={() => onSelect(f)}
                       className="accent-indigo-500"
                     />
                   </td>

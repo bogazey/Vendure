@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
-import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -150,14 +149,39 @@ class DownloadManager:
             try:
                 job.stage = DownloadStage.ANALYZING
                 self._bump_revision()
+                # Persist a non-terminal row now (not just on completion) so a
+                # crash mid-download leaves a trace: on next startup, any row
+                # still "in progress" gets marked failed and stays retryable
+                # instead of vanishing silently (see history_repo.mark_interrupted_as_failed).
+                self._save_history(job)
                 settings = get_settings()
                 await asyncio.to_thread(self._blocking_download, job, settings)
-                self._finish_as_completed(job)
+                if job.cancel_event.is_set():
+                    # The download finished before we could interrupt it (e.g.
+                    # cancel was clicked during the final merge/convert step,
+                    # which we can't abort mid-flight). Honor the cancellation
+                    # after the fact rather than silently reporting success.
+                    self._cleanup_cancelled_file(job)
+                    self._finish_as_cancelled(job)
+                else:
+                    self._finish_as_completed(job)
             except DownloadCancelled:
+                self._cleanup_cancelled_file(job)
                 self._finish_as_cancelled(job)
             except Exception as exc:  # noqa: BLE001 - centralizing error classification
                 friendly = ytdlp_service.classify_error(exc, job.request.url)
                 self._finish_as_failed(job, friendly)
+
+    def _cleanup_cancelled_file(self, job: DownloadJob) -> None:
+        if not job.filepath:
+            return
+        try:
+            path = Path(job.filepath)
+            if path.is_file():
+                path.unlink()
+                logger.info("Removed file for cancelled job %s", job.id)
+        except OSError as exc:
+            logger.warning("Could not remove file for cancelled job %s: %s", job.id, exc)
 
     def _blocking_download(self, job: DownloadJob, settings: AppSettings) -> None:
         ffmpeg_available, _ = ytdlp_service.check_ffmpeg()

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import ErrorBanner from "../components/ErrorBanner";
 import { ApiError, api } from "../services/api";
 import type { AppSettings, CookieSource, HealthResponse, Theme } from "../types/api";
+import { applyTheme } from "../utils/theme";
 
 const COOKIE_SOURCES: { value: CookieSource; label: string }[] = [
   { value: "none", label: "No cookies" },
@@ -52,6 +53,7 @@ export default function SettingsPage() {
     try {
       const saved = await api.updateSettings(patch);
       setSettings(saved);
+      applyTheme(saved.theme);
       setSaveMessage("Saved");
       setTimeout(() => setSaveMessage(null), 1500);
     } catch (err) {

@@ -76,6 +76,8 @@ export interface CreateDownloadRequest {
   media_type: MediaType;
   quality_key: string;
   format_id?: string | null;
+  format_has_video?: boolean | null;
+  format_has_audio?: boolean | null;
   audio_format?: string | null;
   mp3_bitrate?: number | null;
   playlist_mode: PlaylistMode;

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { AnalyzeResponse, CreateDownloadRequest, MediaType, PlaylistMode } from "../types/api";
+import type { AnalyzeResponse, CreateDownloadRequest, FormatOption, MediaType, PlaylistMode } from "../types/api";
 import AdvancedFormats from "./AdvancedFormats";
 import ClipRangeInput from "./ClipRangeInput";
 import PlaylistChooser from "./PlaylistChooser";
@@ -18,7 +18,7 @@ export default function FormatSelector({ media, onStartDownload, submitting }: F
   const [videoQuality, setVideoQuality] = useState("best");
   const [audioFormat, setAudioFormat] = useState<"best" | "mp3" | "m4a">("best");
   const [mp3Bitrate, setMp3Bitrate] = useState(192);
-  const [formatId, setFormatId] = useState<string | null>(null);
+  const [selectedFormat, setSelectedFormat] = useState<FormatOption | null>(null);
   const [playlistMode, setPlaylistMode] = useState<PlaylistMode>("single");
   const [clipEnabled, setClipEnabled] = useState(false);
   const [clipStart, setClipStart] = useState("00:00");
@@ -44,7 +44,9 @@ export default function FormatSelector({ media, onStartDownload, submitting }: F
       url: media.url,
       media_type: mediaType,
       quality_key: mediaType === "video" ? videoQuality : audioFormat,
-      format_id: formatId,
+      format_id: selectedFormat?.format_id ?? null,
+      format_has_video: selectedFormat?.has_video ?? null,
+      format_has_audio: selectedFormat?.has_audio ?? null,
       audio_format: mediaType === "audio" ? audioFormat : null,
       mp3_bitrate: mediaType === "audio" && audioFormat === "mp3" ? mp3Bitrate : null,
       playlist_mode: media.is_playlist ? playlistMode : "single",
@@ -152,7 +154,11 @@ export default function FormatSelector({ media, onStartDownload, submitting }: F
         />
       )}
 
-      <AdvancedFormats formats={media.advanced_formats} selectedFormatId={formatId} onSelect={setFormatId} />
+      <AdvancedFormats
+        formats={media.advanced_formats}
+        selectedFormatId={selectedFormat?.format_id ?? null}
+        onSelect={setSelectedFormat}
+      />
 
       <button
         type="button"
