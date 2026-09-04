@@ -22,9 +22,11 @@ from app.api.deps import get_current_user, get_db
 from app.config.commercial_settings import get_commercial_settings
 from app.config.logging_config import get_logger
 from app.database.commercial_models import User
-from app.models.commercial_schemas import CheckoutRequest, CheckoutResponse
+from app.models.commercial_schemas import BillingPortalResponse, CheckoutRequest, CheckoutResponse
 from app.services import paddle_service
-from app.utils.exceptions import InvalidWebhookSignatureError
+from app.services.account_service import account_service
+from app.services.paddle_client import paddle_client
+from app.utils.exceptions import BillingError, InvalidWebhookSignatureError
 
 router = APIRouter(prefix="/api/billing", tags=["billing"])
 logger = get_logger("billing_api")
@@ -35,6 +37,24 @@ async def create_checkout(
     payload: CheckoutRequest, user: User = Depends(get_current_user)
 ) -> CheckoutResponse:
     return paddle_service.build_checkout(user, payload.plan, payload.billing_period)
+
+
+@router.post("/portal", response_model=BillingPortalResponse)
+async def create_portal_session(
+    user: User = Depends(get_current_user), db: Session = Depends(get_db)
+) -> BillingPortalResponse:
+    """Hands back a Paddle-hosted customer-portal URL for the account page's
+    "Manage billing" button - never a custom card-management UI of our own."""
+    subscription = account_service.get_latest_subscription(db, user.id)
+    if subscription is None or not subscription.provider_customer_id:
+        return BillingPortalResponse(url=None)
+    try:
+        session = paddle_client.create_customer_portal_session(subscription.provider_customer_id)
+    except BillingError:
+        logger.warning("Could not create Paddle portal session for user %s", user.id)
+        return BillingPortalResponse(url=None)
+    url = (session.get("data") or {}).get("urls", {}).get("general", {}).get("overview")
+    return BillingPortalResponse(url=url)
 
 
 @router.post("/paddle/webhook", status_code=204, response_model=None)

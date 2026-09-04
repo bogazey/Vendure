@@ -1,12 +1,16 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import AdSlot from "../components/AdSlot";
 import DownloadQueue from "../components/DownloadQueue";
 import ErrorBanner from "../components/ErrorBanner";
 import FormatSelector from "../components/FormatSelector";
 import MediaCard from "../components/MediaCard";
 import UrlInput from "../components/UrlInput";
 import { useDownloadProgress } from "../hooks/useDownloadProgress";
+import { track } from "../lib/analytics";
 import { ApiError, api } from "../services/api";
-import type { AnalyzeResponse, CreateDownloadRequest } from "../types/api";
+import type { AnalyzeResponse, CreateDownloadRequest, DownloadStage } from "../types/api";
+
+const UPGRADE_ERROR_CODES = new Set(["PLAN_LIMIT_REACHED", "DAILY_LIMIT_REACHED", "FEATURE_NOT_INCLUDED", "UPGRADE_REQUIRED"]);
 
 export default function Dashboard() {
   const [media, setMedia] = useState<AnalyzeResponse | null>(null);
@@ -15,6 +19,18 @@ export default function Dashboard() {
   const [error, setError] = useState<{ message: string; technical?: string | null } | null>(null);
   const [queuedMessage, setQueuedMessage] = useState<string | null>(null);
   const { jobs, connected } = useDownloadProgress();
+  const previousStages = useRef<Map<string, DownloadStage>>(new Map());
+
+  useEffect(() => {
+    for (const job of jobs) {
+      const prevStage = previousStages.current.get(job.id);
+      if (prevStage !== job.stage) {
+        if (job.stage === "completed") track("download_completed");
+        else if (job.stage === "failed") track("download_failed");
+        previousStages.current.set(job.id, job.stage);
+      }
+    }
+  }, [jobs]);
 
   const handleAnalyze = async (url: string) => {
     setAnalyzing(true);
@@ -39,11 +55,15 @@ export default function Dashboard() {
     setError(null);
     try {
       await api.createDownload(request);
+      track("download_started");
       setQueuedMessage("Added to the download queue below.");
       setTimeout(() => setQueuedMessage(null), 4000);
     } catch (err) {
       if (err instanceof ApiError) {
         setError({ message: err.message, technical: err.technical });
+        if (err.code && UPGRADE_ERROR_CODES.has(err.code)) {
+          track("upgrade_prompt_shown", { code: err.code });
+        }
       } else {
         setError({ message: "An unexpected error occurred while starting the download." });
       }
@@ -70,6 +90,7 @@ export default function Dashboard() {
       </div>
 
       <UrlInput onAnalyze={handleAnalyze} loading={analyzing} />
+      <AdSlot placement="below-url-input" />
 
       {error && <ErrorBanner message={error.message} technical={error.technical} onDismiss={() => setError(null)} />}
 
@@ -82,6 +103,7 @@ export default function Dashboard() {
               {queuedMessage}
             </p>
           )}
+          <AdSlot placement="processing-state" />
         </div>
       )}
 
@@ -94,6 +116,7 @@ export default function Dashboard() {
           </span>
         </div>
         <DownloadQueue jobs={jobs} onCancel={handleCancel} />
+        {jobs.some((j) => j.stage === "completed") && <AdSlot placement="post-download" />}
       </div>
     </div>
   );

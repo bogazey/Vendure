@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import AdSlot from "../components/AdSlot";
 import ErrorBanner from "../components/ErrorBanner";
 import { ApiError, api } from "../services/api";
 import type { HistoryRecordOut, Platform } from "../types/api";
@@ -72,6 +73,8 @@ export default function HistoryPage() {
       </div>
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
+
+      <AdSlot placement="history-page" />
 
       {confirmClear && (
         <div className="flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">

@@ -165,6 +165,7 @@ export interface HealthResponse {
 export interface ApiErrorPayload {
   message: string;
   technical?: string | null;
+  code?: string | null;
 }
 
 export interface ValidateFolderResponse {

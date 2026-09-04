@@ -8,17 +8,30 @@ import type {
   UpdateSettingsRequest,
   ValidateFolderResponse,
 } from "../types/api";
+import type {
+  AccountOut,
+  AdminBillingEventOut,
+  AdminUserListOut,
+  AdminUserOut,
+  BillingPeriod,
+  BillingPortalResponse,
+  CheckoutResponse,
+  Plan,
+  UserOut,
+} from "../types/commercial";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
 export class ApiError extends Error {
   technical?: string | null;
+  code?: string | null;
   status: number;
 
-  constructor(message: string, status: number, technical?: string | null) {
+  constructor(message: string, status: number, technical?: string | null, code?: string | null) {
     super(message);
     this.status = status;
     this.technical = technical;
+    this.code = code;
   }
 }
 
@@ -27,6 +40,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     response = await fetch(`${API_BASE}${path}`, {
       ...init,
+      // Auth is httpOnly-cookie based (never localStorage/JS-readable
+      // tokens), so every request - including cross-origin dev requests to
+      // :8000 from the :5173 Vite server - must carry credentials.
+      credentials: "include",
       headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
     });
   } catch {
@@ -36,14 +53,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     let message = `Request failed (${response.status})`;
     let technical: string | undefined;
+    let code: string | undefined;
     try {
       const body = await response.json();
       message = body.message || message;
       technical = body.technical;
+      code = body.code;
     } catch {
       // ignore parse errors, use default message
     }
-    throw new ApiError(message, response.status, technical);
+    throw new ApiError(message, response.status, technical, code);
   }
 
   if (response.status === 204) {
@@ -98,6 +117,65 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ path }),
     }),
+
+  // --- Auth ---
+  signup: (email: string, password: string) =>
+    request<UserOut>("/api/auth/signup", { method: "POST", body: JSON.stringify({ email, password }) }),
+
+  login: (email: string, password: string) =>
+    request<UserOut>("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+
+  logout: () => request<void>("/api/auth/logout", { method: "POST" }),
+
+  me: () => request<UserOut>("/api/auth/me"),
+
+  forgotPassword: (email: string) =>
+    request<void>("/api/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
+
+  resetPassword: (token: string, newPassword: string) =>
+    request<void>("/api/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ token, new_password: newPassword }),
+    }),
+
+  resendVerification: () => request<void>("/api/auth/resend-verification", { method: "POST" }),
+
+  // --- Account / billing ---
+  getAccount: () => request<AccountOut>("/api/account"),
+
+  createCheckout: (plan: Plan, billingPeriod: BillingPeriod) =>
+    request<CheckoutResponse>("/api/billing/checkout", {
+      method: "POST",
+      body: JSON.stringify({ plan, billing_period: billingPeriod }),
+    }),
+
+  createBillingPortalSession: () =>
+    request<BillingPortalResponse>("/api/billing/portal", { method: "POST" }),
+
+  // --- Admin ---
+  adminListUsers: (params: { search?: string; limit?: number; offset?: number } = {}) => {
+    const query = new URLSearchParams();
+    if (params.search) query.set("search", params.search);
+    if (params.limit) query.set("limit", String(params.limit));
+    if (params.offset) query.set("offset", String(params.offset));
+    const qs = query.toString();
+    return request<AdminUserListOut>(`/api/admin/users${qs ? `?${qs}` : ""}`);
+  },
+
+  adminGrantCredits: (userId: string, credits: number, reason: string) =>
+    request<AdminUserOut>(`/api/admin/users/${userId}/grant-credits`, {
+      method: "POST",
+      body: JSON.stringify({ credits, reason }),
+    }),
+
+  adminSetAccountStatus: (userId: string, status: "active" | "disabled") =>
+    request<AdminUserOut>(`/api/admin/users/${userId}/status`, {
+      method: "POST",
+      body: JSON.stringify({ status }),
+    }),
+
+  adminListBillingEvents: (limit = 50) =>
+    request<AdminBillingEventOut[]>(`/api/admin/billing-events?limit=${limit}`),
 };
 
 export const PROGRESS_STREAM_URL = `${API_BASE}/api/progress/stream`;
