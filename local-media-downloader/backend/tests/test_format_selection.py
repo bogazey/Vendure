@@ -1,7 +1,12 @@
-"""yt-dlp format selector construction and download-opts sanitization wiring."""
+"""yt-dlp format selector construction and download-opts sanitization wiring.
+
+Container-mode-specific selector bias (Compatibility vs Original) is covered
+in tests/test_mp4_compatibility.py; these tests fix container_mode=ORIGINAL
+to exercise the underlying selector-construction mechanics without that bias.
+"""
 from __future__ import annotations
 
-from app.models.enums import MediaType
+from app.models.enums import ContainerMode, MediaType
 from app.models.schemas import AppSettings, CreateDownloadRequest
 from app.services import ytdlp_service
 from app.services.ytdlp_service import build_download_opts, build_format_selector
@@ -9,14 +14,18 @@ from app.services.ytdlp_service import build_download_opts, build_format_selecto
 
 class TestBuildFormatSelector:
     def test_best_video(self):
-        assert build_format_selector(MediaType.VIDEO, "best", None) == "bestvideo*+bestaudio/best"
+        selector = build_format_selector(MediaType.VIDEO, "best", None, container_mode=ContainerMode.ORIGINAL)
+        assert selector == "bestvideo*+bestaudio/best"
 
     def test_specific_height(self):
-        selector = build_format_selector(MediaType.VIDEO, "1080", None)
+        selector = build_format_selector(MediaType.VIDEO, "1080", None, container_mode=ContainerMode.ORIGINAL)
         assert selector == "bestvideo[height<=1080]+bestaudio/best[height<=1080]"
 
     def test_invalid_quality_key_falls_back_to_best(self):
-        assert build_format_selector(MediaType.VIDEO, "not-a-number", None) == "bestvideo*+bestaudio/best"
+        selector = build_format_selector(
+            MediaType.VIDEO, "not-a-number", None, container_mode=ContainerMode.ORIGINAL
+        )
+        assert selector == "bestvideo*+bestaudio/best"
 
     def test_audio_best(self):
         assert build_format_selector(MediaType.AUDIO, "best", None) == "bestaudio/best"

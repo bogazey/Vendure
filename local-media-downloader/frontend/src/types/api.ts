@@ -1,5 +1,5 @@
 export type Platform = "youtube" | "tiktok" | "instagram" | "facebook" | "unknown";
-export type MediaType = "video" | "audio" | "playlist";
+export type MediaType = "video" | "audio";
 export type DownloadStage =
   | "queued"
   | "analyzing"
@@ -10,7 +10,10 @@ export type DownloadStage =
   | "cancelled"
   | "failed";
 export type FormatKind = "video" | "audio";
-export type ContainerPref = "auto" | "mp4" | "mkv";
+/** Compatibility: video downloads always end in a genuine, playable MP4
+ * (H.264/AAC), transcoding via FFmpeg when needed. Original: keeps whatever
+ * container/codec the best source streams naturally use (may be WebM/MKV). */
+export type ContainerMode = "compatibility" | "original";
 export type Theme = "system" | "light" | "dark";
 export type CookieSource = "none" | "chrome" | "firefox" | "edge" | "safari" | "file";
 export type PlaylistMode = "single" | "full" | "selected";
@@ -39,6 +42,10 @@ export interface QualityPreset {
   kind: FormatKind;
   available: boolean;
   height: number | null;
+  /** Best-effort prediction shown before downloading; the actual, final
+   * container is always recorded in history after the download completes. */
+  expected_container: string | null;
+  will_transcode: boolean | null;
 }
 
 export interface PlaylistEntryPreview {
@@ -128,7 +135,7 @@ export interface AppSettings {
   theme: Theme;
 
   default_video_quality: string;
-  preferred_container: ContainerPref;
+  container_mode: ContainerMode;
   embed_metadata: boolean;
   save_thumbnail: boolean;
 

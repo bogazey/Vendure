@@ -32,10 +32,18 @@ class FormatKind(str, Enum):
     AUDIO = "audio"
 
 
-class ContainerPref(str, Enum):
-    AUTO = "auto"
-    MP4 = "mp4"
-    MKV = "mkv"
+class ContainerMode(str, Enum):
+    """How video downloads pick their final container/codec.
+
+    COMPATIBILITY (default): always ends in a genuine, broadly-playable MP4
+    (H.264 + AAC), transcoding via FFmpeg when the source streams are
+    WebM/VP9/AV1/Opus rather than just renaming the file.
+    ORIGINAL: keeps whatever container/codec the best source streams
+    naturally use (may be WebM/MKV), never transcodes.
+    """
+
+    COMPATIBILITY = "compatibility"
+    ORIGINAL = "original"
 
 
 class Theme(str, Enum):

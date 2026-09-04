@@ -13,6 +13,38 @@ cd ~/local-media-downloader
 
 ---
 
+## Real-world finding: "Best Available" was producing `.webm` files
+
+The first real YouTube download on macOS succeeded, but selecting **Best
+Available** produced a `.webm` file instead of a broadly-playable `.mp4`.
+This is expected of *raw* yt-dlp: YouTube's actual highest-quality streams
+are usually VP9/AV1 video + Opus audio in a WebM container, not H.264/AAC.
+
+This is now fixed at the architecture level, not by renaming the file:
+
+- A new **Settings → Video → Video output** choice: **Compatibility MP4**
+  (default) or **Best Quality / Original Container**.
+- In Compatibility mode, the app first *prefers* a native H.264 MP4 stream
+  at the requested quality (no conversion needed, fast and lossless). If the
+  best available source is WebM/VP9/AV1/Opus, it downloads that and then
+  **transcodes it with FFmpeg** to genuine H.264 + AAC in an `.mp4` container
+  — it never simply renames a `.webm` to `.mp4`.
+  Already-compatible sources (TikTok/Instagram/Facebook, or YouTube ≤1080p,
+  are almost always already H.264/AAC) get a fast, lossless container remux
+  instead of a full re-encode.
+- **Original** mode keeps today's raw yt-dlp behavior (WebM/MKV allowed,
+  never transcodes) for anyone who wants the smallest file or the exact
+  source codec.
+- The expected output container is shown in the UI (under each quality
+  preset, and as a summary line) **before** you download. History records
+  the *actual* final container after downloading, and **Open file** always
+  points at that final file, never an intermediate.
+- See §4f below to verify this on your Mac; see `README.md` → Architecture
+  for the code-level explanation (`ytdlp_service.needs_mp4_transcode`,
+  `download_manager._ensure_compatible_mp4`).
+
+---
+
 ## 1. Install dependencies
 
 ### 1a. Homebrew (skip if already installed)
@@ -147,10 +179,10 @@ duration) looks right, then proceed as described.
 ### 4a. YouTube (video)
 
 1. Paste a public YouTube video URL, e.g. `https://www.youtube.com/watch?v=<id>` or a `youtu.be/<id>` short link.
-2. Click **Analyze** — the preview card and quality presets (2160p/1440p/…/360p, greyed out for resolutions that don't exist for that video) should appear.
+2. Click **Analyze** — the preview card and quality presets (2160p/1440p/…/360p, greyed out for resolutions that don't exist for that video) should appear, each with a small MP4/converts hint under it, and an "Output: …" summary line below the grid (with Settings on the default Compatibility MP4 mode, this should always say **MP4**).
 3. Leave quality on **Best Available**, click **Start Download**.
-4. Watch it move through **Downloading → Completed** in "Active & Recent Downloads", with a live percentage, speed, and ETA.
-5. Open **Downloads** in the header — the completed row should show a working **Open file** and **Open folder** button (these call macOS `open` under the hood).
+4. Watch it move through **Downloading → (Merging) → (Converting) → Completed** in "Active & Recent Downloads", with a live percentage, speed, and ETA. A "Converting" stage means the source wasn't already H.264/AAC and FFmpeg is transcoding it — see §4f.
+5. Open **Downloads** in the header — the completed row should show a working **Open file** and **Open folder** button (these call macOS `open` under the hood), and the filename shown should end in `.mp4`.
 
 ### 4b. TikTok
 
@@ -177,13 +209,32 @@ duration) looks right, then proceed as described.
 4. Open the finished file — it should play as an actual MP3, and (if "Embed thumbnail into downloaded audio files" is on in Settings) show cover art in your player/Finder preview.
 5. Confirm the *un*checked case too: turn off "Embed thumbnail" and "Save thumbnail" in Settings, download another MP3, and check the download folder has **no leftover `.jpg`/`.webp` file** next to it (this was a real bug we fixed — a stray thumbnail file used to get left behind).
 
-### 4f. 1080p video + audio merging
+### 4f. 1080p video + audio merging, and MP4 compatibility
 
 1. Analyze a YouTube video that actually has a separate 1080p video-only stream (most videos over a few minutes long do).
 2. Select **1080p** explicitly (not "Best Available") and start the download.
-3. You should see the stage move **Downloading → Merging → Completed** — "Merging" is FFmpeg muxing the separately-downloaded video and audio streams into one file.
+3. You should see the stage move **Downloading → Merging → Completed** — "Merging" is FFmpeg muxing the separately-downloaded video and audio streams into one file. 1080p and below is almost always natively H.264 on YouTube, so you should *not* see a separate "Converting" stage here — just a fast merge.
 4. Play the finished file and confirm both picture *and* sound are present (a broken merge is usually silent video or an error, not a video that "looks fine but plays with no audio" — but check anyway).
-5. Open **Settings → Video → Preferred container** and set it to **MKV**, then repeat with a different video — the merged output should be a `.mkv` file this time.
+5. Confirm it's a genuine MP4, not just a renamed file:
+   ```bash
+   ffprobe -v error -show_entries stream=codec_type,codec_name -of default=noprint_wrappers=1 "downloads/<the file>.mp4"
+   ```
+   Expect to see `codec_type=video` / `codec_name=h264` and `codec_type=audio` / `codec_name=aac`.
+
+**Forcing an actual transcode** (to see the "Converting" stage do real work):
+
+1. Find a YouTube video whose *highest* resolution is only available as VP9/AV1 — most 4K/8K uploads qualify, since YouTube generally doesn't offer 4K+ in H.264. Check **Advanced Formats** after analyzing: look for a 2160p/4K row with `vcodec` starting with `vp09`/`vp9`/`av01` and no `avc1` row at that height.
+2. Select **Best Available** (or **2160p**) and start the download.
+3. Watch the stage go **Downloading → Converting → Completed** — "Converting" here is the real FFmpeg re-encode to H.264/AAC (this takes noticeably longer than a remux; a multi-minute 4K clip can take a few minutes depending on your Mac).
+4. Confirm with `ffprobe` as above — codecs should be `h264`/`aac` even though the source was VP9/Opus.
+5. Check the download folder (Finder or `ls downloads/`) — there should be **no leftover `.webm` file**, only the final `.mp4`.
+
+**Original / Best Quality mode (WebM allowed):**
+
+1. Go to **Settings → Video → Video output** and switch to **Best Quality / Original Container**.
+2. Repeat the same VP9/AV1 video from above at **Best Available**.
+3. This time it should complete with **no "Converting" stage**, and the final file should be `.webm` (or `.mkv`) — check the History page's format column, which now shows the actual container (e.g. "Best Available · WEBM").
+4. Switch the setting back to **Compatibility MP4** when done, since that's the recommended default.
 
 ### 4g. Cancellation
 
@@ -219,7 +270,9 @@ platform itself, exactly like your browser would.
 Run these to confirm the app is internally healthy without needing a browser:
 
 ```bash
-# Backend: 99 tests, yt-dlp itself is mocked (no network calls)
+# Backend: 121 tests, yt-dlp AND ffmpeg are mocked (no network calls, no
+# real encoding) - includes tests/test_mp4_compatibility.py, which covers
+# the codec-detection and remux/transcode pipeline from this real-world fix
 cd backend
 source .venv/bin/activate
 python -m pytest -q
@@ -235,7 +288,10 @@ cd ..
 ```
 
 All four frontend commands and the backend test run should finish with no
-errors.
+errors. The mocked tests verify the *logic* (codec detection, format
+selector construction, cleanup, failure handling) — §4f above is how you
+verify real FFmpeg conversion produces an actually-playable file on your
+Mac.
 
 ---
 
@@ -256,6 +312,9 @@ diagnose an issue. `data/logs/app.log` has the same detail plus history.
 | "Permission denied writing to the download folder" | Chosen download folder isn't writable (e.g. inside a read-only volume, or macOS blocked Terminal's folder access) | Pick a different folder in Settings, or grant Terminal "Files and Folders" access in **System Settings → Privacy & Security** |
 | "The download destination is out of disk space" | Disk actually full | Free up space or change the download folder |
 | Video downloads but has no audio, or download fails during "Merging" | FFmpeg couldn't merge — often an FFmpeg version mismatch | Run `brew upgrade ffmpeg`; check `ffmpeg -version` is a reasonably recent build |
+| Download fails during "Converting" (Compatibility MP4 mode) | FFmpeg couldn't transcode the source to H.264/AAC — usually an FFmpeg build missing `libx264`/`aac` encoders | `ffmpeg -encoders \| grep -E "libx264\|aac"` should list both; if not, `brew reinstall ffmpeg` (Homebrew's build includes both by default) |
+| "Best Available" still produces a `.webm`/`.mkv` file | **Settings → Video → Video output** is set to "Best Quality / Original Container" | Switch it to "Compatibility MP4" (the default) — see §4f |
+| Downloads taking much longer than expected at "Converting" | A genuine FFmpeg re-encode (not just a remux) is running — this happens whenever the source is VP9/AV1/Opus, common for 4K+ YouTube video | Expected; re-encoding is CPU-bound and slower than a remux. Switch to Original mode if you'd rather skip conversion and keep the native WebM |
 | "Failed to extract any player response" / similar YouTube extractor errors | yt-dlp is out of date — YouTube changes frequently and old yt-dlp versions break within weeks | `cd backend && source .venv/bin/activate && pip install --upgrade yt-dlp` |
 | Cookie-based download still fails after setting cookies | Browser was still running when cookies were read, or you're not actually logged in with access to that content | Fully quit the browser first (§4g step 2); confirm you can see the content in that same browser |
 | "Could not read the configured cookie file" | Cookie file path is wrong or the file was deleted/moved | Re-check the path in Settings → Authentication |

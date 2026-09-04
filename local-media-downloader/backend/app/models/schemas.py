@@ -6,7 +6,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field, field_validator
 
 from app.models.enums import (
-    ContainerPref,
+    ContainerMode,
     CookieSource,
     DownloadStage,
     FormatKind,
@@ -51,6 +51,12 @@ class QualityPreset(BaseModel):
     kind: FormatKind
     available: bool
     height: Optional[int] = None
+    # Best-effort prediction shown in the UI before downloading. For video
+    # presets in Compatibility mode this is always "mp4" (guaranteed by
+    # post-download conversion if needed); will_transcode flags whether that
+    # conversion is actually expected to run for this particular preset.
+    expected_container: Optional[str] = None
+    will_transcode: Optional[bool] = None
 
 
 class PlaylistEntryPreview(BaseModel):
@@ -165,7 +171,7 @@ class AppSettings(BaseModel):
     theme: Theme = Theme.SYSTEM
 
     default_video_quality: str = "best"
-    preferred_container: ContainerPref = ContainerPref.AUTO
+    container_mode: ContainerMode = ContainerMode.COMPATIBILITY
     embed_metadata: bool = True
     save_thumbnail: bool = False
 
@@ -186,7 +192,7 @@ class UpdateSettingsRequest(BaseModel):
     theme: Optional[Theme] = None
 
     default_video_quality: Optional[str] = None
-    preferred_container: Optional[ContainerPref] = None
+    container_mode: Optional[ContainerMode] = None
     embed_metadata: Optional[bool] = None
     save_thumbnail: Optional[bool] = None
 

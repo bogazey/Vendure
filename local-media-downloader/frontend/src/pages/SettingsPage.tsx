@@ -148,16 +148,20 @@ export default function SettingsPage() {
           </select>
         </Field>
 
-        <Field label="Preferred container">
+        <Field label="Video output">
           <select
-            value={settings.preferred_container}
-            onChange={(e) => persist({ preferred_container: e.target.value as AppSettings["preferred_container"] })}
+            value={settings.container_mode}
+            onChange={(e) => persist({ container_mode: e.target.value as AppSettings["container_mode"] })}
             className={inputClass}
           >
-            <option value="auto">Auto</option>
-            <option value="mp4">MP4</option>
-            <option value="mkv">MKV</option>
+            <option value="compatibility">Compatibility MP4 (default)</option>
+            <option value="original">Best Quality / Original Container</option>
           </select>
+          <span className="text-xs text-slate-500">
+            {settings.container_mode === "compatibility"
+              ? "Always downloads a genuine, broadly-playable MP4 (H.264/AAC), converting with FFmpeg when the source is WebM/VP9/AV1/Opus."
+              : "Keeps the best source streams' native codec/container as-is (may be WebM or MKV) — never converts."}
+          </span>
         </Field>
 
         <label className="flex items-center gap-2 text-sm text-slate-300">

@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import subprocess
 import threading
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -19,13 +21,23 @@ from yt_dlp.utils import DownloadCancelled
 
 from app.config.logging_config import get_logger
 from app.database import history_repo
-from app.models.enums import DownloadStage, MediaType, Platform
+from app.models.enums import ContainerMode, DownloadStage, MediaType, Platform
 from app.models.schemas import AppSettings, CreateDownloadRequest, DownloadJobOut
 from app.services import ytdlp_service
 from app.services.settings_service import get_settings
-from app.utils.exceptions import FfmpegMissingError, JobNotFoundError, UnavailableMediaError
+from app.utils.exceptions import (
+    FfmpegMissingError,
+    FfmpegProcessingError,
+    JobNotFoundError,
+    UnavailableMediaError,
+)
 from app.utils.paths import resolve_safe_directory, validate_directory_writable
 from app.utils.url_detect import detect_platform
+
+# ffmpeg progress/version banners on stderr can be large; keeping ffmpeg quiet
+# avoids filling the pipe buffer while _run_ffmpeg polls rather than streams
+# it, and keeps the output that IS captured relevant if something fails.
+_FFMPEG_QUIET_ARGS = ("-hide_banner", "-loglevel", "error")
 
 logger = get_logger("download_manager")
 
@@ -256,6 +268,107 @@ class DownloadManager:
                 except Exception:  # noqa: BLE001
                     pass
 
+            if job.request.media_type == MediaType.VIDEO and settings.container_mode == ContainerMode.COMPATIBILITY:
+                self._ensure_compatible_mp4(job, info)
+
+    def _ensure_compatible_mp4(self, job: DownloadJob, info: dict) -> None:
+        """Compatibility mode's guarantee: a video download always ends in a
+        genuine, playable .mp4 - remuxing (fast, lossless) when the source
+        codecs are already H.264/AAC, or transcoding via FFmpeg when they
+        aren't (e.g. YouTube's VP9/AV1 + Opus streams). Never just renames a
+        WebM/MKV file to .mp4."""
+        if not job.filepath:
+            return
+        source = Path(job.filepath)
+        if not source.is_file():
+            return
+
+        transcode = ytdlp_service.needs_mp4_transcode(info)
+        if source.suffix.lower() == ".mp4" and not transcode:
+            return  # already a genuine, compatible MP4 - nothing to do
+
+        ffmpeg_available, ffmpeg_path = ytdlp_service.check_ffmpeg()
+        if not ffmpeg_available or not ffmpeg_path:
+            raise FfmpegMissingError("FFmpeg was not found on this system. Install it and try again.")
+
+        job.stage = DownloadStage.CONVERTING
+        self._bump_revision()
+        new_path = self._produce_compatible_mp4(job, ffmpeg_path, source, transcode)
+        job.filepath = str(new_path)
+
+    def _produce_compatible_mp4(
+        self, job: DownloadJob, ffmpeg_path: str, source: Path, transcode: bool
+    ) -> Path:
+        target = source.with_suffix(".mp4")
+        # Guard against the rare case where the source is already named
+        # ".mp4" but has incompatible codecs inside (needs_mp4_transcode
+        # caught it): ffmpeg can't read and overwrite the same file at once,
+        # so convert to a temp name first, then swap it into place.
+        collides = target == source
+        work_target = target.with_name(f"{target.stem}.compat_tmp.mp4") if collides else target
+
+        if transcode:
+            # Genuine re-encode to H.264 + AAC. crf 18 is close to visually
+            # lossless (preserves quality) while still being broadly playable;
+            # yuv420p maximizes device/player compatibility (some VP9 sources
+            # use pixel formats older H.264 decoders choke on).
+            args = [
+                "-y", *_FFMPEG_QUIET_ARGS, "-i", str(source),
+                "-map_metadata", "0",
+                "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p",
+                "-c:a", "aac", "-b:a", "192k",
+                "-movflags", "+faststart",
+                str(work_target),
+            ]
+        else:
+            # Codecs are already MP4-compatible; just remux the container
+            # losslessly (stream copy, no re-encode).
+            args = [
+                "-y", *_FFMPEG_QUIET_ARGS, "-i", str(source),
+                "-map_metadata", "0",
+                "-c", "copy",
+                "-movflags", "+faststart",
+                str(work_target),
+            ]
+
+        self._run_ffmpeg(job, ffmpeg_path, args, work_target)
+
+        if collides:
+            work_target.replace(target)
+        else:
+            try:
+                source.unlink()
+            except OSError as exc:
+                logger.warning("Could not remove intermediate file %s: %s", source, exc)
+
+        return target
+
+    def _run_ffmpeg(self, job: DownloadJob, ffmpeg_path: str, args: list[str], output_path: Path) -> None:
+        """Runs ffmpeg, polling job.cancel_event so a cancel click can
+        interrupt an in-progress merge/conversion, not just the download."""
+        proc = subprocess.Popen(
+            [ffmpeg_path, *args], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True
+        )
+        while proc.poll() is None:
+            if job.cancel_event.is_set():
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait()
+                output_path.unlink(missing_ok=True)
+                raise DownloadCancelled("Cancelled during conversion")
+            time.sleep(0.2)
+
+        stderr_output = proc.stderr.read() if proc.stderr else ""
+        if proc.returncode != 0:
+            output_path.unlink(missing_ok=True)
+            raise FfmpegProcessingError(
+                "FFmpeg could not convert this video to a compatible MP4.",
+                technical=(stderr_output or "").strip()[-4000:] or None,
+            )
+
     def _finish_as_completed(self, job: DownloadJob) -> None:
         job.stage = DownloadStage.COMPLETED
         job.progress_percent = 100.0
@@ -291,11 +404,18 @@ class DownloadManager:
         resolution = None
         if job.request.quality_key and job.request.quality_key not in ("best", "mp3", "m4a"):
             resolution = f"{job.request.quality_key}p"
-        format_label = (
-            (job.request.audio_format or "audio").upper()
-            if job.request.media_type == MediaType.AUDIO
-            else (resolution or "Best Available")
-        )
+
+        if job.request.media_type == MediaType.AUDIO:
+            format_label = (job.request.audio_format or "audio").upper()
+        else:
+            # Record the actual final container, not just the requested
+            # quality - Compatibility mode may have transcoded/remuxed to a
+            # different container than whatever yt-dlp initially produced.
+            format_label = resolution or "Best Available"
+            if job.filepath:
+                container = Path(job.filepath).suffix.lstrip(".").upper()
+                if container:
+                    format_label = f"{format_label} · {container}"
         history_repo.upsert(
             {
                 "id": job.id,

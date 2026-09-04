@@ -38,6 +38,11 @@ export default function FormatSelector({ media, onStartDownload, submitting }: F
 
   const canSubmit = !submitting && !clipError;
 
+  const selectedVideoPreset = useMemo(
+    () => (selectedFormat ? null : media.video_presets.find((p) => p.key === videoQuality) ?? null),
+    [media.video_presets, videoQuality, selectedFormat],
+  );
+
   const handleSubmit = () => {
     if (!canSubmit) return;
     const request: CreateDownloadRequest = {
@@ -83,22 +88,36 @@ export default function FormatSelector({ media, onStartDownload, submitting }: F
       </div>
 
       {mediaType === "video" ? (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {media.video_presets.map((preset) => (
-            <button
-              key={preset.key}
-              type="button"
-              disabled={!preset.available}
-              onClick={() => setVideoQuality(preset.key)}
-              className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                videoQuality === preset.key
-                  ? "border-indigo-500 bg-indigo-500/15 text-indigo-200"
-                  : "border-surface-border text-slate-300 hover:border-slate-500"
-              } ${!preset.available ? "cursor-not-allowed opacity-30" : ""}`}
-            >
-              {preset.label}
-            </button>
-          ))}
+        <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {media.video_presets.map((preset) => (
+              <button
+                key={preset.key}
+                type="button"
+                disabled={!preset.available}
+                onClick={() => setVideoQuality(preset.key)}
+                className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                  videoQuality === preset.key
+                    ? "border-indigo-500 bg-indigo-500/15 text-indigo-200"
+                    : "border-surface-border text-slate-300 hover:border-slate-500"
+                } ${!preset.available ? "cursor-not-allowed opacity-30" : ""}`}
+              >
+                <div>{preset.label}</div>
+                {preset.expected_container && (
+                  <div className="mt-0.5 text-[10px] font-normal uppercase tracking-wide text-slate-500">
+                    {preset.expected_container}
+                    {preset.will_transcode ? " · converts" : ""}
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+          {selectedVideoPreset?.expected_container && (
+            <p className="text-xs text-slate-500">
+              Output: <span className="font-medium text-slate-300">{selectedVideoPreset.expected_container.toUpperCase()}</span>
+              {selectedVideoPreset.will_transcode && " (source will be converted with FFmpeg to preserve compatibility)"}
+            </p>
+          )}
         </div>
       ) : (
         <div className="flex flex-col gap-3">

@@ -26,6 +26,12 @@ Settings page here once you've run the app locally._
 - Metadata preview: thumbnail, title, uploader, duration, description
 - Simple quality presets (2160p → 360p, Best Audio, MP3, M4A) plus an
   "Advanced Formats" table of every stream yt-dlp actually found
+- Video downloads default to a genuine, broadly-playable **MP4** (H.264 +
+  AAC) — remuxing when the source is already compatible, transcoding with
+  FFmpeg when it isn't (e.g. YouTube's VP9/AV1 + Opus streams), never just
+  renaming a `.webm` to `.mp4`. The expected output container is shown
+  before you download; an opt-out "Best Quality / Original Container" mode
+  keeps the raw source codec/container instead
 - Live download progress over Server-Sent Events (no polling)
 - Concurrent download queue (configurable, default 2 at a time)
 - Cancel an in-progress download
@@ -35,8 +41,8 @@ Settings page here once you've run the app locally._
 - Optional cookie support for content that needs your logged-in session
   (cookies never leave your computer)
 - Settings for download folder, concurrency, theme (System/Light/Dark, fully
-  live-applied), container/format preferences, MP3 bitrate, metadata/
-  thumbnail embedding, network timeout
+  live-applied), video output mode (Compatibility MP4/Original), MP3
+  bitrate, metadata/thumbnail embedding, network timeout
 - First-run FFmpeg check with OS-specific install instructions
 - Downloads interrupted by an app crash or force-quit are recovered as
   "Failed" (with a Retry button) the next time the backend starts, instead of
@@ -72,7 +78,13 @@ local-media-downloader/
 merging and audio conversion, SQLite for history/settings, Server-Sent Events
 for progress. All downloads run through an in-process async queue with a
 configurable concurrency limit; yt-dlp itself runs in a worker thread per job
-so the event loop stays responsive.
+so the event loop stays responsive. For video downloads in Compatibility
+mode, `download_manager._ensure_compatible_mp4` inspects the actually-
+downloaded codecs (`ytdlp_service.needs_mp4_transcode`) after yt-dlp finishes
+and, if they aren't already H.264/AAC, runs a second FFmpeg pass — a fast
+lossless remux when only the container needs to change, or a genuine
+transcode (libx264/AAC) when the codecs themselves are incompatible — before
+the job is ever reported "Completed".
 
 **Frontend**: React + TypeScript + Tailwind CSS, built with Vite. Talks to the
 backend over a small typed `fetch` client and subscribes to
@@ -185,8 +197,11 @@ All settings are edited from the Settings page and persisted in SQLite
 (`data/app.db`):
 
 - **General** — download folder, max simultaneous downloads, theme
-- **Video** — default quality, container (Auto/MP4/MKV), embed metadata,
-  save thumbnail
+- **Video** — default quality, video output mode (**Compatibility MP4**,
+  default — always ends in a genuine playable MP4, transcoding via FFmpeg
+  when the source is WebM/VP9/AV1/Opus; or **Best Quality / Original
+  Container** — keeps the source codec/container as-is, may be WebM/MKV,
+  never transcodes), embed metadata, save thumbnail
 - **Audio** — preferred format, MP3 bitrate, embed thumbnail in audio files
 - **Authentication** — cookie source (see below)
 - **Advanced** — yt-dlp version, FFmpeg path (read-only), network timeout,
@@ -227,7 +242,7 @@ don't have access to.
 ## Testing
 
 ```bash
-# Backend (99 tests; yt-dlp is mocked, no network access needed)
+# Backend (121 tests; yt-dlp and ffmpeg are mocked, no network access needed)
 cd backend && source .venv/bin/activate && python -m pytest -q
 
 # Frontend
@@ -262,11 +277,20 @@ The installed version is shown in Settings → Advanced.
   button in History. True byte-level resume isn't attempted, but yt-dlp's
   own partial-file (`.part`) resume will often kick in transparently if the
   retry writes to the same filename.
-- Cancelling a download during the final merge/convert step can't interrupt
-  the running FFmpeg process itself (there's no clean way to abort it
-  mid-flight), but the app still honors the cancellation afterwards — the
-  job ends up "Cancelled" and the file that just finished is deleted, rather
-  than silently reporting success.
+- Cancelling during yt-dlp's own internal merge or MP3-extraction step can't
+  interrupt that specific FFmpeg subprocess mid-flight (yt-dlp doesn't expose
+  a hook for it), but the app still honors the cancellation afterwards — the
+  job ends up "Cancelled" and the file that just finished is deleted rather
+  than silently reporting success. The app's own separate Compatibility-mode
+  MP4 conversion pass (the "Converting" stage after a WebM/VP9 download)
+  *is* directly interruptible — clicking Cancel there stops FFmpeg within
+  about a fifth of a second and cleans up the partial output.
+- Compatibility mode's FFmpeg transcode (when the source isn't already
+  H.264/AAC) uses `libx264 -preset medium -crf 18` — near-visually-lossless
+  and broadly compatible, but a genuine re-encode is CPU-bound and takes
+  meaningfully longer than a remux, especially for 4K+ source video. Switch
+  to "Best Quality / Original Container" in Settings to skip conversion
+  entirely if you'd rather keep the native WebM/AV1 file.
 - Cookie-based access only works for content your own logged-in account can
   already see in a normal browser — it does not bypass any access control.
 - Platform behavior (available qualities, playlist metadata, private-content
@@ -301,6 +325,9 @@ The installed version is shown in Settings → Advanced.
   Settings does.
 - Filenames are sanitized for Windows/macOS/Linux compatibility before
   anything is written to disk.
+- The Compatibility-mode FFmpeg conversion pass invokes `ffmpeg` the same
+  way — an argument array (`subprocess.Popen([ffmpeg_path, ...])`), never a
+  shell string built from user input.
 - Cookies, authorization headers, and other session data are never logged or
   sent anywhere except to the platform's own servers via yt-dlp, exactly as
   your browser would.
