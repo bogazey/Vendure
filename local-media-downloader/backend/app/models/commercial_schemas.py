@@ -7,6 +7,7 @@ from typing import Optional
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.models.commercial_enums import BillingPeriod, Plan, SubscriptionStatus, UserRole
+from app.models.enums import ContainerMode, CookieSource
 
 
 # ---------- Auth ----------
@@ -93,6 +94,23 @@ class AccountOut(BaseModel):
     subscription: SubscriptionOut
     usage: UsageOut
     features: PlanFeaturesOut
+
+
+# ---------- Per-user download preferences ----------
+# container_mode / cookie_source / cookie_file_path are per-user (never the
+# personal app's global AppSettings) so one account's choice here can never
+# change what another account's downloads are gated against or run with.
+
+class DownloadPreferencesOut(BaseModel):
+    container_mode: ContainerMode
+    cookie_source: CookieSource
+    cookie_file_path: Optional[str] = None
+
+
+class UpdateDownloadPreferencesRequest(BaseModel):
+    container_mode: Optional[ContainerMode] = None
+    cookie_source: Optional[CookieSource] = None
+    cookie_file_path: Optional[str] = None
 
 
 # ---------- Billing / checkout ----------

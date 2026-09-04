@@ -73,3 +73,44 @@ class TestEnsurePathPermitted:
         unknown.write_text("data")
         with pytest.raises(InvalidPathError):
             filesystem_service.ensure_path_permitted(unknown)
+
+    def test_legacy_history_fallback_is_scoped_to_the_calling_user(self, download_dir, tmp_path):
+        """A file recorded in one user's history must not be openable by
+        passing another user's id - the history fallback used to be a
+        completely unscoped global lookup (any file any account ever
+        downloaded), which is a cross-tenant leak in a multi-user deployment."""
+        old_download_dir = tmp_path / "old-downloads-2"
+        old_download_dir.mkdir()
+        old_file = old_download_dir / "someone-elses-clip [zzz111].mp4"
+        old_file.write_text("data")
+
+        owner_id = str(uuid.uuid4())
+        other_user_id = str(uuid.uuid4())
+
+        history_repo.upsert(
+            {
+                "id": str(uuid.uuid4()),
+                "url": "https://www.youtube.com/watch?v=zzz111",
+                "platform": "youtube",
+                "title": "Someone Else's Clip",
+                "uploader": None,
+                "thumbnail": None,
+                "format_label": "1080p",
+                "resolution": "1080p",
+                "filepath": str(old_file),
+                "filesize": 4,
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "completed_at": "2026-01-01T00:01:00+00:00",
+                "status": "completed",
+                "error_message": None,
+                "user_id": owner_id,
+            }
+        )
+
+        # The owner can still reach it via the legacy-history fallback.
+        filesystem_service.ensure_path_permitted(old_file, user_id=owner_id)  # must not raise
+
+        # A different authenticated user must NOT be able to use the same
+        # fallback to act on (or even confirm the existence of) this file.
+        with pytest.raises(InvalidPathError):
+            filesystem_service.ensure_path_permitted(old_file, user_id=other_user_id)

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import ErrorBanner from "../components/ErrorBanner";
 import { ApiError, api } from "../services/api";
 import type { AppSettings, CookieSource, HealthResponse, Theme } from "../types/api";
+import type { DownloadPreferencesOut } from "../types/commercial";
 import { applyTheme } from "../utils/theme";
 
 const COOKIE_SOURCES: { value: CookieSource; label: string }[] = [
@@ -36,6 +37,7 @@ const inputClass =
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [preferences, setPreferences] = useState<DownloadPreferencesOut | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -43,6 +45,10 @@ export default function SettingsPage() {
 
   useEffect(() => {
     api.getSettings().then(setSettings).catch((err) => setError(err instanceof ApiError ? err.message : "Could not load settings."));
+    api
+      .getDownloadPreferences()
+      .then(setPreferences)
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load download preferences."));
     api.health().then(setHealth).catch(() => undefined);
   }, []);
 
@@ -61,6 +67,24 @@ export default function SettingsPage() {
     }
   };
 
+  // container_mode / cookie_source / cookie_file_path are per-account, not
+  // part of the shared AppSettings row above - see types/commercial.ts and
+  // COMMERCIAL_ARCHITECTURE.md for why. Persisted separately so one user's
+  // choice here can never affect anyone else's downloads.
+  const persistPreferences = async (patch: Partial<DownloadPreferencesOut>) => {
+    if (!preferences) return;
+    const next = { ...preferences, ...patch };
+    setPreferences(next);
+    try {
+      const saved = await api.updateDownloadPreferences(patch);
+      setPreferences(saved);
+      setSaveMessage("Saved");
+      setTimeout(() => setSaveMessage(null), 1500);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not save download preferences.");
+    }
+  };
+
   const handleFolderChange = async (path: string) => {
     setSettings((prev) => (prev ? { ...prev, download_dir: path } : prev));
   };
@@ -75,7 +99,7 @@ export default function SettingsPage() {
     }
   };
 
-  if (!settings) {
+  if (!settings || !preferences) {
     return <div className="mx-auto max-w-3xl px-6 py-10 text-sm text-slate-500">Loading settings…</div>;
   }
 
@@ -150,15 +174,17 @@ export default function SettingsPage() {
 
         <Field label="Video output">
           <select
-            value={settings.container_mode}
-            onChange={(e) => persist({ container_mode: e.target.value as AppSettings["container_mode"] })}
+            value={preferences.container_mode}
+            onChange={(e) =>
+              persistPreferences({ container_mode: e.target.value as DownloadPreferencesOut["container_mode"] })
+            }
             className={inputClass}
           >
             <option value="compatibility">Compatibility MP4 (default)</option>
             <option value="original">Best Quality / Original Container</option>
           </select>
           <span className="text-xs text-slate-500">
-            {settings.container_mode === "compatibility"
+            {preferences.container_mode === "compatibility"
               ? "Always downloads a genuine, broadly-playable MP4 (H.264/AAC), converting with FFmpeg when the source is WebM/VP9/AV1/Opus."
               : "Keeps the best source streams' native codec/container as-is (may be WebM or MKV) — never converts."}
           </span>
@@ -226,12 +252,12 @@ export default function SettingsPage() {
       <Section title="Authentication">
         <p className="text-xs text-slate-500">
           Cookies remain on this computer and are only used locally by the downloader. They are never uploaded
-          anywhere.
+          anywhere, and these choices are private to your account — no other user's downloads are affected by them.
         </p>
         <Field label="Cookie source">
           <select
-            value={settings.cookie_source}
-            onChange={(e) => persist({ cookie_source: e.target.value as CookieSource })}
+            value={preferences.cookie_source}
+            onChange={(e) => persistPreferences({ cookie_source: e.target.value as CookieSource })}
             className={inputClass}
           >
             {COOKIE_SOURCES.map((opt) => (
@@ -242,13 +268,13 @@ export default function SettingsPage() {
           </select>
         </Field>
 
-        {settings.cookie_source === "file" && (
+        {preferences.cookie_source === "file" && (
           <Field label="Cookie file path (Netscape format)">
             <input
               type="text"
-              value={settings.cookie_file_path || ""}
-              onChange={(e) => setSettings({ ...settings, cookie_file_path: e.target.value })}
-              onBlur={(e) => persist({ cookie_file_path: e.target.value })}
+              value={preferences.cookie_file_path || ""}
+              onChange={(e) => setPreferences({ ...preferences, cookie_file_path: e.target.value })}
+              onBlur={(e) => persistPreferences({ cookie_file_path: e.target.value })}
               placeholder="/path/to/cookies.txt"
               className={inputClass}
             />

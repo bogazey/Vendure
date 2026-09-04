@@ -27,6 +27,7 @@ from app.models.schemas import AppSettings, CreateDownloadRequest, DownloadJobOu
 from app.services import ytdlp_service
 from app.services.settings_service import get_settings
 from app.services.usage_service import usage_service
+from app.services.user_preferences_service import user_preferences_service
 from app.utils.exceptions import (
     FfmpegMissingError,
     FfmpegProcessingError,
@@ -176,6 +177,26 @@ class DownloadManager:
             request = CreateDownloadRequest(url=record.url)
         return self.create_job(request)
 
+    def _effective_settings(self, job: DownloadJob) -> AppSettings:
+        """Global AppSettings (download_dir, concurrency, audio/video
+        presets, timeouts, ...) with container_mode/cookie_source/
+        cookie_file_path overridden by this job's owning user's own
+        preferences - see user_preferences_service.py for why those three
+        fields specifically can never come from the shared global row."""
+        settings = get_settings()
+        if not job.user_id:
+            return settings
+        session = session_scope()
+        try:
+            effective = user_preferences_service.get_effective_settings(session, job.user_id, settings)
+            session.commit()  # persist a lazily-created default row rather than rolling it back on close
+            return effective
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
     async def _run_job(self, job_id: str) -> None:
         job = self.get_job(job_id)
         semaphore = await self._get_semaphore()
@@ -191,7 +212,7 @@ class DownloadManager:
                 # still "in progress" gets marked failed and stays retryable
                 # instead of vanishing silently (see history_repo.mark_interrupted_as_failed).
                 self._save_history(job)
-                settings = get_settings()
+                settings = self._effective_settings(job)
                 await asyncio.to_thread(self._blocking_download, job, settings)
                 if job.cancel_event.is_set():
                     # The download finished before we could interrupt it (e.g.

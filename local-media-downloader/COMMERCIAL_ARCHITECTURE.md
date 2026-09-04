@@ -16,7 +16,7 @@ bypass, or any other technical-protection circumvention.
 |---|---|---|
 | File | `data/app.db` | `data/commercial.db` |
 | Access | raw `sqlite3` (`app/database/db.py`) | SQLAlchemy 2.0 ORM |
-| Contents | `settings`, `history` | `users`, `subscriptions`, `usage_periods`, `usage_events`, `entitlements`, `billing_events`, `refresh_tokens`, `password_reset_tokens`, `email_verification_tokens` |
+| Contents | `settings`, `history` | `users`, `subscriptions`, `usage_periods`, `usage_events`, `entitlements`, `billing_events`, `refresh_tokens`, `password_reset_tokens`, `email_verification_tokens`, `user_download_preferences` |
 | Migrations | none (additive `ALTER TABLE` in `db.py._migrate_schema`, see §7) | Alembic (`backend/alembic/`) |
 | Portability | SQLite only | `DATABASE_URL` env var — SQLite locally, PostgreSQL in production, no code changes |
 
@@ -158,18 +158,106 @@ scoping at all before this branch. It's now `Depends(get_current_user)` and
 filters to `manager.list_jobs(user_id=user.id)`, matching `GET
 /api/downloads`.
 
-### 4.1 Known limitation: global app settings vs. per-user gating
+### 4.1 Per-user download preferences (container_mode / cookie_source)
 
-`container_mode` and `cookie_source` are still process-global settings
-(`app/services/settings_service.py`, backed by the personal app's
-`settings` table) — they were **not** rearchitected into per-user settings
-in this pass. `DownloadGateService` gates on the *current global value*:
-if `container_mode=ORIGINAL` or `cookie_source != NONE` is set (by anyone,
-since it's one shared setting), every Free-plan request will be rejected
-with `FEATURE_NOT_INCLUDED` until it's set back, because Free doesn't
-include those features. In a real multi-tenant deployment this needs to
-become a per-user setting before launch — flagged here explicitly rather
-than glossed over, since it's a correctness issue, not just a nice-to-have.
+**Fixed** — this section originally flagged `container_mode` and
+`cookie_source` as process-global settings that `DownloadGateService`
+gated on directly: any user setting `container_mode=ORIGINAL` or a
+non-`NONE` `cookie_source` would silently block every *other* Free-plan
+user's downloads with `FEATURE_NOT_INCLUDED`, since it was one shared row.
+
+They now live in a dedicated table, `user_download_preferences`
+(`user_id` primary key, one row per account, created lazily on first
+access with sensible defaults), owned by `app/services/
+user_preferences_service.py`. Every place that used to read the global
+`AppSettings.container_mode`/`cookie_source`/`cookie_file_path` now goes
+through it instead:
+
+- `DownloadGateService.authorize_and_reserve()` gates on `session,
+  user.id`'s own row — never the global settings object (which it no
+  longer even receives as a parameter).
+- `DownloadManager._effective_settings()` builds the global `AppSettings`
+  (download_dir, concurrency, audio/video presets, timeouts — still
+  legitimately shared, see below) and layers the job's owning user's own
+  container_mode/cookie_source/cookie_file_path on top before handing it
+  to `ytdlp_service.build_download_opts`, so what a job is gated against
+  and what it actually runs with are guaranteed to match.
+- `POST /api/analyze` (format/quality preview, reachable anonymously as
+  part of the pre-signup funnel) uses `get_optional_user` and applies the
+  *signed-in* caller's own preferences when there is one, sensible
+  defaults otherwise — an anonymous preview or another user's preview can
+  never be shaped by a third user's settings.
+- `GET/PUT /api/account/download-preferences` is the new per-user REST
+  surface (auth required); the Settings page's "Video output" and
+  "Authentication" sections now call it instead of the old global
+  `/api/settings` endpoint, whose `container_mode`/`cookie_source`/
+  `cookie_file_path` fields remain in the schema only for backward
+  compatibility with any direct API consumer of the old shape — the
+  commercial frontend never reads or writes them anymore.
+
+Isolation is covered by `tests/test_commercial_user_preferences.py`:
+a Free user is unaffected by a Pro user's changes, two Pro users' changes
+never cross, a 20-thread/20-user concurrent-update test proves no
+cross-account bleed even under contention, and a user who never opens
+Settings still downloads normally on the hardcoded defaults.
+
+**Other global-state issues found and fixed during this same audit** (the
+task was explicitly to check for "other settings with the same
+multi-tenant problem," and these three were real, live, exploitable gaps
+at the time — not the download_dir case below, which is flagged but not
+yet fixed):
+
+- `GET/PUT /api/settings` had **no authentication at all** — any
+  unauthenticated caller could rewrite the shared `download_dir`,
+  concurrency limit, theme, or audio/video defaults for the entire
+  server. Now requires `Depends(get_current_user)`.
+- `POST /api/fs/open` and `/api/fs/open-folder` — which run the OS's
+  "reveal in file manager" handler (`open`/`xdg-open`/`explorer`) on a
+  server-side path — also had **no authentication**. Now require auth.
+- `ensure_path_permitted()`'s fallback check ("is this path something
+  *any* history row ever recorded, even outside the current download
+  folder") was a completely **unscoped, cross-account** lookup
+  (`history_repo.filepath_exists` had no `user_id` filter at all) — one
+  account could use it to act on, or merely probe the existence of,
+  another account's downloaded file path. `filepath_exists()` now takes
+  an optional `user_id` and every caller in the app passes the current
+  authenticated user's id.
+
+### 4.2 Known limitation: `download_dir` is still a shared, global setting
+
+Unlike container_mode/cookie_source, `download_dir` (and the rest of
+`AppSettings` — concurrency, theme, audio/video presets, timeouts) was
+**deliberately left as one shared row** in this pass, for two reasons: (1)
+it wasn't the specific bug reported (a gating false-positive from a shared
+setting) — `download_dir` isn't read by any entitlement check, so no plan
+gets incorrectly blocked by another user's folder choice; and (2) properly
+fixing it is a materially bigger change (see below), not a settings-table
+tweak.
+
+It's still a real problem for a genuine multi-tenant deployment, and is
+arguably worse than the bug just fixed: `resolve_safe_directory()`
+explicitly does **not** constrain the chosen path to any root ("since the
+user explicitly chooses their own download directory" — true for the
+original single-operator desktop app, not true once "the user" is any
+signed-up web visitor). Today, any authenticated account can point the
+*shared* `download_dir` at an arbitrary writable path on the server, which
+both misdirects every other user's downloads into that folder and is an
+arbitrary-file-write primitive beyond just a settings leak. `cookie_source
+=file`'s `cookie_file_path` has the same unconstrained-path shape, though
+lower severity (it's read, not written, and parse failures don't echo file
+contents back to the caller).
+
+**Recommended fix** (not implemented here — flagged, not silently left,
+per the instruction not to start unrelated scope creep in this pass): make
+`download_dir` per-user like `container_mode`/`cookie_source`, but instead
+of letting each user set an arbitrary absolute path, resolve it to a
+fixed, non-configurable subfolder under one admin/ops-configured root
+(e.g. `<download_root>/<user_id>/`), and apply the same containment to
+`cookie_file_path` (require it under a per-user uploads directory rather
+than an arbitrary server path). This is real work — new download-path
+resolution logic, a Settings UI change (folder becomes read-only/display-
+only for non-admin accounts), and its own isolation tests — which is why
+it's called out as the next task rather than rushed into this pass.
 
 ## 5. Paddle billing
 
@@ -231,7 +319,8 @@ Tables: `users`, `subscriptions`, `usage_periods` (unique per
 `user_id, period_start`), `usage_events` (append-only audit log of every
 reserve/commit/refund/admin-grant), `entitlements` (ad-hoc grants, see
 §3.3), `billing_events`, `refresh_tokens`, `password_reset_tokens`,
-`email_verification_tokens`.
+`email_verification_tokens`, `user_download_preferences` (`user_id` itself
+is the primary key — one row per account, see §4.1).
 
 ## 7. Migrations
 
@@ -239,9 +328,11 @@ reserve/commit/refund/admin-grant), `entitlements` (ad-hoc grants, see
   `DATABASE_URL` from `CommercialSettings` and targets `Base.metadata`.
   `scripts/start.sh`/`start.bat` run `alembic upgrade head` on every
   startup — safe to run repeatedly (no-op once current). **Do not rely on
-  `create_all()` for production** — the one migration currently checked in
-  (`20491e9286b1_create_commercial_tables.py`) is what actually creates the
-  tables in a fresh environment.
+  `create_all()` for production** — the migrations currently checked in
+  (`20491e9286b1_create_commercial_tables.py`, then
+  `2b437cf7ea5c_add_per_user_download_preferences.py`) are what actually
+  create the tables in a fresh environment; both were verified against a
+  completely empty database.
 - **Personal layer** (`data/app.db`): still schema-on-connect via
   `CREATE TABLE IF NOT EXISTS` in `db.py`, as before — with one additive
   change: a `user_id` column was added to `history` (needed so download

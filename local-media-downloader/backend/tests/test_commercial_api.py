@@ -67,6 +67,21 @@ class TestAuthRequirement:
         resp = TestClient(app).get("/api/progress/stream")
         assert resp.status_code == 401
 
+    def test_settings_requires_auth(self):
+        """Previously wide open - anyone unauthenticated could rewrite the
+        shared download_dir/concurrency/theme/etc. for the whole server."""
+        c = TestClient(app)
+        assert c.get("/api/settings").status_code == 401
+        assert c.put("/api/settings", json={"theme": "dark"}).status_code == 401
+
+    def test_filesystem_open_requires_auth(self):
+        """Previously wide open - anyone unauthenticated could ask the
+        server to run its OS file-open handler on a path."""
+        c = TestClient(app)
+        assert c.post("/api/fs/open", json={"path": "/tmp"}).status_code == 401
+        assert c.post("/api/fs/open-folder", json={"path": "/tmp"}).status_code == 401
+        assert c.post("/api/fs/validate-folder", json={"path": "/tmp"}).status_code == 401
+
 
 class TestAdminAuthorization:
     def test_regular_user_cannot_list_admin_users(self):

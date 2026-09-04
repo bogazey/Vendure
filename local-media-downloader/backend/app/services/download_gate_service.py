@@ -14,10 +14,11 @@ from sqlalchemy.orm import Session
 from app.database.commercial_models import Subscription, User
 from app.models.commercial_enums import Plan
 from app.models.enums import ContainerMode, CookieSource, MediaType
-from app.models.schemas import AppSettings, CreateDownloadRequest
+from app.models.schemas import CreateDownloadRequest
 from app.services import plan_policy
 from app.services.entitlement_service import entitlement_service
 from app.services.usage_service import usage_service
+from app.services.user_preferences_service import user_preferences_service
 from app.utils.exceptions import PlanLimitReachedError
 
 # Credit costs assume the worst case for an unconstrained "best available"
@@ -49,7 +50,6 @@ class DownloadGateService:
         user: User,
         plan: Plan,
         subscription: Optional[Subscription],
-        app_settings: AppSettings,
         request: CreateDownloadRequest,
         download_job_id: str,
     ) -> str:
@@ -57,8 +57,14 @@ class DownloadGateService:
         DailyLimitReachedError/InsufficientCreditsError if this request
         isn't allowed right now. Otherwise reserves the credit cost and
         returns a reservation id to pass through to the download job (for
-        commit-on-success / refund-on-failure)."""
+        commit-on-success / refund-on-failure).
+
+        Gates against *this user's own* container_mode/cookie_source
+        (user_preferences_service) - never the personal app's global
+        settings, which would let one account's choice block or unblock
+        every other account's downloads."""
         policy = plan_policy.get_policy(plan)
+        prefs = user_preferences_service.get_or_create(session, user.id)
 
         if request.media_type == MediaType.VIDEO:
             if request.quality_key == "best" and policy.max_resolution_height is not None:
@@ -77,14 +83,14 @@ class DownloadGateService:
                 entitlement_service.check_feature(plan, "clip_range")
             if request.playlist_mode == "full":
                 entitlement_service.check_feature(plan, "batch")
-            if app_settings.container_mode == ContainerMode.ORIGINAL:
+            if prefs.container_mode == ContainerMode.ORIGINAL.value:
                 entitlement_service.check_feature(plan, "original_container")
-            if app_settings.cookie_source != CookieSource.NONE:
+            if prefs.cookie_source != CookieSource.NONE.value:
                 entitlement_service.check_feature(plan, "browser_cookies")
 
             cost = plan_policy.credit_cost_for_video(_height_for_cost(request.quality_key))
         else:
-            if app_settings.cookie_source != CookieSource.NONE:
+            if prefs.cookie_source != CookieSource.NONE.value:
                 entitlement_service.check_feature(plan, "browser_cookies")
             cost = plan_policy.credit_cost_for_audio()
 

@@ -162,6 +162,27 @@ class PasswordResetToken(Base):
     used_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
 
 
+class UserDownloadPreferences(Base):
+    """Per-user download behavior overrides - container_mode and cookie
+    handling MUST live here rather than in the personal app's global
+    `settings` table, which is a single shared row: reading it for a
+    plan-gating decision (see download_gate_service.py) meant one user's
+    choice could silently block or unblock every other user. `user_id` is
+    itself the primary key (one row per user, created lazily on first
+    access with sensible defaults - see user_preferences_service.py)."""
+
+    __tablename__ = "user_download_preferences"
+
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), primary_key=True)
+    container_mode: Mapped[str] = mapped_column(String(20), default="compatibility", nullable=False)
+    cookie_source: Mapped[str] = mapped_column(String(20), default="none", nullable=False)
+    cookie_file_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), default=_now, onupdate=_now, nullable=False
+    )
+
+
 class EmailVerificationToken(Base):
     __tablename__ = "email_verification_tokens"
 

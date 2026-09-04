@@ -21,7 +21,6 @@ from app.models.schemas import CreateDownloadRequest, DownloadJobOut
 from app.services.account_service import account_service
 from app.services.download_gate_service import download_gate_service
 from app.services.download_manager import manager
-from app.services.settings_service import get_settings
 from app.utils.exceptions import JobNotFoundError, UnsupportedUrlError
 from app.utils.url_detect import detect_platform, is_supported_platform, is_valid_url
 
@@ -42,11 +41,10 @@ def _gate_and_create(
 ) -> DownloadJobOut:
     _validate_url(request)
     plan, subscription = account_service.get_current_plan(db, user.id)
-    app_settings = get_settings()
     job_id = str(uuid.uuid4())
 
     reservation_id = download_gate_service.authorize_and_reserve(
-        db, user, plan, subscription, app_settings, request, job_id
+        db, user, plan, subscription, request, job_id
     )
     # Commit the reservation now, before the job can possibly race to
     # commit/refund it in the background - get_db's end-of-request commit
