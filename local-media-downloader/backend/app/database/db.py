@@ -10,8 +10,6 @@ from typing import Iterator
 from app.config.paths import DB_PATH
 
 _local = threading.local()
-_init_lock = threading.Lock()
-_initialized = False
 
 
 SCHEMA = """

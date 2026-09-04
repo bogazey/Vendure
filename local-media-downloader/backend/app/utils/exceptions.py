@@ -43,6 +43,13 @@ class FfmpegMissingError(AppError):
     status_code = 503
 
 
+class FfmpegProcessingError(AppError):
+    """FFmpeg ran but failed (or was cancelled) while merging/converting a
+    file - distinct from FfmpegMissingError (binary not found at all)."""
+
+    status_code = 502
+
+
 class FormatUnavailableError(AppError):
     status_code = 400
 

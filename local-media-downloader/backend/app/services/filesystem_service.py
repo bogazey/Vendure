@@ -3,6 +3,12 @@
 Only ever opens a path the caller already owns (a completed download's own
 file or its containing folder) via argument-array subprocess calls. Never
 concatenates paths into a shell string and never accepts arbitrary commands.
+
+Every path is additionally checked against `ensure_path_permitted` before any
+filesystem action runs, so this can never be used to open or delete a path
+outside the configured download folder (or, for legacy files, a path we
+actually recorded in history) — even though the FastAPI/CORS layer already
+restricts who can reach these endpoints in the first place.
 """
 from __future__ import annotations
 
@@ -12,6 +18,7 @@ from pathlib import Path
 
 from app.config.logging_config import get_logger
 from app.utils.exceptions import InvalidPathError
+from app.utils.paths import is_within
 
 logger = get_logger("filesystem")
 
@@ -26,9 +33,24 @@ def _open_with_os_handler(path: Path) -> None:
         subprocess.run(["xdg-open", str(path)], check=False)
 
 
+def ensure_path_permitted(path: Path) -> None:
+    """Raise InvalidPathError unless `path` is inside the current download
+    folder, or matches a file we actually downloaded (recorded in history)."""
+    from app.database import history_repo
+    from app.services.settings_service import get_settings
+
+    download_dir = Path(get_settings().download_dir).expanduser().resolve()
+    if is_within(path, download_dir):
+        return
+    if history_repo.filepath_exists(str(path)):
+        return
+    raise InvalidPathError("This path is outside the allowed download location.")
+
+
 def open_path(raw_path: str) -> None:
     """Open a file (in its default app) or a folder (in the file manager)."""
     path = Path(raw_path).expanduser().resolve()
+    ensure_path_permitted(path)
     if not path.exists():
         raise InvalidPathError("That file or folder no longer exists.")
     _open_with_os_handler(path)
@@ -38,6 +60,7 @@ def open_path(raw_path: str) -> None:
 def open_containing_folder(raw_path: str) -> None:
     path = Path(raw_path).expanduser().resolve()
     target = path.parent if path.is_file() else path
+    ensure_path_permitted(target)
     if not target.exists():
         raise InvalidPathError("That folder no longer exists.")
     _open_with_os_handler(target)

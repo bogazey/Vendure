@@ -15,7 +15,9 @@ from app.services import ytdlp_service
 class FakeYoutubeDL:
     """Stand-in for yt_dlp.YoutubeDL that never touches the network."""
 
-    behavior = "success"  # "success" | "cancel" | "unavailable" | "error"
+    behavior = "success"  # "success" | "cancel" | "unavailable" | "error" | "cancel_after_finish"
+    finish_filename = "/tmp/fake_video [abc123].mp4"
+    cancel_event_to_set_on_finish = None
 
     def __init__(self, opts):
         self.opts = opts
@@ -40,15 +42,22 @@ class FakeYoutubeDL:
             raise RuntimeError("simulated extractor failure")
 
         for hook in hooks:
-            hook({"status": "finished", "filename": "/tmp/fake_video [abc123].mp4"})
+            hook({"status": "finished", "filename": FakeYoutubeDL.finish_filename})
 
         if FakeYoutubeDL.behavior == "unavailable":
             return None
 
+        if FakeYoutubeDL.behavior == "cancel_after_finish":
+            # Simulates cancel arriving after the download itself finished
+            # (e.g. during the merge/convert step) - too late for the
+            # progress_hook's DownloadCancelled raise to interrupt anything,
+            # but the job must still end up cancelled, not completed.
+            FakeYoutubeDL.cancel_event_to_set_on_finish.set()
+
         return {"title": "Fake Title", "uploader": "Fake Uploader", "thumbnail": "https://example.com/t.jpg", "id": "abc123"}
 
     def prepare_filename(self, info):
-        return "/tmp/fake_video [abc123].mp4"
+        return FakeYoutubeDL.finish_filename
 
 
 @pytest.fixture(autouse=True)
@@ -61,6 +70,8 @@ def _isolated_manager(monkeypatch, tmp_path):
     monkeypatch.setattr(ytdlp_service, "check_ffmpeg", lambda: (True, "/usr/bin/ffmpeg"))
     monkeypatch.setattr(dm_module, "yt_dlp", type("M", (), {"YoutubeDL": FakeYoutubeDL}))
     FakeYoutubeDL.behavior = "success"
+    FakeYoutubeDL.finish_filename = "/tmp/fake_video [abc123].mp4"
+    FakeYoutubeDL.cancel_event_to_set_on_finish = None
     yield manager
 
 
@@ -107,6 +118,29 @@ class TestDownloadJobLifecycle:
 
         finished = _isolated_manager.get_job(job.id)
         assert finished.stage == DownloadStage.CANCELLED
+
+    async def test_cancel_arriving_after_download_finishes_is_still_honored(self, _isolated_manager, tmp_path):
+        # Regression test: cancelling during the merge/convert step (after
+        # the download itself has finished) must not silently report the
+        # job as completed, and must clean up the file it just finished.
+        real_file = tmp_path / "fake_video [abc123].mp4"
+        real_file.write_text("fake video bytes")
+        FakeYoutubeDL.behavior = "cancel_after_finish"
+        FakeYoutubeDL.finish_filename = str(real_file)
+
+        request = CreateDownloadRequest(url="https://www.youtube.com/watch?v=abc123", media_type=MediaType.VIDEO)
+        job = _isolated_manager.create_job(request)
+        FakeYoutubeDL.cancel_event_to_set_on_finish = job.cancel_event
+
+        await asyncio.wait_for(_wait_for_terminal(_isolated_manager, job.id), timeout=5)
+
+        finished = _isolated_manager.get_job(job.id)
+        assert finished.stage == DownloadStage.CANCELLED
+        assert not real_file.exists()
+
+        history = history_repo.get(job.id)
+        assert history is not None
+        assert history.status == DownloadStage.CANCELLED
 
     async def test_list_jobs_returns_all(self, _isolated_manager):
         request = CreateDownloadRequest(url="https://www.youtube.com/watch?v=abc123", media_type=MediaType.VIDEO)

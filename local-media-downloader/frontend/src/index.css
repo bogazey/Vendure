@@ -2,8 +2,45 @@
 @tailwind components;
 @tailwind utilities;
 
-html {
+/*
+ * Theme tokens. Component classNames use a fixed dark-oriented Tailwind
+ * scale (slate-50 = brightest text ... slate-600 = most muted, surface* =
+ * page/card/border) — swapping these CSS custom properties under `.light`
+ * re-maps the same class names to a properly-contrasted light palette
+ * without touching every component. See src/utils/theme.ts for how the
+ * `.light` / `.dark` class gets applied to <html>.
+ */
+:root,
+:root.dark {
   color-scheme: dark;
+
+  --color-surface: #0f1115;
+  --color-surface-raised: #171a21;
+  --color-surface-border: #262b36;
+
+  --color-slate-50: #f8fafc;
+  --color-slate-100: #f1f5f9;
+  --color-slate-200: #e2e8f0;
+  --color-slate-300: #cbd5e1;
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #64748b;
+  --color-slate-600: #475569;
+}
+
+:root.light {
+  color-scheme: light;
+
+  --color-surface: #f6f7f9;
+  --color-surface-raised: #ffffff;
+  --color-surface-border: #e3e5eb;
+
+  --color-slate-50: #0f172a;
+  --color-slate-100: #1e293b;
+  --color-slate-200: #334155;
+  --color-slate-300: #475569;
+  --color-slate-400: #64748b;
+  --color-slate-500: #6b7688;
+  --color-slate-600: #94a3b8;
 }
 
 body {

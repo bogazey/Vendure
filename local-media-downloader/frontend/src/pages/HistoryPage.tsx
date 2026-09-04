@@ -204,7 +204,7 @@ function HistoryRow({
             </button>
           </>
         )}
-        {record.status === "failed" && (
+        {(record.status === "failed" || record.status === "cancelled") && (
           <button
             onClick={() => onRetry(record.id)}
             className="rounded-md border border-indigo-500/40 px-2 py-1 text-xs text-indigo-300 hover:border-indigo-400"

@@ -46,6 +46,16 @@ def validate_directory_writable(path: Path) -> tuple[bool, str | None]:
     return True, None
 
 
+def is_directory_writable(path: Path) -> bool:
+    """Non-mutating writability check for read-only contexts like /api/health.
+
+    Unlike `validate_directory_writable`, this never creates the directory or
+    writes a probe file — a health-check GET request shouldn't have side
+    effects on the filesystem.
+    """
+    return path.is_dir() and os.access(path, os.W_OK)
+
+
 def is_within(child: Path, parent: Path) -> bool:
     try:
         child.resolve().relative_to(parent.resolve())
