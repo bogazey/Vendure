@@ -7,6 +7,7 @@ interface UrlInputProps {
 
 export default function UrlInput({ onAnalyze, loading }: UrlInputProps) {
   const [value, setValue] = useState("");
+  const [justPasted, setJustPasted] = useState(false);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -16,7 +17,11 @@ export default function UrlInput({ onAnalyze, loading }: UrlInputProps) {
   const handlePaste = async () => {
     try {
       const text = await navigator.clipboard.readText();
-      if (text) setValue(text.trim());
+      if (text) {
+        setValue(text.trim());
+        setJustPasted(true);
+        setTimeout(() => setJustPasted(false), 1200);
+      }
     } catch {
       // Clipboard access denied by the browser; user can paste manually.
     }
@@ -35,8 +40,12 @@ export default function UrlInput({ onAnalyze, loading }: UrlInputProps) {
           />
         </div>
         <div className="flex gap-2">
-          <button type="button" onClick={handlePaste} className="btn-glass px-4 py-4 sm:px-5">
-            Paste
+          <button
+            type="button"
+            onClick={handlePaste}
+            className={`btn-glass px-4 py-4 transition-colors sm:px-5 ${justPasted ? "!border-brand-aqua/50 !text-brand-aqua" : ""}`}
+          >
+            {justPasted ? "Pasted" : "Paste"}
           </button>
           <button
             type="submit"

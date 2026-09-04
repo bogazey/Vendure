@@ -77,23 +77,27 @@ export default function Header({ health, healthError }: HeaderProps) {
         </div>
 
         <div className="flex items-center gap-3">
-          <div
-            className="hidden items-center gap-3 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-slate-400 backdrop-blur-xl lg:flex"
-            title={
-              healthError
-                ? "Backend unreachable"
-                : `Backend: ${backendOk ? "ready" : "degraded"} · FFmpeg: ${ffmpegOk ? "found" : "missing"}`
-            }
-          >
-            <span className="flex items-center gap-1.5">
-              <StatusDot ok={!healthError && backendOk} />
-              Backend
-            </span>
-            <span className="flex items-center gap-1.5">
-              <StatusDot ok={!healthError && ffmpegOk} />
-              FFmpeg
-            </span>
-          </div>
+          {/* Server-health details are for operators, not marketing-page
+              visitors - only shown once signed in as an admin. */}
+          {account?.user.role === "admin" && (
+            <div
+              className="hidden items-center gap-3 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-slate-400 backdrop-blur-xl lg:flex"
+              title={
+                healthError
+                  ? "Backend unreachable"
+                  : `Backend: ${backendOk ? "ready" : "degraded"} · FFmpeg: ${ffmpegOk ? "found" : "missing"}`
+              }
+            >
+              <span className="flex items-center gap-1.5">
+                <StatusDot ok={!healthError && backendOk} />
+                Backend
+              </span>
+              <span className="flex items-center gap-1.5">
+                <StatusDot ok={!healthError && ffmpegOk} />
+                FFmpeg
+              </span>
+            </div>
+          )}
 
           {account ? (
             <div className="relative">

@@ -27,9 +27,13 @@
   --color-slate-100: #eef0f8;
   --color-slate-200: #d6dae8;
   --color-slate-300: #aab0c8;
-  --color-slate-400: #7c84a3;
-  --color-slate-500: #5a6180;
-  --color-slate-600: #3d425c;
+  /* 400-600 brightened from the original scale - secondary/tertiary copy
+     (hero subhead, card descriptions, footer/legal text) read as too dim
+     against the near-black surface at the old values. Still clearly
+     secondary to slate-50/100/200, just legible without squinting. */
+  --color-slate-400: #9aa2c4;
+  --color-slate-500: #838bad;
+  --color-slate-600: #656d90;
 }
 
 :root.light {

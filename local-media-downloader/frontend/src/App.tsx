@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 import { Route, Routes } from "react-router-dom";
 import AuroraBackground from "./components/AuroraBackground";
 import FirstRunSetup from "./components/FirstRunSetup";
+import Footer from "./components/Footer";
 import Header from "./components/Header";
 import ProtectedRoute, { AdminRoute } from "./components/ProtectedRoute";
 import { AuthProvider } from "./context/AuthContext";
@@ -96,6 +97,7 @@ function AppShell() {
             <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
           </Routes>
         </div>
+        <Footer />
       </div>
     </div>
   );
