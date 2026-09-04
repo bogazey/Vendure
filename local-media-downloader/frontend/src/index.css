@@ -19,9 +19,9 @@
 :root.dark {
   color-scheme: dark;
 
-  --color-surface: #05060c;
-  --color-surface-raised: #10131f;
-  --color-surface-border: #232a42;
+  --color-surface: #05070d;
+  --color-surface-raised: #0a1020;
+  --color-surface-border: #1c2740;
 
   --color-slate-50: #f7f8fc;
   --color-slate-100: #eef0f8;
@@ -99,28 +99,30 @@ h3,
 .aurora-blob {
   position: absolute;
   border-radius: 9999px;
-  filter: blur(80px);
-  opacity: 0.55;
+  filter: blur(90px);
+  opacity: 0.42;
   will-change: transform;
 }
 
 .aurora-grid {
   position: absolute;
   inset: -1px;
+  /* Almost subliminal on the near-black foundation - texture, not a
+     visible pattern. */
   background-image:
-    linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    linear-gradient(to right, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
   background-size: 64px 64px;
   mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%);
 }
 
 :root.light .aurora-blob {
-  opacity: 0.35;
+  opacity: 0.28;
 }
 :root.light .aurora-grid {
   background-image:
-    linear-gradient(to right, rgba(15, 18, 32, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(15, 18, 32, 0.05) 1px, transparent 1px);
+    linear-gradient(to right, rgba(15, 18, 32, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(15, 18, 32, 0.04) 1px, transparent 1px);
 }
 
 @media (prefers-reduced-motion: reduce) {

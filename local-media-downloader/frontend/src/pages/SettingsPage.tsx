@@ -131,7 +131,10 @@ export default function SettingsPage() {
             onChange={(e) => persist({ theme: e.target.value as Theme })}
             className={inputClass}
           >
-            <option value="system">System</option>
+            {/* "system" no longer tracks the OS - Loady's dark identity is
+                fixed, so it's relabeled here to say what it actually does.
+                The stored value stays "system" for API/backend compatibility. */}
+            <option value="system">Dark (default)</option>
             <option value="light">Light</option>
             <option value="dark">Dark</option>
           </select>

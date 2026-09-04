@@ -25,7 +25,7 @@ import SettingsPage from "./pages/SettingsPage";
 import Usage from "./pages/Usage";
 import { api } from "./services/api";
 import type { HealthResponse } from "./types/api";
-import { applyTheme, getCachedThemePreference, watchSystemTheme } from "./utils/theme";
+import { applyTheme } from "./utils/theme";
 
 const HEALTH_POLL_MS = 15000;
 
@@ -60,9 +60,6 @@ function AppShell() {
       .catch(() => {
         // Keep whatever theme was applied from the local cache in main.tsx.
       });
-    // Reads the freshly-persisted preference on every OS theme change, so it
-    // stays correct even after SettingsPage applies a change of its own.
-    watchSystemTheme(getCachedThemePreference);
   }, []);
 
   // FFmpeg is a local-machine prerequisite for actually running downloads,

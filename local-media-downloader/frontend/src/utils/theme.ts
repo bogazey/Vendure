@@ -2,16 +2,17 @@ import type { Theme } from "../types/api";
 
 const STORAGE_KEY = "lmd-theme-preference";
 
-function systemPrefersDark(): boolean {
-  try {
-    return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? true;
-  } catch {
-    return true;
-  }
-}
-
+/**
+ * Loady's dark navy/glass look is the confirmed brand identity, not a
+ * convenience that tracks the visitor's OS appearance - "system" used to
+ * mean "follow prefers-color-scheme," which silently showed the pale
+ * accessibility-fallback light theme to anyone whose OS/browser wasn't in
+ * dark mode (read as "a bright SaaS landing page" instead of Loady).
+ * "system" now always resolves to dark; the light theme is only ever shown
+ * when a user explicitly picks "Light" in Settings.
+ */
 export function resolveTheme(theme: Theme): "light" | "dark" {
-  return theme === "system" ? (systemPrefersDark() ? "dark" : "light") : theme;
+  return theme === "light" ? "light" : "dark";
 }
 
 /** Applies the theme to <html> and remembers it for the next page load. */
@@ -39,17 +40,4 @@ export function getCachedThemePreference(): Theme {
     // ignore
   }
   return "system";
-}
-
-let systemWatcherAttached = false;
-
-/** Re-applies the theme whenever the OS preference changes, while the current setting is "system". */
-export function watchSystemTheme(getCurrentTheme: () => Theme): void {
-  if (systemWatcherAttached || !window.matchMedia) return;
-  systemWatcherAttached = true;
-  const mql = window.matchMedia("(prefers-color-scheme: dark)");
-  const handler = () => {
-    if (getCurrentTheme() === "system") applyTheme("system");
-  };
-  mql.addEventListener?.("change", handler);
 }

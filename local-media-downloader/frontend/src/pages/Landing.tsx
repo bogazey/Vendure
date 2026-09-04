@@ -1,24 +1,63 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import HeroUrlInput from "../components/HeroUrlInput";
 import { useAuth } from "../context/AuthContext";
 import { gradientText, secondaryButton } from "../styles/ui";
 
-const FEATURES: { title: string; body: string }[] = [
+function FeatureIcon({ children }: { children: ReactNode }) {
+  return (
+    <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-brand-gradient-soft text-brand-aqua">
+      <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+        {children}
+      </svg>
+    </span>
+  );
+}
+
+const FEATURES: { title: string; body: string; icon: ReactNode }[] = [
   {
     title: "Save",
     body: "Pull video and audio from YouTube, TikTok, Instagram, and Facebook straight to your device.",
+    icon: (
+      <FeatureIcon>
+        <path d="M12 4v11" />
+        <path d="m7 11 5 5 5-5" />
+        <path d="M5 19h14" />
+      </FeatureIcon>
+    ),
   },
   {
     title: "Convert",
     body: "Every video lands as a genuine, playable MP4 by default - or keep the original container if you'd rather.",
+    icon: (
+      <FeatureIcon>
+        <path d="M4 7h13l-3-3" />
+        <path d="M20 17H7l3 3" />
+      </FeatureIcon>
+    ),
   },
   {
     title: "Organize",
     body: "A searchable library of everything you've saved, with quick access to every file.",
+    icon: (
+      <FeatureIcon>
+        <rect x="4" y="5" width="16" height="14" rx="2" />
+        <path d="M4 10h16" />
+      </FeatureIcon>
+    ),
   },
   {
     title: "Process",
     body: "Clip ranges, pick exact formats and bitrates, and batch through a whole playlist at once on paid plans.",
+    icon: (
+      <FeatureIcon>
+        <path d="M5 6h14" />
+        <path d="M5 12h9" />
+        <path d="M5 18h14" />
+        <circle cx="16" cy="6" r="1.5" fill="currentColor" stroke="none" />
+        <circle cx="10" cy="18" r="1.5" fill="currentColor" stroke="none" />
+      </FeatureIcon>
+    ),
   },
 ];
 
@@ -62,7 +101,11 @@ export default function Landing() {
 
       <section className="mx-auto grid w-full max-w-5xl gap-5 px-6 pb-20 sm:grid-cols-2 lg:grid-cols-4">
         {FEATURES.map((f) => (
-          <div key={f.title} className="glass-panel-raised flex flex-col gap-2 p-5 transition-transform duration-200 hover:-translate-y-0.5">
+          <div
+            key={f.title}
+            className="glass-panel-raised flex flex-col gap-3 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-white/20 hover:shadow-glow"
+          >
+            {f.icon}
             <h3 className="font-display text-sm font-semibold text-slate-50">{f.title}</h3>
             <p className="text-sm text-slate-400">{f.body}</p>
           </div>
