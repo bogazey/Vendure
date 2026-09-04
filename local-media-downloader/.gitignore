@@ -6,6 +6,7 @@ backend/.pytest_cache/
 
 frontend/node_modules/
 frontend/dist/
+frontend/*.tsbuildinfo
 
 data/*.db
 data/logs/*.log*
