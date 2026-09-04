@@ -134,7 +134,14 @@ h3,
  * TSX) so the exact same premium surface is trivially reusable from any
  * component without repeating a long utility chain everywhere. */
 .glass-panel {
-  @apply rounded-3xl border border-white/10 bg-white/[0.035] shadow-glass backdrop-blur-xl;
+  /* box-shadow is hardcoded rather than routed through a custom
+     `boxShadow` theme key + `@apply shadow-glass` - that pattern is the
+     most fragile part of a Tailwind build (a custom-key utility resolved
+     inside `@apply`) and has been observed to fail on some local
+     toolchains even when the config is valid. Plain CSS needs no
+     utility-class resolution at all, so it can't hit that failure mode. */
+  @apply rounded-3xl border border-white/10 bg-white/[0.035] backdrop-blur-xl;
+  box-shadow: 0 8px 40px -8px rgba(0, 0, 0, 0.55), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
 }
 
 :root.light .glass-panel {
@@ -142,7 +149,8 @@ h3,
 }
 
 .glass-panel-raised {
-  @apply rounded-2xl border border-white/10 bg-white/[0.05] shadow-glass backdrop-blur-xl;
+  @apply rounded-2xl border border-white/10 bg-white/[0.05] backdrop-blur-xl;
+  box-shadow: 0 8px 40px -8px rgba(0, 0, 0, 0.55), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
 }
 
 :root.light .glass-panel-raised {
@@ -186,7 +194,20 @@ h3,
 }
 
 .btn-gradient {
-  @apply relative inline-flex items-center justify-center gap-2 rounded-2xl bg-brand-gradient px-5 py-3 text-sm font-semibold text-white shadow-glow transition-all duration-200 hover:shadow-glow-lg hover:brightness-110 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:shadow-glow disabled:hover:brightness-100;
+  /* Same reasoning as .glass-panel above: the glow/glow-lg box-shadows are
+     plain CSS instead of `@apply shadow-glow` / `hover:shadow-glow-lg` so
+     nothing here depends on a custom boxShadow theme key resolving inside
+     `@apply`. */
+  @apply relative inline-flex items-center justify-center gap-2 rounded-2xl bg-brand-gradient px-5 py-3 text-sm font-semibold text-white transition-all duration-200 hover:brightness-110 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:brightness-100;
+  box-shadow: 0 0 0 1px rgba(157, 92, 255, 0.15), 0 8px 30px -6px rgba(79, 124, 255, 0.35), 0 2px 12px -2px rgba(45, 217, 232, 0.2);
+}
+
+.btn-gradient:hover {
+  box-shadow: 0 0 0 1px rgba(157, 92, 255, 0.18), 0 20px 60px -12px rgba(79, 124, 255, 0.45), 0 8px 30px -8px rgba(157, 92, 255, 0.3);
+}
+
+.btn-gradient:disabled:hover {
+  box-shadow: 0 0 0 1px rgba(157, 92, 255, 0.15), 0 8px 30px -6px rgba(79, 124, 255, 0.35), 0 2px 12px -2px rgba(45, 217, 232, 0.2);
 }
 
 .btn-glass {

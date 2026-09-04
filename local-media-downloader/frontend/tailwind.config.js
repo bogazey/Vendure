@@ -41,9 +41,13 @@ export default {
         "brand-radial-3": "radial-gradient(closest-side, rgba(45,217,232,0.4), transparent)",
       },
       boxShadow: {
+        // "glow"/"glow-lg" are used directly as `shadow-glow`/`shadow-glow-lg`
+        // classNames in JSX (Tailwind's normal content-scanned JIT path).
+        // The equivalent glass-panel/btn-gradient shadows are hardcoded as
+        // plain CSS in index.css instead of a custom key applied via
+        // `@apply` - see the comments there for why.
         glow: "0 0 0 1px rgba(157,92,255,0.15), 0 8px 30px -6px rgba(79,124,255,0.35), 0 2px 12px -2px rgba(45,217,232,0.2)",
         "glow-lg": "0 0 0 1px rgba(157,92,255,0.18), 0 20px 60px -12px rgba(79,124,255,0.45), 0 8px 30px -8px rgba(157,92,255,0.3)",
-        glass: "0 8px 40px -8px rgba(0,0,0,0.55), inset 0 1px 0 0 rgba(255,255,255,0.06)",
       },
       fontFamily: {
         sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
