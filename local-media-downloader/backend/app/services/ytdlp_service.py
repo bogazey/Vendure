@@ -1,0 +1,349 @@
+"""Thin, typed wrapper around yt-dlp for metadata extraction and downloads.
+
+All extraction logic is delegated to yt-dlp itself; this module only adapts
+its output to our Pydantic schemas and translates its errors into the app's
+friendly exception types. No site-specific scraping or DRM/paywall bypass
+logic lives here.
+"""
+from __future__ import annotations
+
+import shutil
+from typing import Any, Callable, Optional
+
+import yt_dlp
+from yt_dlp.utils import DownloadCancelled, DownloadError
+
+from app.config.logging_config import get_logger
+from app.models.enums import CookieSource, FormatKind, MediaType, Platform
+from app.models.schemas import (
+    AnalyzeResponse,
+    AppSettings,
+    ClipRange,
+    CreateDownloadRequest,
+    FormatOption,
+    PlaylistEntryPreview,
+    QualityPreset,
+)
+from app.utils.exceptions import (
+    AgeRestrictedError,
+    DiskFullError,
+    ExtractorFailureError,
+    FfmpegMissingError,
+    GeoRestrictedError,
+    NetworkError,
+    PermissionDeniedError,
+    PrivateOrLoginRequiredError,
+    UnavailableMediaError,
+    UnsupportedUrlError,
+)
+from app.utils.timecode import validate_clip_range
+from app.utils.url_detect import detect_platform, is_supported_platform, looks_like_playlist_url
+
+logger = get_logger("ytdlp")
+
+VIDEO_HEIGHT_PRESETS = [2160, 1440, 1080, 720, 480, 360]
+
+
+def get_ytdlp_version() -> str:
+    return yt_dlp.version.__version__
+
+
+def check_ffmpeg() -> tuple[bool, Optional[str]]:
+    path = shutil.which("ffmpeg")
+    return (path is not None, path)
+
+
+def classify_error(exc: Exception, url: str = "") -> Exception:
+    """Map a yt-dlp/OS exception to one of our friendly AppError subclasses."""
+    from app.utils.exceptions import AppError
+
+    if isinstance(exc, AppError):
+        return exc
+
+    text = str(exc).lower()
+
+    if isinstance(exc, FileNotFoundError) and "ffmpeg" in text:
+        return FfmpegMissingError(
+            "FFmpeg is required for this operation but was not found.",
+            technical=str(exc),
+        )
+    if "ffmpeg" in text and "not found" in text:
+        return FfmpegMissingError(
+            "FFmpeg is required for this operation but was not found.",
+            technical=str(exc),
+        )
+    if isinstance(exc, OSError) and getattr(exc, "errno", None) == 28:
+        return DiskFullError("The download destination is out of disk space.", technical=str(exc))
+    if any(k in text for k in ("no space left on device", "disk full")):
+        return DiskFullError("The download destination is out of disk space.", technical=str(exc))
+    if isinstance(exc, PermissionError) or "permission denied" in text or "not writable" in text:
+        return PermissionDeniedError(
+            "Permission denied writing to the download folder. Choose a different folder in Settings.",
+            technical=str(exc),
+        )
+    if any(k in text for k in ("private video", "login required", "requires authentication", "rate-limit reached")):
+        return PrivateOrLoginRequiredError(
+            "This content is private or requires a logged-in session. "
+            "Add browser cookies in Settings if you have access.",
+            technical=str(exc),
+        )
+    if "age" in text and "restrict" in text:
+        return AgeRestrictedError(
+            "This content is age-restricted and could not be accessed.",
+            technical=str(exc),
+        )
+    if "not available in your country" in text or "geo" in text and "restrict" in text:
+        return GeoRestrictedError(
+            "This content is not available in your region.", technical=str(exc)
+        )
+    if any(k in text for k in ("video unavailable", "has been removed", "no longer available", "404")):
+        return UnavailableMediaError(
+            "This content is unavailable or has been removed.", technical=str(exc)
+        )
+    if any(k in text for k in ("unsupported url", "no extractor", "is not a valid url")):
+        return UnsupportedUrlError(
+            "This URL isn't supported. Only YouTube, TikTok, Instagram, and Facebook links are supported.",
+            technical=str(exc),
+        )
+    if any(k in text for k in ("urlopen error", "timed out", "connection", "network", "temporary failure")):
+        return NetworkError(
+            "A network error occurred while contacting the platform. Check your connection and try again.",
+            technical=str(exc),
+        )
+    return ExtractorFailureError(
+        "This content could not be processed. It may be unavailable or unsupported.",
+        technical=str(exc),
+    )
+
+
+def _cookie_opts(settings: AppSettings) -> dict[str, Any]:
+    opts: dict[str, Any] = {}
+    if settings.cookie_source == CookieSource.FILE and settings.cookie_file_path:
+        opts["cookiefile"] = settings.cookie_file_path
+    elif settings.cookie_source in (
+        CookieSource.CHROME, CookieSource.FIREFOX, CookieSource.EDGE, CookieSource.SAFARI,
+    ):
+        opts["cookiesfrombrowser"] = (settings.cookie_source.value,)
+    return opts
+
+
+def _base_opts(settings: AppSettings) -> dict[str, Any]:
+    opts: dict[str, Any] = {
+        "quiet": True,
+        "no_warnings": True,
+        "noprogress": True,
+        "socket_timeout": settings.network_timeout_seconds,
+        "retries": settings.retries,
+        "logger": _YtdlpLogAdapter(),
+    }
+    opts.update(_cookie_opts(settings))
+    return opts
+
+
+class _YtdlpLogAdapter:
+    """Routes yt-dlp's internal logging into our rotating app log, without leaking cookies."""
+
+    def debug(self, msg: str) -> None:
+        if msg.startswith("[debug] "):
+            return
+        logger.debug(msg)
+
+    def info(self, msg: str) -> None:
+        logger.info(msg)
+
+    def warning(self, msg: str) -> None:
+        logger.warning(msg)
+
+    def error(self, msg: str) -> None:
+        logger.error(msg)
+
+
+def _format_to_option(fmt: dict[str, Any]) -> FormatOption:
+    vcodec = fmt.get("vcodec")
+    acodec = fmt.get("acodec")
+    has_video = bool(vcodec and vcodec != "none")
+    has_audio = bool(acodec and acodec != "none")
+    kind = FormatKind.VIDEO if has_video else FormatKind.AUDIO
+    return FormatOption(
+        format_id=fmt.get("format_id", ""),
+        kind=kind,
+        ext=fmt.get("ext", ""),
+        resolution=fmt.get("resolution"),
+        height=fmt.get("height"),
+        fps=fmt.get("fps"),
+        vcodec=vcodec if has_video else None,
+        acodec=acodec if has_audio else None,
+        abr=fmt.get("abr"),
+        vbr=fmt.get("vbr"),
+        filesize=fmt.get("filesize"),
+        filesize_approx=fmt.get("filesize_approx"),
+        has_video=has_video,
+        has_audio=has_audio,
+        note=fmt.get("format_note"),
+    )
+
+
+def _build_presets(formats: list[FormatOption]) -> tuple[list[QualityPreset], list[QualityPreset]]:
+    video_heights = {f.height for f in formats if f.has_video and f.height}
+    has_audio_stream = any(f.has_audio for f in formats)
+
+    video_presets = [
+        QualityPreset(key="best", label="Best Available", kind=FormatKind.VIDEO, available=bool(video_heights) or True)
+    ]
+    for h in VIDEO_HEIGHT_PRESETS:
+        available = any(vh >= h for vh in video_heights) if video_heights else False
+        video_presets.append(
+            QualityPreset(key=str(h), label=f"{h}p", kind=FormatKind.VIDEO, available=available, height=h)
+        )
+
+    audio_presets = [
+        QualityPreset(key="best", label="Best Audio", kind=FormatKind.AUDIO, available=has_audio_stream),
+        QualityPreset(key="mp3", label="MP3", kind=FormatKind.AUDIO, available=has_audio_stream),
+        QualityPreset(key="m4a", label="M4A", kind=FormatKind.AUDIO, available=has_audio_stream),
+    ]
+    return video_presets, audio_presets
+
+
+def analyze(url: str, settings: AppSettings) -> AnalyzeResponse:
+    platform = detect_platform(url)
+    if not is_supported_platform(platform):
+        raise UnsupportedUrlError(
+            "This URL isn't supported. Only YouTube, TikTok, Instagram, and Facebook links are supported."
+        )
+
+    opts = _base_opts(settings)
+    opts.update({"noplaylist": True, "skip_download": True})
+
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except DownloadError as exc:
+        raise classify_error(exc, url) from exc
+
+    if info is None:
+        raise UnavailableMediaError("No media information could be extracted from this URL.")
+
+    formats = [_format_to_option(f) for f in info.get("formats", []) if f.get("format_id")]
+    video_presets, audio_presets = _build_presets(formats)
+
+    response = AnalyzeResponse(
+        url=url,
+        platform=platform,
+        media_type=MediaType.VIDEO,
+        id=str(info.get("id")),
+        title=info.get("title") or "Untitled",
+        uploader=info.get("uploader") or info.get("channel"),
+        thumbnail=info.get("thumbnail"),
+        duration=info.get("duration"),
+        description=(info.get("description") or "")[:500] or None,
+        video_presets=video_presets,
+        audio_presets=audio_presets,
+        advanced_formats=formats,
+    )
+
+    if looks_like_playlist_url(url):
+        try:
+            playlist_opts = _base_opts(settings)
+            playlist_opts.update(
+                {"noplaylist": False, "extract_flat": "in_playlist", "playlistend": 6, "skip_download": True}
+            )
+            with yt_dlp.YoutubeDL(playlist_opts) as ydl:
+                playlist_info = ydl.extract_info(url, download=False)
+            entries = playlist_info.get("entries") if playlist_info else None
+            if entries:
+                entries = list(entries)
+                response.is_playlist = True
+                response.playlist_title = playlist_info.get("title")
+                response.playlist_count = playlist_info.get("playlist_count") or len(entries)
+                response.playlist_entries_preview = [
+                    PlaylistEntryPreview(
+                        id=str(e.get("id")), title=e.get("title") or "Untitled", duration=e.get("duration")
+                    )
+                    for e in entries[:5]
+                    if e
+                ]
+        except DownloadError as exc:
+            logger.warning("Playlist preview extraction failed: %s", exc)
+
+    return response
+
+
+def build_format_selector(
+    media_type: MediaType, quality_key: str, format_id: Optional[str]
+) -> str:
+    if format_id:
+        return f"{format_id}+bestaudio/{format_id}/best"
+
+    if media_type == MediaType.AUDIO:
+        return "bestaudio/best"
+
+    if quality_key == "best" or not quality_key:
+        return "bestvideo*+bestaudio/best"
+
+    try:
+        height = int(quality_key)
+    except ValueError:
+        return "bestvideo*+bestaudio/best"
+    return f"bestvideo[height<={height}]+bestaudio/best[height<={height}]"
+
+
+def build_download_opts(
+    request: CreateDownloadRequest,
+    settings: AppSettings,
+    output_template: str,
+    progress_hook: Callable[[dict], None],
+    postprocessor_hook: Callable[[dict], None],
+) -> dict[str, Any]:
+    opts = _base_opts(settings)
+    opts.update(
+        {
+            "noplaylist": request.playlist_mode == "single",
+            "outtmpl": output_template,
+            "format": build_format_selector(request.media_type, request.quality_key, request.format_id),
+            "progress_hooks": [progress_hook],
+            "postprocessor_hooks": [postprocessor_hook],
+            "windowsfilenames": True,
+            "trim_file_name": 150,
+            "writethumbnail": settings.save_thumbnail or (
+                request.media_type == MediaType.AUDIO and settings.embed_thumbnail_in_audio
+            ),
+        }
+    )
+
+    postprocessors: list[dict[str, Any]] = []
+
+    if request.media_type == MediaType.AUDIO:
+        audio_format = request.audio_format or "best"
+        if audio_format in ("mp3", "m4a"):
+            postprocessors.append(
+                {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": audio_format,
+                    "preferredquality": str(request.mp3_bitrate or settings.mp3_bitrate)
+                    if audio_format == "mp3"
+                    else None,
+                }
+            )
+        if settings.embed_thumbnail_in_audio:
+            postprocessors.append({"key": "EmbedThumbnail"})
+    else:
+        if settings.preferred_container != "auto":
+            opts["merge_output_format"] = settings.preferred_container.value \
+                if hasattr(settings.preferred_container, "value") else settings.preferred_container
+
+    if settings.embed_metadata:
+        postprocessors.append({"key": "FFmpegMetadata", "add_metadata": True})
+
+    if request.clip is not None:
+        start_s, end_s = validate_clip_range(request.clip.start, request.clip.end)
+        opts["download_ranges"] = _make_download_ranges(start_s, end_s)
+        opts["force_keyframes_at_cuts"] = True
+
+    opts["postprocessors"] = postprocessors
+    return opts
+
+
+def _make_download_ranges(start_s: float, end_s: float):
+    from yt_dlp.utils import download_range_func
+
+    return download_range_func(None, [(start_s, end_s)])

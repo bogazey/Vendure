@@ -1,0 +1,16 @@
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.pytest_cache/
+*.pyc
+
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+
+data/*.db
+data/logs/*.log*
+downloads/*
+!downloads/.gitkeep
+
+.env

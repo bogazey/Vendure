@@ -1,0 +1,167 @@
+import { useMemo, useState } from "react";
+import type { AnalyzeResponse, CreateDownloadRequest, MediaType, PlaylistMode } from "../types/api";
+import AdvancedFormats from "./AdvancedFormats";
+import ClipRangeInput from "./ClipRangeInput";
+import PlaylistChooser from "./PlaylistChooser";
+import { parseTimecode } from "../utils/timecode";
+
+interface FormatSelectorProps {
+  media: AnalyzeResponse;
+  onStartDownload: (request: CreateDownloadRequest) => void;
+  submitting: boolean;
+}
+
+const MP3_BITRATES = [128, 192, 256, 320];
+
+export default function FormatSelector({ media, onStartDownload, submitting }: FormatSelectorProps) {
+  const [mediaType, setMediaType] = useState<MediaType>("video");
+  const [videoQuality, setVideoQuality] = useState("best");
+  const [audioFormat, setAudioFormat] = useState<"best" | "mp3" | "m4a">("best");
+  const [mp3Bitrate, setMp3Bitrate] = useState(192);
+  const [formatId, setFormatId] = useState<string | null>(null);
+  const [playlistMode, setPlaylistMode] = useState<PlaylistMode>("single");
+  const [clipEnabled, setClipEnabled] = useState(false);
+  const [clipStart, setClipStart] = useState("00:00");
+  const [clipEnd, setClipEnd] = useState("00:30");
+
+  const clipError = useMemo(() => {
+    if (!clipEnabled) return null;
+    try {
+      const startS = parseTimecode(clipStart);
+      const endS = parseTimecode(clipEnd);
+      if (endS <= startS) return "End time must be after start time.";
+      return null;
+    } catch {
+      return "Use HH:MM:SS or MM:SS format.";
+    }
+  }, [clipEnabled, clipStart, clipEnd]);
+
+  const canSubmit = !submitting && !clipError;
+
+  const handleSubmit = () => {
+    if (!canSubmit) return;
+    const request: CreateDownloadRequest = {
+      url: media.url,
+      media_type: mediaType,
+      quality_key: mediaType === "video" ? videoQuality : audioFormat,
+      format_id: formatId,
+      audio_format: mediaType === "audio" ? audioFormat : null,
+      mp3_bitrate: mediaType === "audio" && audioFormat === "mp3" ? mp3Bitrate : null,
+      playlist_mode: media.is_playlist ? playlistMode : "single",
+      clip: clipEnabled && !clipError ? { start: clipStart, end: clipEnd } : null,
+    };
+    onStartDownload(request);
+  };
+
+  return (
+    <div className="flex flex-col gap-4 rounded-xl border border-surface-border bg-surface-raised p-4">
+      {media.is_playlist && (
+        <PlaylistChooser media={media} mode={playlistMode} onChange={setPlaylistMode} />
+      )}
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setMediaType("video")}
+          className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+            mediaType === "video" ? "bg-indigo-600 text-white" : "bg-surface text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          Video
+        </button>
+        <button
+          type="button"
+          onClick={() => setMediaType("audio")}
+          className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+            mediaType === "audio" ? "bg-indigo-600 text-white" : "bg-surface text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          Audio Only
+        </button>
+      </div>
+
+      {mediaType === "video" ? (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {media.video_presets.map((preset) => (
+            <button
+              key={preset.key}
+              type="button"
+              disabled={!preset.available}
+              onClick={() => setVideoQuality(preset.key)}
+              className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                videoQuality === preset.key
+                  ? "border-indigo-500 bg-indigo-500/15 text-indigo-200"
+                  : "border-surface-border text-slate-300 hover:border-slate-500"
+              } ${!preset.available ? "cursor-not-allowed opacity-30" : ""}`}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-3 gap-2">
+            {media.audio_presets.map((preset) => (
+              <button
+                key={preset.key}
+                type="button"
+                disabled={!preset.available}
+                onClick={() => setAudioFormat(preset.key as "best" | "mp3" | "m4a")}
+                className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                  audioFormat === preset.key
+                    ? "border-indigo-500 bg-indigo-500/15 text-indigo-200"
+                    : "border-surface-border text-slate-300 hover:border-slate-500"
+                } ${!preset.available ? "cursor-not-allowed opacity-30" : ""}`}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+
+          {audioFormat === "mp3" && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">Bitrate</span>
+              {MP3_BITRATES.map((rate) => (
+                <button
+                  key={rate}
+                  type="button"
+                  onClick={() => setMp3Bitrate(rate)}
+                  className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+                    mp3Bitrate === rate
+                      ? "bg-indigo-500 text-white"
+                      : "bg-surface text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  {rate} kbps
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {mediaType === "video" && (
+        <ClipRangeInput
+          enabled={clipEnabled}
+          start={clipStart}
+          end={clipEnd}
+          onToggle={setClipEnabled}
+          onStartChange={setClipStart}
+          onEndChange={setClipEnd}
+          error={clipError}
+        />
+      )}
+
+      <AdvancedFormats formats={media.advanced_formats} selectedFormatId={formatId} onSelect={setFormatId} />
+
+      <button
+        type="button"
+        onClick={handleSubmit}
+        disabled={!canSubmit}
+        className="rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {submitting ? "Starting…" : "Start Download"}
+      </button>
+    </div>
+  );
+}

@@ -1,0 +1,272 @@
+# Local Media Downloader
+
+A local-only web app for downloading publicly accessible media from YouTube,
+TikTok, Instagram, and Facebook by pasting a URL. Everything runs on your own
+machine — there is no cloud service, no account, and no paid API involved.
+
+> **Use responsibly.** This tool is for downloading content you are lawfully
+> allowed to access and save (your own uploads, public domain media, content
+> whose creator permits downloading, etc.). It does not circumvent DRM,
+> paywalls, or authentication systems. Private/login-required content only
+> works if you supply your own browser cookies, exactly as your browser would
+> send them.
+
+## Screenshots
+
+_Add screenshots of the Dashboard, format selection, live download queue, and
+Settings page here once you've run the app locally._
+
+- `docs/screenshots/dashboard.png`
+- `docs/screenshots/download-queue.png`
+- `docs/screenshots/settings.png`
+
+## Features
+
+- Paste a URL and auto-detect the platform (YouTube, TikTok, Instagram, Facebook)
+- Metadata preview: thumbnail, title, uploader, duration, description
+- Simple quality presets (2160p → 360p, Best Audio, MP3, M4A) plus an
+  "Advanced Formats" table of every stream yt-dlp actually found
+- Live download progress over Server-Sent Events (no polling)
+- Concurrent download queue (configurable, default 2 at a time)
+- Cancel an in-progress download
+- Download history in SQLite: search, filter, sort, retry, remove, open
+  file/folder
+- Optional clip-range downloads (download only part of a video)
+- Optional cookie support for content that needs your logged-in session
+  (cookies never leave your computer)
+- Settings for download folder, concurrency, theme, container/format
+  preferences, MP3 bitrate, metadata/thumbnail embedding, network timeout
+- First-run FFmpeg check with OS-specific install instructions
+
+## Architecture
+
+```
+local-media-downloader/
+  backend/            FastAPI app (Python)
+    app/
+      main.py          App wiring, CORS, error handlers
+      api/              HTTP route modules (one per resource)
+      services/         yt-dlp wrapper, download queue, settings, filesystem
+      models/           Pydantic schemas + enums
+      database/         SQLite connection + repositories
+      utils/            URL detection, sanitization, timecode parsing, paths
+      config/           Paths & logging configuration
+    tests/              pytest suite (yt-dlp is mocked; no network calls)
+  frontend/           React + Vite + TypeScript + Tailwind
+    src/
+      components/       Reusable UI pieces (MediaCard, FormatSelector, ...)
+      pages/            Dashboard, History, Settings
+      hooks/            useDownloadProgress (SSE)
+      services/         Typed fetch client
+      types/            Shared TypeScript types mirroring the backend schemas
+  downloads/          Default download destination
+  data/               SQLite database + rotating logs
+  scripts/            start.sh / start.bat
+```
+
+**Backend**: FastAPI + Uvicorn, yt-dlp for extraction/download, FFmpeg for
+merging and audio conversion, SQLite for history/settings, Server-Sent Events
+for progress. All downloads run through an in-process async queue with a
+configurable concurrency limit; yt-dlp itself runs in a worker thread per job
+so the event loop stays responsive.
+
+**Frontend**: React + TypeScript + Tailwind CSS, built with Vite. Talks to the
+backend over a small typed `fetch` client and subscribes to
+`/api/progress/stream` for live job updates.
+
+## Supported platforms
+
+| Platform  | Recognized URL forms                                   |
+|-----------|----------------------------------------------------------|
+| YouTube   | `youtube.com/watch`, `youtu.be`, `/shorts/`, live links  |
+| TikTok    | `tiktok.com`, `vm.tiktok.com`, `vt.tiktok.com`            |
+| Instagram | `instagram.com/reel/`, `/p/`, `/tv/`                      |
+| Facebook  | `facebook.com`, `fb.watch`, reels                          |
+
+Extraction itself is delegated entirely to yt-dlp, so support tracks whatever
+yt-dlp's extractors currently handle for these domains.
+
+## Requirements
+
+- Python 3.12+ (3.11 also works; see [Known limitations](#known-limitations))
+- Node.js 18+
+- FFmpeg (required for merging video/audio and for audio conversion)
+
+## Installation
+
+### macOS
+
+```bash
+brew install python ffmpeg node
+git clone <this-repo>
+cd local-media-downloader
+./scripts/start.sh
+```
+
+### Windows
+
+```powershell
+winget install Python.Python.3.12
+winget install Gyan.FFmpeg
+winget install OpenJS.NodeJS.LTS
+git clone <this-repo>
+cd local-media-downloader
+scripts\start.bat
+```
+
+### Linux (Debian/Ubuntu)
+
+```bash
+sudo apt update && sudo apt install -y python3 python3-venv ffmpeg nodejs npm
+git clone <this-repo>
+cd local-media-downloader
+./scripts/start.sh
+```
+
+## FFmpeg installation
+
+| OS | Command |
+|----|---------|
+| macOS (Homebrew) | `brew install ffmpeg` |
+| Windows (winget) | `winget install Gyan.FFmpeg` |
+| Windows (Chocolatey) | `choco install ffmpeg` |
+| Ubuntu / Debian | `sudo apt install ffmpeg` |
+| Fedora | `sudo dnf install ffmpeg` |
+| Arch Linux | `sudo pacman -S ffmpeg` |
+
+If FFmpeg isn't found, the app shows a setup screen with these same
+instructions and a "Recheck" button — no need to restart the app once it's
+installed.
+
+## Local startup
+
+The easiest path is the startup script, which creates the Python virtual
+environment, installs dependencies, verifies FFmpeg, and launches both
+servers:
+
+```bash
+# macOS / Linux
+./scripts/start.sh
+
+# Windows
+scripts\start.bat
+```
+
+This opens the app at **http://127.0.0.1:5173**. The backend API listens on
+**http://127.0.0.1:8000** and is bound to localhost only.
+
+### Manual startup
+
+```bash
+# Backend
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate        # .venv\Scripts\activate on Windows
+pip install -r requirements.txt
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+# Frontend (separate terminal)
+cd frontend
+npm install
+npm run dev
+```
+
+## Settings
+
+All settings are edited from the Settings page and persisted in SQLite
+(`data/app.db`):
+
+- **General** — download folder, max simultaneous downloads, theme
+- **Video** — default quality, container (Auto/MP4/MKV), embed metadata,
+  save thumbnail
+- **Audio** — preferred format, MP3 bitrate, embed thumbnail in audio files
+- **Authentication** — cookie source (see below)
+- **Advanced** — yt-dlp version, FFmpeg path (read-only), network timeout,
+  retry count
+
+## Cookie support
+
+Some content requires your normal logged-in browser session. In
+**Settings → Authentication** you can choose:
+
+- No cookies (default)
+- Cookies from Chrome, Firefox, Edge, or Safari (read directly from your
+  browser's local cookie store via yt-dlp's `--cookies-from-browser`)
+- A cookie file you export yourself (Netscape format)
+
+Cookies are read locally by yt-dlp and are **never uploaded anywhere** — they
+stay on your computer and are never sent to the frontend, logged, or
+transmitted over the network by this app. This only makes a difference for
+content your own account can already see; it does not unlock content you
+don't have access to.
+
+## Troubleshooting
+
+- **"FFmpeg is required" screen won't go away** — install FFmpeg (see above)
+  and click Recheck. Restarting the backend also re-checks on startup.
+- **"Could not reach the local backend"** — make sure the backend is running
+  on port 8000 and that nothing else is using that port.
+- **A specific video fails to analyze/download** — the app surfaces a
+  friendly message (private/login-required, geo-restricted, age-restricted,
+  unavailable, network error, etc.) with an optional "Show technical details"
+  section. Check `data/logs/app.log` for the full error.
+- **Downloads are slow or stall** — check Settings → Advanced for the
+  network timeout/retry values; some platforms rate-limit aggressively.
+- **Format/resolution I expected isn't shown** — the app only shows presets
+  that actually exist for that particular video; check "Advanced Formats" to
+  see every stream yt-dlp found.
+
+## Updating yt-dlp
+
+Platforms change frequently, and yt-dlp ships frequent fixes. To update:
+
+```bash
+cd backend
+source .venv/bin/activate
+pip install --upgrade yt-dlp
+```
+
+The installed version is shown in Settings → Advanced.
+
+## Known limitations
+
+- This environment's Python is 3.11 rather than the requested 3.12+; the app
+  has no 3.12-only dependencies, so it runs correctly on 3.11+, but 3.12+ is
+  still recommended for production use.
+- Active download jobs live in memory; if you restart the backend mid-download,
+  in-flight jobs are lost (completed downloads already in history are
+  unaffected). Retry them from the History page.
+- Cookie-based access only works for content your own logged-in account can
+  already see in a normal browser — it does not bypass any access control.
+- Platform behavior (available qualities, playlist metadata, private-content
+  handling) depends entirely on yt-dlp's extractors and will change as
+  platforms change their sites.
+- The clip-range feature re-encodes at cut points for accuracy, which is
+  slower than a plain full-file download.
+
+## Security & privacy
+
+- Backend binds to `127.0.0.1` only — nothing here listens on your network.
+- CORS is restricted to the local frontend origins.
+- No endpoint reads arbitrary files or executes arbitrary shell commands; the
+  only filesystem operations are: writing inside your configured download
+  folder, and opening a file/folder you already downloaded via the OS's own
+  file manager (`open` / `explorer` / `xdg-open`), invoked with argument
+  arrays — never a shell string.
+- Filenames are sanitized for Windows/macOS/Linux compatibility before
+  anything is written to disk.
+- Cookies, authorization headers, and other session data are never logged or
+  sent anywhere except to the platform's own servers via yt-dlp, exactly as
+  your browser would.
+
+## Version 2 ideas
+
+- Batch/queue multiple URLs at once from a pasted list
+- Per-item playlist selection (choose specific videos from a playlist, not
+  just "current" vs "all")
+- Tauri desktop packaging (structure already keeps backend/frontend
+  independent enough to wrap)
+- Scheduled/recurring downloads (e.g. "watch this channel")
+- Subtitle download/embedding
+- Dark/light theme actually wired to the `theme` setting (currently dark-only
+  in the UI; the setting is stored but not yet applied)
