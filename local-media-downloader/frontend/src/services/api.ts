@@ -140,6 +140,9 @@ export const api = {
 
   resendVerification: () => request<void>("/api/auth/resend-verification", { method: "POST" }),
 
+  verifyEmail: (token: string) =>
+    request<void>("/api/auth/verify-email", { method: "POST", body: JSON.stringify({ token }) }),
+
   // --- Account / billing ---
   getAccount: () => request<AccountOut>("/api/account"),
 

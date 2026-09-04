@@ -116,16 +116,24 @@ async def forgot_password(payload: ForgotPasswordRequest, request: Request, db: 
 
 
 @router.post("/reset-password", status_code=204, response_model=None)
-async def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)) -> None:
+async def reset_password(payload: ResetPasswordRequest, request: Request, db: Session = Depends(get_db)) -> None:
+    if not password_reset_limiter.allow(_client_key(request), max_events=10, window_seconds=3600):
+        raise RateLimitedError("Too many attempts. Please try again later.")
     auth_service.reset_password(db, payload.token, payload.new_password)
 
 
 @router.post("/verify-email", status_code=204, response_model=None)
-async def verify_email(payload: VerifyEmailRequest, db: Session = Depends(get_db)) -> None:
+async def verify_email(payload: VerifyEmailRequest, request: Request, db: Session = Depends(get_db)) -> None:
+    if not password_reset_limiter.allow(_client_key(request), max_events=10, window_seconds=3600):
+        raise RateLimitedError("Too many attempts. Please try again later.")
     auth_service.verify_email(db, payload.token)
 
 
 @router.post("/resend-verification", status_code=204, response_model=None)
-async def resend_verification(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> None:
+async def resend_verification(
+    request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)
+) -> None:
+    if not password_reset_limiter.allow(_client_key(request), max_events=5, window_seconds=3600):
+        raise RateLimitedError("Too many requests. Please try again later.")
     if not user.email_verified:
         auth_service.request_email_verification(db, user)
