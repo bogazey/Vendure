@@ -11,7 +11,7 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.config.logging_config import get_logger
-from app.config.paths import DATA_DIR
+from app.config.paths import DATA_DIR, DEFAULT_DOWNLOAD_DIR
 
 logger = get_logger("commercial_settings")
 
@@ -48,6 +48,13 @@ class CommercialSettings(BaseSettings):
     paddle_pro_annual_price_id: str = Field(default="", alias="PADDLE_PRO_ANNUAL_PRICE_ID")
     paddle_creator_monthly_price_id: str = Field(default="", alias="PADDLE_CREATOR_MONTHLY_PRICE_ID")
     paddle_creator_annual_price_id: str = Field(default="", alias="PADDLE_CREATOR_ANNUAL_PRICE_ID")
+
+    # --- Storage ---
+    # Admin/server config, not user-editable: every authenticated user's
+    # downloads are confined to <DOWNLOAD_ROOT>/<user_id>/ - see
+    # app/services/user_storage_service.py. Defaults to the personal app's
+    # own default download folder so this works out of the box.
+    download_root: str = Field(default=str(DEFAULT_DOWNLOAD_DIR), alias="DOWNLOAD_ROOT")
 
     # --- Ads ---
     ads_enabled: bool = Field(default=True, alias="ADS_ENABLED")

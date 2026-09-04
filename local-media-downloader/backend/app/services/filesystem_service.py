@@ -5,10 +5,16 @@ file or its containing folder) via argument-array subprocess calls. Never
 concatenates paths into a shell string and never accepts arbitrary commands.
 
 Every path is additionally checked against `ensure_path_permitted` before any
-filesystem action runs, so this can never be used to open or delete a path
-outside the configured download folder (or, for legacy files, a path we
-actually recorded in history) — even though the FastAPI/CORS layer already
-restricts who can reach these endpoints in the first place.
+filesystem action runs — even though the FastAPI/CORS layer already restricts
+who can reach these endpoints in the first place. For an authenticated
+(commercial) caller, this means confined strictly to
+<DOWNLOAD_ROOT>/<user_id>/ (see user_storage_service.py) — no global
+download_dir fallback, no cross-account history fallback. The
+no-user_id branch below is the personal/local-mode-only fallback (kept
+for backward compatibility with any programmatic caller that has no
+authenticated user context) and is unreachable from any HTTP route in
+this build, since every /api/fs/* and /api/history/* route requires auth
+and always passes its own user_id.
 """
 from __future__ import annotations
 
@@ -35,19 +41,27 @@ def _open_with_os_handler(path: Path) -> None:
 
 
 def ensure_path_permitted(path: Path, user_id: Optional[str] = None) -> None:
-    """Raise InvalidPathError unless `path` is inside the current download
-    folder, or matches a file `user_id` themselves actually downloaded
-    (recorded in their own history rows) - the history fallback is always
-    user-scoped so this can never be used to probe or act on another
-    account's downloaded files, even though download_dir itself is still a
-    shared, global setting today (see COMMERCIAL_ARCHITECTURE.md §4.1)."""
+    """Raise InvalidPathError unless `path` is allowed for this caller.
+
+    With a user_id (every real HTTP caller in this build), confined
+    strictly to that user's own <DOWNLOAD_ROOT>/<user_id>/ directory - see
+    user_storage_service.ensure_within_user_dir. Without one, falls back to
+    the legacy personal-mode behavior (current global download_dir, or a
+    file recorded in - unscoped - history), kept only for callers with no
+    authenticated user context at all."""
+    if user_id is not None:
+        from app.services.user_storage_service import ensure_within_user_dir
+
+        ensure_within_user_dir(path, user_id)
+        return
+
     from app.database import history_repo
     from app.services.settings_service import get_settings
 
     download_dir = Path(get_settings().download_dir).expanduser().resolve()
     if is_within(path, download_dir):
         return
-    if history_repo.filepath_exists(str(path), user_id=user_id):
+    if history_repo.filepath_exists(str(path)):
         return
     raise InvalidPathError("This path is outside the allowed download location.")
 

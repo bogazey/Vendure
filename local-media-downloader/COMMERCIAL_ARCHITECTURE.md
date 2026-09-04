@@ -177,11 +177,12 @@ through it instead:
   user.id`'s own row — never the global settings object (which it no
   longer even receives as a parameter).
 - `DownloadManager._effective_settings()` builds the global `AppSettings`
-  (download_dir, concurrency, audio/video presets, timeouts — still
-  legitimately shared, see below) and layers the job's owning user's own
-  container_mode/cookie_source/cookie_file_path on top before handing it
-  to `ytdlp_service.build_download_opts`, so what a job is gated against
-  and what it actually runs with are guaranteed to match.
+  (concurrency, audio/video presets, timeouts — still legitimately shared)
+  and layers the job's owning user's own container_mode/cookie_source/
+  cookie_file_path **and** download_dir (see §4.2 — also no longer shared)
+  on top before handing it to `ytdlp_service.build_download_opts`, so what
+  a job is gated against and what it actually runs with are guaranteed to
+  match.
 - `POST /api/analyze` (format/quality preview, reachable anonymously as
   part of the pre-signup funnel) uses `get_optional_user` and applies the
   *signed-in* caller's own preferences when there is one, sensible
@@ -204,13 +205,14 @@ Settings still downloads normally on the hardcoded defaults.
 **Other global-state issues found and fixed during this same audit** (the
 task was explicitly to check for "other settings with the same
 multi-tenant problem," and these three were real, live, exploitable gaps
-at the time — not the download_dir case below, which is flagged but not
-yet fixed):
+at the time — `download_dir` itself was flagged in the same pass and fixed
+separately shortly after, see §4.2):
 
 - `GET/PUT /api/settings` had **no authentication at all** — any
-  unauthenticated caller could rewrite the shared `download_dir`,
-  concurrency limit, theme, or audio/video defaults for the entire
-  server. Now requires `Depends(get_current_user)`.
+  unauthenticated caller could rewrite the shared concurrency limit,
+  theme, or audio/video defaults for the entire server (and, at the time,
+  the shared `download_dir` — now moot, see §4.2). Now requires
+  `Depends(get_current_user)`.
 - `POST /api/fs/open` and `/api/fs/open-folder` — which run the OS's
   "reveal in file manager" handler (`open`/`xdg-open`/`explorer`) on a
   server-side path — also had **no authentication**. Now require auth.
@@ -223,41 +225,82 @@ yet fixed):
   an optional `user_id` and every caller in the app passes the current
   authenticated user's id.
 
-### 4.2 Known limitation: `download_dir` is still a shared, global setting
+### 4.2 `download_dir` is now per-user and non-configurable
 
-Unlike container_mode/cookie_source, `download_dir` (and the rest of
-`AppSettings` — concurrency, theme, audio/video presets, timeouts) was
-**deliberately left as one shared row** in this pass, for two reasons: (1)
-it wasn't the specific bug reported (a gating false-positive from a shared
-setting) — `download_dir` isn't read by any entitlement check, so no plan
-gets incorrectly blocked by another user's folder choice; and (2) properly
-fixing it is a materially bigger change (see below), not a settings-table
-tweak.
+**Fixed.** This section originally flagged `download_dir` as still a
+shared, global, freely-user-editable setting — worse than the
+container_mode/cookie_source bug fixed in §4.1, since `resolve_safe_
+directory()` placed **no restriction at all** on the path a user could
+set, making it an arbitrary-server-file-write primitive once "the user"
+became any signed-up web visitor rather than the original single-operator
+desktop app's own owner.
 
-It's still a real problem for a genuine multi-tenant deployment, and is
-arguably worse than the bug just fixed: `resolve_safe_directory()`
-explicitly does **not** constrain the chosen path to any root ("since the
-user explicitly chooses their own download directory" — true for the
-original single-operator desktop app, not true once "the user" is any
-signed-up web visitor). Today, any authenticated account can point the
-*shared* `download_dir` at an arbitrary writable path on the server, which
-both misdirects every other user's downloads into that folder and is an
-arbitrary-file-write primitive beyond just a settings leak. `cookie_source
-=file`'s `cookie_file_path` has the same unconstrained-path shape, though
-lower severity (it's read, not written, and parse failures don't echo file
-contents back to the caller).
+**Design**: a new admin/server-only config value, `DOWNLOAD_ROOT`
+(`CommercialSettings.download_root`, defaults to the personal app's own
+default download folder), owned by `app/services/user_storage_service.py`.
+Every authenticated user's downloads are confined to exactly
+`<DOWNLOAD_ROOT>/<user_id>/` — never user-editable, never an admin-editable
+per-user runtime value, purely a deterministic function of the account's
+own id. No database column stores it (unlike container_mode/cookie_source,
+this isn't a *preference* — it's an identity-derived storage location).
 
-**Recommended fix** (not implemented here — flagged, not silently left,
-per the instruction not to start unrelated scope creep in this pass): make
-`download_dir` per-user like `container_mode`/`cookie_source`, but instead
-of letting each user set an arbitrary absolute path, resolve it to a
-fixed, non-configurable subfolder under one admin/ops-configured root
-(e.g. `<download_root>/<user_id>/`), and apply the same containment to
-`cookie_file_path` (require it under a per-user uploads directory rather
-than an arbitrary server path). This is real work — new download-path
-resolution logic, a Settings UI change (folder becomes read-only/display-
-only for non-admin accounts), and its own isolation tests — which is why
-it's called out as the next task rather than rushed into this pass.
+- `user_download_dir(user_id)` resolves (and lazily creates) that
+  directory. Security checks, in order: `user_id` must match a strict
+  allow-list pattern (blocks path traversal via the id itself - `..`, `/`,
+  `\`, empty, or anything not matching the UUID shape this app actually
+  generates); if a **symlink** already occupies where the directory should
+  be, it's refused outright rather than silently followed (`mkdir(exist_ok=
+  True)` would otherwise happily accept a symlinked directory); the
+  resolved result is verified to still fall within `DOWNLOAD_ROOT` as a
+  final check.
+- `ensure_within_user_dir(path, user_id)` is the sole authorization check
+  behind every open/delete/cleanup/retry filesystem action for an
+  authenticated caller — no history-based fallback, no global-download-dir
+  fallback (both existed before this fix and both are now gone for any
+  caller with a real user_id). It resolves **both sides** before comparing,
+  so a symlink planted *inside* an otherwise-legitimate user directory,
+  pointing elsewhere, can't be used to escape it either.
+- `DownloadManager._effective_settings()` now overrides `download_dir` too
+  (alongside container_mode/cookie_source from §4.1) with this computed,
+  confined path before a job ever touches disk — re-verified once more
+  immediately before the actual write in `_blocking_download`, and again in
+  `_cleanup_cancelled_file`, on the theory that a security boundary this
+  consequential deserves more than one layer of defense. A job created with
+  no `user_id` (the lower-level, non-HTTP `manager.retry_job()`, kept for
+  programmatic/test use) keeps the old global-`download_dir` behavior
+  unchanged - full backward compatibility for that one legacy path.
+- `filesystem_service.ensure_path_permitted(path, user_id=...)` — what
+  `/api/fs/*` and `/api/history/*` actually call — now routes through
+  `ensure_within_user_dir` whenever a `user_id` is present (every real HTTP
+  route in this build). The old global-download-dir + unscoped-history
+  fallback survives only as a no-`user_id` branch for programmatic callers
+  with no authenticated context, unreachable from any route.
+- `GET /api/settings` now returns this computed, read-only path in its
+  `download_dir` field (still the same response shape, so nothing else
+  breaks); `PUT /api/settings` rejects any patch that includes
+  `download_dir` with a clear `400`. The Settings page's "Download folder"
+  field is now a read-only display, not an editable input.
+
+**Not addressed in this fix** (separate, smaller, and lower-severity):
+`cookie_source=file`'s `cookie_file_path` still accepts an arbitrary server
+path. It's read-only (never written to), and a parse failure doesn't echo
+file contents back to the caller, so the risk is materially lower than
+`download_dir` was — but it's the same *shape* of problem and would
+benefit from a similar per-user-sandboxed-uploads treatment if this ever
+needs to harden further before a real launch.
+
+Verified: 27 new/updated automated tests (`tests/test_user_storage_service.py`
+plus `TestPerUserDownloadDirectory` in `tests/test_download_manager.py`)
+covering path traversal via a malicious `user_id`, a symlink planted where
+a user's directory should be, a symlink planted *inside* an otherwise-
+legitimate directory, cross-user access denial (including at the real HTTP
+layer — two real accounts, real cookies), and that a job with no user_id
+still falls back to the old behavior unchanged. Also verified live against
+a running server: two real accounts each got their own, differently-named
+directory under `DOWNLOAD_ROOT` (confirmed on disk after an actual queued
+download); an attempted `PUT /api/settings` with an arbitrary
+`download_dir` was rejected with 400; and a path-traversal attempt via
+`POST /api/fs/open` (`/etc/passwd`) was rejected.
 
 ## 5. Paddle billing
 

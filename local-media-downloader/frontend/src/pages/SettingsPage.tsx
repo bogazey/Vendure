@@ -41,7 +41,6 @@ export default function SettingsPage() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [folderStatus, setFolderStatus] = useState<string | null>(null);
 
   useEffect(() => {
     api.getSettings().then(setSettings).catch((err) => setError(err instanceof ApiError ? err.message : "Could not load settings."));
@@ -85,20 +84,6 @@ export default function SettingsPage() {
     }
   };
 
-  const handleFolderChange = async (path: string) => {
-    setSettings((prev) => (prev ? { ...prev, download_dir: path } : prev));
-  };
-
-  const handleFolderBlur = async (path: string) => {
-    const result = await api.validateFolder(path).catch(() => null);
-    if (result?.valid) {
-      setFolderStatus(null);
-      await persist({ download_dir: path });
-    } else {
-      setFolderStatus(result?.reason || "This folder could not be used.");
-    }
-  };
-
   if (!settings || !preferences) {
     return <div className="mx-auto max-w-3xl px-6 py-10 text-sm text-slate-500">Loading settings…</div>;
   }
@@ -115,13 +100,12 @@ export default function SettingsPage() {
       <Section title="General">
         <Field label="Download folder">
           <div className="flex gap-2">
-            <input
-              type="text"
-              value={settings.download_dir}
-              onChange={(e) => handleFolderChange(e.target.value)}
-              onBlur={(e) => handleFolderBlur(e.target.value)}
-              className={`${inputClass} flex-1`}
-            />
+            <span
+              className={`${inputClass} flex-1 truncate text-slate-400`}
+              title={settings.download_dir}
+            >
+              {settings.download_dir}
+            </span>
             <button
               type="button"
               onClick={() => api.openPath(settings.download_dir).catch(() => undefined)}
@@ -130,7 +114,9 @@ export default function SettingsPage() {
               Open Downloads Folder
             </button>
           </div>
-          {folderStatus && <span className="text-xs text-red-400">{folderStatus}</span>}
+          <span className="text-xs text-slate-500">
+            Your downloads are stored in a private folder for your account and can't be changed to another location.
+          </span>
         </Field>
 
         <Field label="Maximum simultaneous downloads">

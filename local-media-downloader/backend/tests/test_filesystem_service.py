@@ -1,5 +1,10 @@
-"""Path-permission guard: opening/deleting files must stay inside the
-configured download folder, or be a path we actually recorded in history."""
+"""Path-permission guard, legacy/no-user_id (personal-mode) behavior:
+opening/deleting files must stay inside the configured download folder, or
+be a path we actually recorded in history. This is the fallback used only
+when there's no authenticated user context at all - every real HTTP route
+in this build always passes user_id and gets the much stricter,
+per-account-directory-only behavior instead (no history fallback at all -
+see tests/test_user_storage_service.py)."""
 from __future__ import annotations
 
 import uuid
@@ -74,19 +79,20 @@ class TestEnsurePathPermitted:
         with pytest.raises(InvalidPathError):
             filesystem_service.ensure_path_permitted(unknown)
 
-    def test_legacy_history_fallback_is_scoped_to_the_calling_user(self, download_dir, tmp_path):
-        """A file recorded in one user's history must not be openable by
-        passing another user's id - the history fallback used to be a
-        completely unscoped global lookup (any file any account ever
-        downloaded), which is a cross-tenant leak in a multi-user deployment."""
+    def test_a_user_id_skips_the_legacy_fallback_entirely(self, download_dir, tmp_path):
+        """Passing a user_id (every real HTTP caller in this build) routes
+        through user_storage_service's strict per-account-directory check
+        instead of this legacy global-download-dir/history-fallback logic -
+        even a file legitimately recorded in that exact user's history is
+        rejected here, because it isn't inside their own
+        <DOWNLOAD_ROOT>/<user_id>/ directory. See test_user_storage_service.py
+        for the real, current behavior authenticated callers get."""
         old_download_dir = tmp_path / "old-downloads-2"
         old_download_dir.mkdir()
         old_file = old_download_dir / "someone-elses-clip [zzz111].mp4"
         old_file.write_text("data")
 
         owner_id = str(uuid.uuid4())
-        other_user_id = str(uuid.uuid4())
-
         history_repo.upsert(
             {
                 "id": str(uuid.uuid4()),
@@ -107,10 +113,5 @@ class TestEnsurePathPermitted:
             }
         )
 
-        # The owner can still reach it via the legacy-history fallback.
-        filesystem_service.ensure_path_permitted(old_file, user_id=owner_id)  # must not raise
-
-        # A different authenticated user must NOT be able to use the same
-        # fallback to act on (or even confirm the existence of) this file.
         with pytest.raises(InvalidPathError):
-            filesystem_service.ensure_path_permitted(old_file, user_id=other_user_id)
+            filesystem_service.ensure_path_permitted(old_file, user_id=owner_id)

@@ -18,9 +18,11 @@ class FakeYoutubeDL:
     behavior = "success"  # "success" | "cancel" | "unavailable" | "error" | "cancel_after_finish"
     finish_filename = "/tmp/fake_video [abc123].mp4"
     cancel_event_to_set_on_finish = None
+    last_opts: dict | None = None
 
     def __init__(self, opts):
         self.opts = opts
+        FakeYoutubeDL.last_opts = opts
 
     def __enter__(self):
         return self
@@ -155,3 +157,79 @@ async def _wait_for_terminal(manager: dm_module.DownloadManager, job_id: str) ->
     terminal = {DownloadStage.COMPLETED, DownloadStage.CANCELLED, DownloadStage.FAILED}
     while manager.get_job(job_id).stage not in terminal:
         await asyncio.sleep(0.02)
+
+
+def _make_real_user() -> str:
+    """A job's per-user directory is keyed off a real users.id (FK-enforced
+    in the commercial DB), so tests need an actual signed-up account, not
+    just any UUID string."""
+    import uuid
+
+    from app.database.commercial_db import get_session_factory
+    from app.services.auth_service import auth_service
+
+    session = get_session_factory()()
+    try:
+        result = auth_service.signup(session, f"dm-{uuid.uuid4().hex[:10]}@example.com", "correcthorse9!")
+        session.commit()
+        return result.user.id
+    finally:
+        session.close()
+
+
+@pytest.mark.asyncio
+class TestPerUserDownloadDirectory:
+    """A job's actual write location (what's handed to yt-dlp as outtmpl)
+    must be this user's own <DOWNLOAD_ROOT>/<user_id>/ directory - never
+    the shared global download_dir this fixture configures - and never
+    another user's directory either."""
+
+    @pytest.fixture()
+    def download_root(self, tmp_path, monkeypatch):
+        from app.services import user_storage_service
+
+        root = tmp_path / "per-user-root"
+        root.mkdir()
+        settings = type("S", (), {"download_root": str(root)})()
+        monkeypatch.setattr(user_storage_service, "get_commercial_settings", lambda: settings)
+        return root
+
+    async def test_job_writes_into_its_owners_directory(self, _isolated_manager, download_root):
+        user_id = _make_real_user()
+        request = CreateDownloadRequest(url="https://www.youtube.com/watch?v=abc123", media_type=MediaType.VIDEO)
+        job = _isolated_manager.create_job(request, user_id=user_id, reservation_id=None)
+        await asyncio.wait_for(_wait_for_terminal(_isolated_manager, job.id), timeout=5)
+
+        finished = _isolated_manager.get_job(job.id)
+        assert finished.stage == DownloadStage.COMPLETED
+        outtmpl = FakeYoutubeDL.last_opts["outtmpl"]
+        assert str(download_root / user_id) in outtmpl
+
+    async def test_two_users_jobs_write_into_different_directories(self, _isolated_manager, download_root):
+        user_a = _make_real_user()
+        request_a = CreateDownloadRequest(url="https://www.youtube.com/watch?v=abc123", media_type=MediaType.VIDEO)
+        job_a = _isolated_manager.create_job(request_a, user_id=user_a, reservation_id=None)
+        await asyncio.wait_for(_wait_for_terminal(_isolated_manager, job_a.id), timeout=5)
+        outtmpl_a = FakeYoutubeDL.last_opts["outtmpl"]
+
+        user_b = _make_real_user()
+        request_b = CreateDownloadRequest(url="https://www.youtube.com/watch?v=abc123", media_type=MediaType.VIDEO)
+        job_b = _isolated_manager.create_job(request_b, user_id=user_b, reservation_id=None)
+        await asyncio.wait_for(_wait_for_terminal(_isolated_manager, job_b.id), timeout=5)
+        outtmpl_b = FakeYoutubeDL.last_opts["outtmpl"]
+
+        assert str(download_root / user_a) in outtmpl_a
+        assert str(download_root / user_b) in outtmpl_b
+        assert outtmpl_a != outtmpl_b
+
+    async def test_job_with_no_user_id_falls_back_to_the_shared_global_dir(self, _isolated_manager, download_root, tmp_path):
+        # Backward compatibility: programmatic/legacy jobs created with no
+        # user_id (e.g. the lower-level manager.retry_job()) keep the old
+        # global-download_dir behavior untouched.
+        request = CreateDownloadRequest(url="https://www.youtube.com/watch?v=abc123", media_type=MediaType.VIDEO)
+        job = _isolated_manager.create_job(request)
+        await asyncio.wait_for(_wait_for_terminal(_isolated_manager, job.id), timeout=5)
+
+        outtmpl = FakeYoutubeDL.last_opts["outtmpl"]
+        assert str(tmp_path) in outtmpl  # the fixture's global fake_settings.download_dir
+        assert str(download_root) not in outtmpl
