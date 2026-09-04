@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import ErrorBanner from "../components/ErrorBanner";
 import { useAuth } from "../context/AuthContext";
 import { track } from "../lib/analytics";
+import { openPaddleCheckout } from "../lib/paddle";
 import { ApiError, api } from "../services/api";
 import type { BillingPeriod, Plan } from "../types/commercial";
 import { PLAN_PRICES } from "../types/commercial";
@@ -61,6 +62,7 @@ export default function Pricing() {
   const [period, setPeriod] = useState<BillingPeriod>("monthly");
   const [error, setError] = useState<string | null>(null);
   const [checkingOut, setCheckingOut] = useState<Plan | null>(null);
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     track("pricing_view");
@@ -81,15 +83,21 @@ export default function Pricing() {
     track("checkout_started", { plan });
     try {
       const checkout = await api.createCheckout(plan, period);
-      // Paddle.js would open its overlay here using checkout.client_token /
-      // checkout.price_id. No Paddle Sandbox tooling was available in this
-      // build environment to exercise that client-side flow end-to-end -
-      // see PADDLE_SANDBOX_TESTING.md for exact manual steps.
-      window.alert(
-        `Sandbox checkout ready: plan=${checkout.plan}, price_id=${checkout.price_id || "(not configured)"}.\n` +
-          "See PADDLE_SANDBOX_TESTING.md for how to complete this in Paddle Sandbox."
-      );
-      await refresh();
+      await openPaddleCheckout(checkout, (event) => {
+        if (event.name === "checkout.completed") {
+          // The account's plan itself only actually changes once Paddle's
+          // webhook lands (never trust the checkout UI alone - see
+          // COMMERCIAL_ARCHITECTURE.md §5), which is usually seconds away -
+          // a short poll covers that gap instead of leaving the page stale.
+          setConfirming(true);
+          refresh();
+          setTimeout(refresh, 3000);
+          setTimeout(() => {
+            refresh();
+            setConfirming(false);
+          }, 8000);
+        }
+      });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not start checkout.");
     } finally {
@@ -130,6 +138,11 @@ export default function Pricing() {
       </div>
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
+      {confirming && (
+        <p className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-4 py-2 text-center text-sm text-indigo-300">
+          Payment received — confirming your upgrade…
+        </p>
+      )}
 
       <div className="grid gap-6 md:grid-cols-3">
         {PLAN_ROWS.map((row) => {

@@ -268,10 +268,15 @@ nothing in this codebase is wired to accept live Paddle credentials as
 wasn't possible to verify without a real Paddle account.
 
 - **Checkout**: `POST /api/billing/checkout` returns `{price_id,
-  client_token, plan, billing_period, custom_data: {user_id}}`. The backend
-  never creates a "checkout session" — Paddle.js runs checkout client-side
-  against the price ID, using only the public client token. The backend API
-  key (`PADDLE_API_KEY`) is never sent to the frontend.
+  client_token, environment, plan, billing_period, custom_data: {user_id}}`
+  (raises a clean `502 BILLING_ERROR` rather than crashing if no price/token
+  is configured for that plan+period). The backend never creates a
+  "checkout session" — `frontend/src/lib/paddle.ts` loads Paddle.js v2 from
+  Paddle's CDN client-side and opens its checkout overlay directly against
+  the price ID and public client token; `environment` drives
+  `Paddle.Environment.set()` so the frontend never hardcodes sandbox vs.
+  production. The backend API key (`PADDLE_API_KEY`) is never sent to the
+  frontend — only the public, checkout-only client token is.
 - **Webhook — the sole source of truth**: `POST
   /api/billing/paddle/webhook`. A successful frontend checkout redirect is
   *never* trusted on its own; the account page keeps showing the old plan
@@ -296,13 +301,16 @@ wasn't possible to verify without a real Paddle account.
   button opens Paddle's own UI in a new tab. No custom card-management UI
   was built, per the explicit instruction not to invent one.
 
-`paddle_client.py` (the low-level REST wrapper) and the webhook payload
-shapes in `paddle_service.py` are written against Paddle's documented
-Billing API v1 from training knowledge — **no Paddle MCP/sandbox tooling
-was available in this environment** to exercise them against a real
-account (confirmed via `ToolSearch`/`SearchMcpRegistry` — no Paddle
-connector present, despite the task description assuming one). See
-`PADDLE_SANDBOX_TESTING.md` for the exact manual verification steps.
+`paddle_client.py` (the low-level REST wrapper), the webhook payload
+shapes in `paddle_service.py`, and the Paddle.js integration in
+`frontend/src/lib/paddle.ts` are all written against Paddle's documented
+Billing API v1 / Paddle.js v2 from training knowledge — **no Paddle
+MCP/sandbox tooling has been available in this environment**, checked
+twice across two build sessions (`ToolSearch`/`SearchMcpRegistry`/
+`ListConnectors`, all empty for Paddle) to exercise any of it against a
+real account. See `PADDLE_SANDBOX_TESTING.md` for exactly what is and
+isn't verified, and the manual steps to finish verification with real
+credentials.
 
 ## 6. Database model
 

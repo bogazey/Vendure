@@ -20,7 +20,7 @@ from app.database.commercial_models import BillingEvent, Subscription, User
 from app.models.commercial_enums import BillingEventStatus, BillingPeriod, Plan, SubscriptionStatus
 from app.models.commercial_schemas import CheckoutResponse
 from app.services import email_service
-from app.utils.exceptions import InvalidWebhookSignatureError
+from app.utils.exceptions import BillingError, InvalidWebhookSignatureError
 
 logger = get_logger("paddle_service")
 
@@ -92,14 +92,15 @@ def _plan_and_period_for_price_id(price_id: str) -> tuple[Plan, BillingPeriod] |
 def build_checkout(user: User, plan: Plan, billing_period: BillingPeriod) -> CheckoutResponse:
     settings = get_commercial_settings()
     price_id = _price_id_for(plan, billing_period)
-    if not price_id:
-        raise ValueError(
-            f"No Paddle price configured for {plan.value}/{billing_period.value}. "
-            "Set the corresponding PADDLE_*_PRICE_ID environment variable."
+    if not price_id or not settings.paddle_client_token:
+        raise BillingError(
+            "Billing isn't configured on this server yet. See PADDLE_SANDBOX_TESTING.md for setup.",
+            technical=f"missing price id or client token for {plan.value}/{billing_period.value}",
         )
     return CheckoutResponse(
         price_id=price_id,
         client_token=settings.paddle_client_token,
+        environment=settings.paddle_env,
         plan=plan,
         billing_period=billing_period,
         custom_data={"user_id": user.id},

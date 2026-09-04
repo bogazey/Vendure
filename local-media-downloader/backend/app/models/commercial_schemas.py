@@ -130,6 +130,10 @@ class CheckoutRequest(BaseModel):
 class CheckoutResponse(BaseModel):
     price_id: str
     client_token: str
+    # "sandbox" | "production" - the frontend calls Paddle.Environment.set()
+    # with this rather than hardcoding it, so PADDLE_ENV stays the single
+    # source of truth. This build only ever sets PADDLE_ENV=sandbox.
+    environment: str
     plan: Plan
     billing_period: BillingPeriod
     # Passed to Paddle.js as `customData` so the webhook can be correlated

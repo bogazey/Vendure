@@ -58,6 +58,8 @@ export interface AccountOut {
 export interface CheckoutResponse {
   price_id: string;
   client_token: string;
+  /** "sandbox" | "production" - drives Paddle.Environment.set(), never hardcoded client-side. */
+  environment: string;
   plan: Plan;
   billing_period: BillingPeriod;
   custom_data: Record<string, unknown>;
