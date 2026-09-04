@@ -7,6 +7,8 @@ logic lives here.
 """
 from __future__ import annotations
 
+import os
+import re
 import shutil
 from typing import Any, Callable, Optional
 
@@ -14,7 +16,7 @@ import yt_dlp
 from yt_dlp.utils import DownloadCancelled, DownloadError
 
 from app.config.logging_config import get_logger
-from app.models.enums import CookieSource, FormatKind, MediaType, Platform
+from app.models.enums import ContainerMode, CookieSource, FormatKind, MediaType, Platform
 from app.models.schemas import (
     AnalyzeResponse,
     AppSettings,
@@ -26,6 +28,7 @@ from app.models.schemas import (
 )
 from app.utils.exceptions import (
     AgeRestrictedError,
+    AppError,
     DiskFullError,
     ExtractorFailureError,
     FfmpegMissingError,
@@ -48,15 +51,30 @@ def get_ytdlp_version() -> str:
     return yt_dlp.version.__version__
 
 
+# Homebrew doesn't always end up on PATH for GUI-launched processes (Apple
+# Silicon installs to /opt/homebrew, Intel to /usr/local); check the common
+# install locations directly as a fallback so the app doesn't misreport
+# FFmpeg as "missing" on a correctly-set-up Mac.
+_FFMPEG_FALLBACK_PATHS = (
+    "/opt/homebrew/bin/ffmpeg",
+    "/usr/local/bin/ffmpeg",
+    "/usr/bin/ffmpeg",
+)
+
+
 def check_ffmpeg() -> tuple[bool, Optional[str]]:
     path = shutil.which("ffmpeg")
-    return (path is not None, path)
+    if path:
+        return True, path
+
+    for candidate in _FFMPEG_FALLBACK_PATHS:
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return True, candidate
+    return False, None
 
 
 def classify_error(exc: Exception, url: str = "") -> Exception:
     """Map a yt-dlp/OS exception to one of our friendly AppError subclasses."""
-    from app.utils.exceptions import AppError
-
     if isinstance(exc, AppError):
         return exc
 
@@ -79,6 +97,11 @@ def classify_error(exc: Exception, url: str = "") -> Exception:
     if isinstance(exc, PermissionError) or "permission denied" in text or "not writable" in text:
         return PermissionDeniedError(
             "Permission denied writing to the download folder. Choose a different folder in Settings.",
+            technical=str(exc),
+        )
+    if "cookie" in text and any(k in text for k in ("no such file", "not found", "could not open", "unable to open")):
+        return PrivateOrLoginRequiredError(
+            "Could not read the configured cookie file. Check the cookie file path in Settings.",
             technical=str(exc),
         )
     if any(k in text for k in ("private video", "login required", "requires authentication", "rate-limit reached")):
@@ -136,8 +159,26 @@ def _base_opts(settings: AppSettings) -> dict[str, Any]:
         "retries": settings.retries,
         "logger": _YtdlpLogAdapter(),
     }
+    ffmpeg_available, ffmpeg_path = check_ffmpeg()
+    if ffmpeg_available and ffmpeg_path:
+        # Point yt-dlp at the exact binary our own health check found, rather
+        # than letting it re-search PATH (which may resolve differently, e.g.
+        # under a GUI-launched process with a thinner PATH than a terminal).
+        opts["ffmpeg_location"] = ffmpeg_path
     opts.update(_cookie_opts(settings))
     return opts
+
+
+_SENSITIVE_LOG_PATTERN = re.compile(
+    r"(cookie|authorization|set-cookie)\s*:\s*\S+", re.IGNORECASE
+)
+
+
+def _redact(msg: str) -> str:
+    """Defense-in-depth scrub: yt-dlp's normal (non-verbose) logging never
+    includes raw cookie/auth header values, but this strips them if it ever
+    did, so a cookie can never end up in the log file."""
+    return _SENSITIVE_LOG_PATTERN.sub(lambda m: f"{m.group(1)}: [redacted]", msg)
 
 
 class _YtdlpLogAdapter:
@@ -146,16 +187,16 @@ class _YtdlpLogAdapter:
     def debug(self, msg: str) -> None:
         if msg.startswith("[debug] "):
             return
-        logger.debug(msg)
+        logger.debug(_redact(msg))
 
     def info(self, msg: str) -> None:
-        logger.info(msg)
+        logger.info(_redact(msg))
 
     def warning(self, msg: str) -> None:
-        logger.warning(msg)
+        logger.warning(_redact(msg))
 
     def error(self, msg: str) -> None:
-        logger.error(msg)
+        logger.error(_redact(msg))
 
 
 def _format_to_option(fmt: dict[str, Any]) -> FormatOption:
@@ -183,23 +224,99 @@ def _format_to_option(fmt: dict[str, Any]) -> FormatOption:
     )
 
 
-def _build_presets(formats: list[FormatOption]) -> tuple[list[QualityPreset], list[QualityPreset]]:
+# --- MP4 (H.264 + AAC) compatibility detection -----------------------------
+#
+# yt-dlp's own `merge_output_format`/rename-based approaches can produce a
+# ".mp4" file that actually contains VP9/AV1 video or Opus audio, which many
+# players (QuickTime, older TVs, etc.) refuse to play - a "fake" MP4. This app
+# never does that: it only reports a stream as MP4-compatible when the codec
+# itself is H.264 (+AAC), and otherwise genuinely transcodes with FFmpeg (see
+# download_manager._blocking_download / needs_mp4_transcode below).
+_MP4_COMPATIBLE_VIDEO_PREFIXES = ("avc1", "h264")
+_MP4_COMPATIBLE_AUDIO_PREFIXES = ("mp4a", "aac")
+
+
+def _is_mp4_compatible_video_codec(vcodec: Optional[str]) -> bool:
+    return bool(vcodec) and vcodec != "none" and vcodec.lower().startswith(_MP4_COMPATIBLE_VIDEO_PREFIXES)
+
+
+def _is_mp4_compatible_audio_codec(acodec: Optional[str]) -> bool:
+    return bool(acodec) and acodec != "none" and acodec.lower().startswith(_MP4_COMPATIBLE_AUDIO_PREFIXES)
+
+
+def _has_compatible_mp4_video(formats: list[FormatOption], max_height: Optional[int]) -> bool:
+    """Whether an H.264 video stream exists (at or under max_height, if given).
+
+    Used to both bias the download format selector toward native MP4 (so we
+    only transcode when actually necessary) and to predict the "expected
+    container" shown in the UI before downloading.
+    """
+    for f in formats:
+        if not f.has_video or not _is_mp4_compatible_video_codec(f.vcodec):
+            continue
+        if max_height is not None and f.height and f.height > max_height:
+            continue
+        return True
+    return False
+
+
+def needs_mp4_transcode(info: dict[str, Any]) -> bool:
+    """Given yt-dlp's final info dict for a completed video download, whether
+    the actual downloaded streams are NOT already H.264 video + AAC/M4A audio
+    - i.e. whether Compatibility mode must run FFmpeg to produce a genuine
+    MP4, rather than a plain remux (or nothing at all)."""
+    parts = info.get("requested_formats") or [info]
+    video_ok = True
+    audio_ok = True
+    for part in parts:
+        vcodec = part.get("vcodec")
+        if vcodec and vcodec != "none":
+            video_ok = _is_mp4_compatible_video_codec(vcodec)
+        acodec = part.get("acodec")
+        if acodec and acodec != "none":
+            audio_ok = _is_mp4_compatible_audio_codec(acodec)
+    return not (video_ok and audio_ok)
+
+
+def _build_presets(
+    formats: list[FormatOption], container_mode: ContainerMode = ContainerMode.COMPATIBILITY
+) -> tuple[list[QualityPreset], list[QualityPreset]]:
     video_heights = {f.height for f in formats if f.has_video and f.height}
     has_audio_stream = any(f.has_audio for f in formats)
+    compat = container_mode == ContainerMode.COMPATIBILITY
 
-    video_presets = [
-        QualityPreset(key="best", label="Best Available", kind=FormatKind.VIDEO, available=bool(video_heights) or True)
-    ]
+    def _video_preset(key: str, label: str, available: bool, height: Optional[int]) -> QualityPreset:
+        if not available:
+            return QualityPreset(key=key, label=label, kind=FormatKind.VIDEO, available=False, height=height)
+        if compat:
+            # Compatibility mode always ends in a genuine MP4 (transcoding if
+            # needed - see needs_mp4_transcode), so the expected container is
+            # always mp4; will_transcode tells the UI whether that conversion
+            # step is actually expected to run for this preset.
+            has_native = _has_compatible_mp4_video(formats, height)
+            return QualityPreset(
+                key=key, label=label, kind=FormatKind.VIDEO, available=True, height=height,
+                expected_container="mp4", will_transcode=not has_native,
+            )
+        # Original/Best Quality mode: best-effort guess at the container the
+        # highest-quality matching stream naturally uses (for display only -
+        # history records the real, final container after downloading).
+        candidates = [f for f in formats if f.has_video and (height is None or (f.height or 0) <= height)]
+        best = max(candidates, key=lambda f: f.height or 0, default=None)
+        return QualityPreset(
+            key=key, label=label, kind=FormatKind.VIDEO, available=True, height=height,
+            expected_container=best.ext if best else None, will_transcode=False,
+        )
+
+    video_presets = [_video_preset("best", "Best Available", bool(video_heights), None)]
     for h in VIDEO_HEIGHT_PRESETS:
         available = any(vh >= h for vh in video_heights) if video_heights else False
-        video_presets.append(
-            QualityPreset(key=str(h), label=f"{h}p", kind=FormatKind.VIDEO, available=available, height=h)
-        )
+        video_presets.append(_video_preset(str(h), f"{h}p", available, h))
 
     audio_presets = [
         QualityPreset(key="best", label="Best Audio", kind=FormatKind.AUDIO, available=has_audio_stream),
-        QualityPreset(key="mp3", label="MP3", kind=FormatKind.AUDIO, available=has_audio_stream),
-        QualityPreset(key="m4a", label="M4A", kind=FormatKind.AUDIO, available=has_audio_stream),
+        QualityPreset(key="mp3", label="MP3", kind=FormatKind.AUDIO, available=has_audio_stream, expected_container="mp3"),
+        QualityPreset(key="m4a", label="M4A", kind=FormatKind.AUDIO, available=has_audio_stream, expected_container="m4a"),
     ]
     return video_presets, audio_presets
 
@@ -224,7 +341,7 @@ def analyze(url: str, settings: AppSettings) -> AnalyzeResponse:
         raise UnavailableMediaError("No media information could be extracted from this URL.")
 
     formats = [_format_to_option(f) for f in info.get("formats", []) if f.get("format_id")]
-    video_presets, audio_presets = _build_presets(formats)
+    video_presets, audio_presets = _build_presets(formats, settings.container_mode)
 
     response = AnalyzeResponse(
         url=url,
@@ -269,21 +386,59 @@ def analyze(url: str, settings: AppSettings) -> AnalyzeResponse:
 
 
 def build_format_selector(
-    media_type: MediaType, quality_key: str, format_id: Optional[str]
+    media_type: MediaType,
+    quality_key: str,
+    format_id: Optional[str],
+    format_has_video: Optional[bool] = None,
+    format_has_audio: Optional[bool] = None,
+    container_mode: ContainerMode = ContainerMode.COMPATIBILITY,
 ) -> str:
     if format_id:
-        return f"{format_id}+bestaudio/{format_id}/best"
+        if format_has_video and not format_has_audio:
+            # Video-only stream (e.g. a DASH video track): merge with the best
+            # available audio.
+            return f"{format_id}+bestaudio/{format_id}/best"
+        if format_has_audio and not format_has_video:
+            # Audio-only stream: download it directly. Appending "+bestaudio"
+            # here would ask yt-dlp to merge two audio-only streams, which is
+            # invalid and fails.
+            return f"{format_id}/bestaudio/best"
+        # Either already has both video and audio, or we don't know (older
+        # analyze responses / manual format id) — download it as-is and let
+        # yt-dlp fall back to its own best-effort selection if unavailable.
+        return f"{format_id}/best"
 
     if media_type == MediaType.AUDIO:
         return "bestaudio/best"
 
+    compat = container_mode == ContainerMode.COMPATIBILITY
+
     if quality_key == "best" or not quality_key:
+        if compat:
+            # Prefer the best H.264 video (any resolution) + M4A audio; if the
+            # video has NO H.264 option at all (common for 4K/8K, which
+            # YouTube often only offers as VP9/AV1), fall back to true best.
+            # needs_mp4_transcode() + the post-download conversion step is
+            # what actually *guarantees* MP4 output either way.
+            return "bestvideo*[vcodec^=avc1]+bestaudio[ext=m4a]/bestvideo*[vcodec^=avc1]+bestaudio/bestvideo*+bestaudio/best"
         return "bestvideo*+bestaudio/best"
 
     try:
         height = int(quality_key)
     except ValueError:
-        return "bestvideo*+bestaudio/best"
+        return build_format_selector(media_type, "best", None, container_mode=container_mode)
+
+    if compat:
+        # Common preset heights (1080p and below) almost always have a native
+        # H.264 option, so prefer it and avoid an unnecessary transcode;
+        # still falls back to any codec at that height (and ultimately to the
+        # post-download conversion step) if not.
+        return (
+            f"bestvideo[vcodec^=avc1][height<={height}]+bestaudio[ext=m4a]"
+            f"/bestvideo[vcodec^=avc1][height<={height}]+bestaudio"
+            f"/bestvideo[height<={height}]+bestaudio"
+            f"/best[height<={height}]"
+        )
     return f"bestvideo[height<={height}]+bestaudio/best[height<={height}]"
 
 
@@ -299,7 +454,14 @@ def build_download_opts(
         {
             "noplaylist": request.playlist_mode == "single",
             "outtmpl": output_template,
-            "format": build_format_selector(request.media_type, request.quality_key, request.format_id),
+            "format": build_format_selector(
+                request.media_type,
+                request.quality_key,
+                request.format_id,
+                request.format_has_video,
+                request.format_has_audio,
+                settings.container_mode,
+            ),
             "progress_hooks": [progress_hook],
             "postprocessor_hooks": [postprocessor_hook],
             "windowsfilenames": True,
@@ -315,21 +477,24 @@ def build_download_opts(
     if request.media_type == MediaType.AUDIO:
         audio_format = request.audio_format or "best"
         if audio_format in ("mp3", "m4a"):
-            postprocessors.append(
-                {
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": audio_format,
-                    "preferredquality": str(request.mp3_bitrate or settings.mp3_bitrate)
-                    if audio_format == "mp3"
-                    else None,
-                }
-            )
+            audio_pp: dict[str, Any] = {"key": "FFmpegExtractAudio", "preferredcodec": audio_format}
+            if audio_format == "mp3":
+                audio_pp["preferredquality"] = str(request.mp3_bitrate or settings.mp3_bitrate)
+            postprocessors.append(audio_pp)
         if settings.embed_thumbnail_in_audio:
-            postprocessors.append({"key": "EmbedThumbnail"})
-    else:
-        if settings.preferred_container != "auto":
-            opts["merge_output_format"] = settings.preferred_container.value \
-                if hasattr(settings.preferred_container, "value") else settings.preferred_container
+            # already_have_thumbnail=False tells yt-dlp to delete the temp
+            # thumbnail file after embedding it, unless the user separately
+            # asked to keep thumbnails (save_thumbnail) — otherwise a stray
+            # .jpg/.webp would be left behind next to every audio download.
+            postprocessors.append(
+                {"key": "EmbedThumbnail", "already_have_thumbnail": settings.save_thumbnail}
+            )
+    # No merge_output_format is set for video here: forcing yt-dlp to mux
+    # into ".mp4" regardless of the actual codecs is exactly the "fake MP4"
+    # bug this app avoids. yt-dlp merges into whatever container naturally
+    # fits the downloaded codecs; download_manager then inspects the actual
+    # result and, in Compatibility mode, runs a genuine FFmpeg remux/
+    # transcode to MP4 afterward if needed (see needs_mp4_transcode).
 
     if settings.embed_metadata:
         postprocessors.append({"key": "FFmpegMetadata", "add_metadata": True})

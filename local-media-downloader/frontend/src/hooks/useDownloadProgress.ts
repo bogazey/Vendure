@@ -22,7 +22,10 @@ export function useDownloadProgress() {
       })
       .catch(() => undefined);
 
-    const source = new EventSource(PROGRESS_STREAM_URL);
+    // withCredentials is required cross-origin (Vite dev server on :5173 ->
+    // API on :8000) so the httpOnly auth cookie is sent - this endpoint is
+    // scoped per-user server-side and 401s without it.
+    const source = new EventSource(PROGRESS_STREAM_URL, { withCredentials: true });
     sourceRef.current = source;
 
     source.addEventListener("open", () => setConnected(true));

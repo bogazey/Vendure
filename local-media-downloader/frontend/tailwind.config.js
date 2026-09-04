@@ -6,9 +6,21 @@ export default {
     extend: {
       colors: {
         surface: {
-          DEFAULT: "#0f1115",
-          raised: "#171a21",
-          border: "#262b36",
+          DEFAULT: "var(--color-surface)",
+          raised: "var(--color-surface-raised)",
+          border: "var(--color-surface-border)",
+        },
+        // Only the shades actually used across the app are re-pointed at CSS
+        // vars; unlisted shades (700-950) fall back to Tailwind's defaults
+        // via the deep merge that `extend` performs.
+        slate: {
+          50: "var(--color-slate-50)",
+          100: "var(--color-slate-100)",
+          200: "var(--color-slate-200)",
+          300: "var(--color-slate-300)",
+          400: "var(--color-slate-400)",
+          500: "var(--color-slate-500)",
+          600: "var(--color-slate-600)",
         },
       },
       fontFamily: {

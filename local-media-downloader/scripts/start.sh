@@ -32,6 +32,21 @@ source "$BACKEND_DIR/.venv/bin/activate"
 echo "-> Installing backend dependencies..."
 pip install --disable-pip-version-check -q -r "$BACKEND_DIR/requirements.txt"
 
+# 3b. Commercial layer: generate a local backend/.env with a real SECRET_KEY
+# on first run (a missing one is fine - the app just generates a random
+# per-process secret - but that invalidates every session on each restart,
+# which is annoying for local development), then apply DB migrations.
+if [ ! -f "$BACKEND_DIR/.env" ]; then
+  echo "-> First run: creating backend/.env with a generated SECRET_KEY..."
+  GENERATED_SECRET="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+  {
+    echo "SECRET_KEY=$GENERATED_SECRET"
+    echo "PADDLE_ENV=sandbox"
+  } > "$BACKEND_DIR/.env"
+fi
+echo "-> Applying commercial database migrations..."
+(cd "$BACKEND_DIR" && python -m alembic upgrade head)
+
 # 4. Verify FFmpeg
 if ! command -v ffmpeg >/dev/null 2>&1; then
   echo "Warning: FFmpeg was not found on PATH. The app will start, but downloads"

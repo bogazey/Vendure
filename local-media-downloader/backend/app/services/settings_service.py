@@ -1,9 +1,12 @@
 """Application settings service: defaults + persistence + validation."""
 from __future__ import annotations
 
+from pathlib import Path
+
 from app.config.paths import DEFAULT_DOWNLOAD_DIR
 from app.config.logging_config import get_logger
 from app.database import settings_repo
+from app.models.enums import CookieSource
 from app.models.schemas import AppSettings, UpdateSettingsRequest
 from app.utils.paths import resolve_safe_directory, validate_directory_writable
 
@@ -35,6 +38,14 @@ def update_settings(patch: UpdateSettingsRequest) -> AppSettings:
         patch_data["download_dir"] = str(resolved)
 
     data.update(patch_data)
+
+    if data.get("cookie_source") == CookieSource.FILE and data.get("cookie_file_path"):
+        cookie_path = Path(data["cookie_file_path"]).expanduser()
+        if not cookie_path.is_file():
+            raise ValueError(
+                "Cookie file not found at that path. Check Settings → Authentication."
+            )
+
     new_settings = AppSettings(**data)
     settings_repo.save_all({_SETTINGS_KEY: new_settings.model_dump()})
     logger.info("Settings updated")

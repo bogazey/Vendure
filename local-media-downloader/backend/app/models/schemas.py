@@ -1,12 +1,12 @@
 """Pydantic request/response schemas for the API."""
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
 from app.models.enums import (
-    ContainerPref,
+    ContainerMode,
     CookieSource,
     DownloadStage,
     FormatKind,
@@ -51,6 +51,12 @@ class QualityPreset(BaseModel):
     kind: FormatKind
     available: bool
     height: Optional[int] = None
+    # Best-effort prediction shown in the UI before downloading. For video
+    # presets in Compatibility mode this is always "mp4" (guaranteed by
+    # post-download conversion if needed); will_transcode flags whether that
+    # conversion is actually expected to run for this particular preset.
+    expected_container: Optional[str] = None
+    will_transcode: Optional[bool] = None
 
 
 class PlaylistEntryPreview(BaseModel):
@@ -98,9 +104,13 @@ class CreateDownloadRequest(BaseModel):
     media_type: MediaType = MediaType.VIDEO
     quality_key: str = "best"
     format_id: Optional[str] = None
+    # Whether the chosen advanced format_id already carries video/audio, so the
+    # backend can build a correct format selector (see build_format_selector).
+    format_has_video: Optional[bool] = None
+    format_has_audio: Optional[bool] = None
     audio_format: Optional[str] = None  # "mp3" | "m4a" | "best"
-    mp3_bitrate: Optional[int] = None
-    playlist_mode: str = "single"  # "single" | "full" | "selected"
+    mp3_bitrate: Optional[int] = Field(default=None, ge=32, le=320)
+    playlist_mode: Literal["single", "full", "selected"] = "single"
     playlist_item_indices: Optional[list[int]] = None
     clip: Optional[ClipRange] = None
 
@@ -161,12 +171,12 @@ class AppSettings(BaseModel):
     theme: Theme = Theme.SYSTEM
 
     default_video_quality: str = "best"
-    preferred_container: ContainerPref = ContainerPref.AUTO
+    container_mode: ContainerMode = ContainerMode.COMPATIBILITY
     embed_metadata: bool = True
     save_thumbnail: bool = False
 
     preferred_audio_format: str = "mp3"
-    mp3_bitrate: int = 192
+    mp3_bitrate: int = Field(default=192, ge=32, le=320)
     embed_thumbnail_in_audio: bool = True
 
     cookie_source: CookieSource = CookieSource.NONE
@@ -182,12 +192,12 @@ class UpdateSettingsRequest(BaseModel):
     theme: Optional[Theme] = None
 
     default_video_quality: Optional[str] = None
-    preferred_container: Optional[ContainerPref] = None
+    container_mode: Optional[ContainerMode] = None
     embed_metadata: Optional[bool] = None
     save_thumbnail: Optional[bool] = None
 
     preferred_audio_format: Optional[str] = None
-    mp3_bitrate: Optional[int] = None
+    mp3_bitrate: Optional[int] = Field(default=None, ge=32, le=320)
     embed_thumbnail_in_audio: Optional[bool] = None
 
     cookie_source: Optional[CookieSource] = None

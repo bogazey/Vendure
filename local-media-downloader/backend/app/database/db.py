@@ -10,8 +10,6 @@ from typing import Iterator
 from app.config.paths import DB_PATH
 
 _local = threading.local()
-_init_lock = threading.Lock()
-_initialized = False
 
 
 SCHEMA = """
@@ -35,13 +33,29 @@ CREATE TABLE IF NOT EXISTS history (
     completed_at TEXT,
     status TEXT NOT NULL,
     error_message TEXT,
-    request_json TEXT
+    request_json TEXT,
+    user_id TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_history_created_at ON history(created_at);
 CREATE INDEX IF NOT EXISTS idx_history_platform ON history(platform);
 CREATE INDEX IF NOT EXISTS idx_history_status ON history(status);
 """
+
+
+def _migrate_schema(conn: sqlite3.Connection) -> None:
+    """Additive, idempotent migrations for the raw sqlite3 layer (no Alembic
+    here - this DB predates the commercial layer). `CREATE TABLE IF NOT
+    EXISTS` doesn't add columns to an already-existing table, so a
+    pre-commercial `data/app.db` needs `user_id` added by hand. The
+    user_id index is created here too (never in the executescript'd SCHEMA
+    above) so it never runs before this ALTER on an old database."""
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(history)").fetchall()}
+    if "user_id" not in columns:
+        conn.execute("ALTER TABLE history ADD COLUMN user_id TEXT")
+        conn.commit()
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_history_user_id ON history(user_id)")
+    conn.commit()
 
 
 def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
@@ -58,6 +72,7 @@ def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
     conn.commit()
+    _migrate_schema(conn)
 
     _local.conn = conn
     _local.conn_key = key

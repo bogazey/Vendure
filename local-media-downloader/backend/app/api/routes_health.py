@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import APIRouter
 
 from app.database.db import database_healthy
 from app.models.schemas import HealthResponse
 from app.services import ytdlp_service
 from app.services.settings_service import get_settings
-from app.utils.paths import validate_directory_writable
+from app.utils.paths import is_directory_writable
 
 router = APIRouter(tags=["health"])
 
@@ -15,9 +17,7 @@ router = APIRouter(tags=["health"])
 async def health() -> HealthResponse:
     settings = get_settings()
     ffmpeg_available, ffmpeg_path = ytdlp_service.check_ffmpeg()
-    from pathlib import Path
-
-    writable, _ = validate_directory_writable(Path(settings.download_dir))
+    writable = is_directory_writable(Path(settings.download_dir))
 
     try:
         version = ytdlp_service.get_ytdlp_version()

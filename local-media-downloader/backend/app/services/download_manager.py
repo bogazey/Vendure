@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import subprocess
 import threading
 import time
 import uuid
@@ -20,13 +21,25 @@ from yt_dlp.utils import DownloadCancelled
 
 from app.config.logging_config import get_logger
 from app.database import history_repo
-from app.models.enums import DownloadStage, MediaType, Platform
+from app.database.commercial_db import session_scope
+from app.models.enums import ContainerMode, DownloadStage, MediaType, Platform
 from app.models.schemas import AppSettings, CreateDownloadRequest, DownloadJobOut
 from app.services import ytdlp_service
 from app.services.settings_service import get_settings
-from app.utils.exceptions import FfmpegMissingError, JobNotFoundError, UnavailableMediaError
+from app.services.usage_service import usage_service
+from app.utils.exceptions import (
+    FfmpegMissingError,
+    FfmpegProcessingError,
+    JobNotFoundError,
+    UnavailableMediaError,
+)
 from app.utils.paths import resolve_safe_directory, validate_directory_writable
 from app.utils.url_detect import detect_platform
+
+# ffmpeg progress/version banners on stderr can be large; keeping ffmpeg quiet
+# avoids filling the pipe buffer while _run_ffmpeg polls rather than streams
+# it, and keeps the output that IS captured relevant if something fails.
+_FFMPEG_QUIET_ARGS = ("-hide_banner", "-loglevel", "error")
 
 logger = get_logger("download_manager")
 
@@ -40,6 +53,8 @@ class DownloadJob:
     id: str
     request: CreateDownloadRequest
     platform: Platform
+    user_id: Optional[str] = None
+    reservation_id: Optional[str] = None
     title: Optional[str] = None
     uploader: Optional[str] = None
     thumbnail: Optional[str] = None
@@ -95,16 +110,21 @@ class DownloadManager:
         with self._lock:
             return self._revision
 
-    def list_jobs(self) -> list[DownloadJobOut]:
+    def list_jobs(self, user_id: Optional[str] = None) -> list[DownloadJobOut]:
         with self._lock:
             jobs = list(self._jobs.values())
+        if user_id is not None:
+            jobs = [j for j in jobs if j.user_id == user_id]
         jobs.sort(key=lambda j: j.created_at, reverse=True)
         return [j.to_out() for j in jobs]
 
-    def get_job(self, job_id: str) -> DownloadJob:
+    def get_job(self, job_id: str, user_id: Optional[str] = None) -> DownloadJob:
         with self._lock:
             job = self._jobs.get(job_id)
-        if job is None:
+        # Scoped lookups treat "exists but belongs to someone else" the same
+        # as "doesn't exist" - never leak another user's job via a 403 vs 404
+        # distinction.
+        if job is None or (user_id is not None and job.user_id != user_id):
             raise JobNotFoundError("Download job not found.")
         return job
 
@@ -115,21 +135,37 @@ class DownloadManager:
             self._semaphore_limit = settings.max_concurrent_downloads
         return self._semaphore
 
-    def create_job(self, request: CreateDownloadRequest) -> DownloadJob:
+    def create_job(
+        self,
+        request: CreateDownloadRequest,
+        job_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        reservation_id: Optional[str] = None,
+    ) -> DownloadJob:
         platform = detect_platform(request.url)
-        job = DownloadJob(id=str(uuid.uuid4()), request=request, platform=platform)
+        job = DownloadJob(
+            id=job_id or str(uuid.uuid4()),
+            request=request,
+            platform=platform,
+            user_id=user_id,
+            reservation_id=reservation_id,
+        )
         with self._lock:
             self._jobs[job.id] = job
             self._revision += 1
         asyncio.create_task(self._run_job(job.id))
         return job
 
-    def cancel_job(self, job_id: str) -> None:
-        job = self.get_job(job_id)
+    def cancel_job(self, job_id: str, user_id: Optional[str] = None) -> None:
+        job = self.get_job(job_id, user_id=user_id)
         job.cancel_event.set()
         logger.info("Cancellation requested for job %s", job_id)
 
     def retry_job(self, history_id: str) -> DownloadJob:
+        """Lower-level retry with no gating/ownership check - kept for
+        programmatic/test use. routes_downloads.retry_download re-implements
+        this with an ownership-scoped lookup and a fresh entitlement check
+        instead of calling this directly."""
         record = history_repo.get(history_id)
         if record is None:
             raise JobNotFoundError("History record not found.")
@@ -150,14 +186,39 @@ class DownloadManager:
             try:
                 job.stage = DownloadStage.ANALYZING
                 self._bump_revision()
+                # Persist a non-terminal row now (not just on completion) so a
+                # crash mid-download leaves a trace: on next startup, any row
+                # still "in progress" gets marked failed and stays retryable
+                # instead of vanishing silently (see history_repo.mark_interrupted_as_failed).
+                self._save_history(job)
                 settings = get_settings()
                 await asyncio.to_thread(self._blocking_download, job, settings)
-                self._finish_as_completed(job)
+                if job.cancel_event.is_set():
+                    # The download finished before we could interrupt it (e.g.
+                    # cancel was clicked during the final merge/convert step,
+                    # which we can't abort mid-flight). Honor the cancellation
+                    # after the fact rather than silently reporting success.
+                    self._cleanup_cancelled_file(job)
+                    self._finish_as_cancelled(job)
+                else:
+                    self._finish_as_completed(job)
             except DownloadCancelled:
+                self._cleanup_cancelled_file(job)
                 self._finish_as_cancelled(job)
             except Exception as exc:  # noqa: BLE001 - centralizing error classification
                 friendly = ytdlp_service.classify_error(exc, job.request.url)
                 self._finish_as_failed(job, friendly)
+
+    def _cleanup_cancelled_file(self, job: DownloadJob) -> None:
+        if not job.filepath:
+            return
+        try:
+            path = Path(job.filepath)
+            if path.is_file():
+                path.unlink()
+                logger.info("Removed file for cancelled job %s", job.id)
+        except OSError as exc:
+            logger.warning("Could not remove file for cancelled job %s: %s", job.id, exc)
 
     def _blocking_download(self, job: DownloadJob, settings: AppSettings) -> None:
         ffmpeg_available, _ = ytdlp_service.check_ffmpeg()
@@ -232,12 +293,136 @@ class DownloadManager:
                 except Exception:  # noqa: BLE001
                     pass
 
+            if job.request.media_type == MediaType.VIDEO and settings.container_mode == ContainerMode.COMPATIBILITY:
+                self._ensure_compatible_mp4(job, info)
+
+    def _ensure_compatible_mp4(self, job: DownloadJob, info: dict) -> None:
+        """Compatibility mode's guarantee: a video download always ends in a
+        genuine, playable .mp4 - remuxing (fast, lossless) when the source
+        codecs are already H.264/AAC, or transcoding via FFmpeg when they
+        aren't (e.g. YouTube's VP9/AV1 + Opus streams). Never just renames a
+        WebM/MKV file to .mp4."""
+        if not job.filepath:
+            return
+        source = Path(job.filepath)
+        if not source.is_file():
+            return
+
+        transcode = ytdlp_service.needs_mp4_transcode(info)
+        if source.suffix.lower() == ".mp4" and not transcode:
+            return  # already a genuine, compatible MP4 - nothing to do
+
+        ffmpeg_available, ffmpeg_path = ytdlp_service.check_ffmpeg()
+        if not ffmpeg_available or not ffmpeg_path:
+            raise FfmpegMissingError("FFmpeg was not found on this system. Install it and try again.")
+
+        job.stage = DownloadStage.CONVERTING
+        self._bump_revision()
+        new_path = self._produce_compatible_mp4(job, ffmpeg_path, source, transcode)
+        job.filepath = str(new_path)
+
+    def _produce_compatible_mp4(
+        self, job: DownloadJob, ffmpeg_path: str, source: Path, transcode: bool
+    ) -> Path:
+        target = source.with_suffix(".mp4")
+        # Guard against the rare case where the source is already named
+        # ".mp4" but has incompatible codecs inside (needs_mp4_transcode
+        # caught it): ffmpeg can't read and overwrite the same file at once,
+        # so convert to a temp name first, then swap it into place.
+        collides = target == source
+        work_target = target.with_name(f"{target.stem}.compat_tmp.mp4") if collides else target
+
+        if transcode:
+            # Genuine re-encode to H.264 + AAC. crf 18 is close to visually
+            # lossless (preserves quality) while still being broadly playable;
+            # yuv420p maximizes device/player compatibility (some VP9 sources
+            # use pixel formats older H.264 decoders choke on).
+            args = [
+                "-y", *_FFMPEG_QUIET_ARGS, "-i", str(source),
+                "-map_metadata", "0",
+                "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p",
+                "-c:a", "aac", "-b:a", "192k",
+                "-movflags", "+faststart",
+                str(work_target),
+            ]
+        else:
+            # Codecs are already MP4-compatible; just remux the container
+            # losslessly (stream copy, no re-encode).
+            args = [
+                "-y", *_FFMPEG_QUIET_ARGS, "-i", str(source),
+                "-map_metadata", "0",
+                "-c", "copy",
+                "-movflags", "+faststart",
+                str(work_target),
+            ]
+
+        self._run_ffmpeg(job, ffmpeg_path, args, work_target)
+
+        if collides:
+            work_target.replace(target)
+        else:
+            try:
+                source.unlink()
+            except OSError as exc:
+                logger.warning("Could not remove intermediate file %s: %s", source, exc)
+
+        return target
+
+    def _run_ffmpeg(self, job: DownloadJob, ffmpeg_path: str, args: list[str], output_path: Path) -> None:
+        """Runs ffmpeg, polling job.cancel_event so a cancel click can
+        interrupt an in-progress merge/conversion, not just the download."""
+        proc = subprocess.Popen(
+            [ffmpeg_path, *args], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True
+        )
+        while proc.poll() is None:
+            if job.cancel_event.is_set():
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait()
+                output_path.unlink(missing_ok=True)
+                raise DownloadCancelled("Cancelled during conversion")
+            time.sleep(0.2)
+
+        stderr_output = proc.stderr.read() if proc.stderr else ""
+        if proc.returncode != 0:
+            output_path.unlink(missing_ok=True)
+            raise FfmpegProcessingError(
+                "FFmpeg could not convert this video to a compatible MP4.",
+                technical=(stderr_output or "").strip()[-4000:] or None,
+            )
+
+    def _finalize_usage(self, job: DownloadJob, committed: bool) -> None:
+        """Settle this job's credit reservation: commit it on a genuine
+        success, or give it back on failure/cancellation. Runs against the
+        commercial DB directly (session_scope) since a background job has no
+        FastAPI request-scoped session to reuse."""
+        if not job.reservation_id:
+            return
+        session = session_scope()
+        try:
+            if committed:
+                usage_service.commit(session, job.reservation_id)
+            else:
+                usage_service.refund(session, job.reservation_id)
+            session.commit()
+        except Exception:
+            session.rollback()
+            logger.exception(
+                "Failed to finalize usage for job %s (reservation %s)", job.id, job.reservation_id
+            )
+        finally:
+            session.close()
+
     def _finish_as_completed(self, job: DownloadJob) -> None:
         job.stage = DownloadStage.COMPLETED
         job.progress_percent = 100.0
         job.completed_at = _now_iso()
         self._bump_revision()
         self._save_history(job)
+        self._finalize_usage(job, committed=True)
         logger.info("Job %s completed", job.id)
 
     def _finish_as_cancelled(self, job: DownloadJob) -> None:
@@ -246,6 +431,7 @@ class DownloadManager:
         job.error_message = "Cancelled by user."
         self._bump_revision()
         self._save_history(job)
+        self._finalize_usage(job, committed=False)
         logger.info("Job %s cancelled", job.id)
 
     def _finish_as_failed(self, job: DownloadJob, exc: Exception) -> None:
@@ -255,6 +441,7 @@ class DownloadManager:
         job.error_technical = getattr(exc, "technical", None)
         self._bump_revision()
         self._save_history(job)
+        self._finalize_usage(job, committed=False)
         logger.error("Job %s failed: %s", job.id, job.error_message)
 
     def _save_history(self, job: DownloadJob) -> None:
@@ -267,11 +454,18 @@ class DownloadManager:
         resolution = None
         if job.request.quality_key and job.request.quality_key not in ("best", "mp3", "m4a"):
             resolution = f"{job.request.quality_key}p"
-        format_label = (
-            (job.request.audio_format or "audio").upper()
-            if job.request.media_type == MediaType.AUDIO
-            else (resolution or "Best Available")
-        )
+
+        if job.request.media_type == MediaType.AUDIO:
+            format_label = (job.request.audio_format or "audio").upper()
+        else:
+            # Record the actual final container, not just the requested
+            # quality - Compatibility mode may have transcoded/remuxed to a
+            # different container than whatever yt-dlp initially produced.
+            format_label = resolution or "Best Available"
+            if job.filepath:
+                container = Path(job.filepath).suffix.lstrip(".").upper()
+                if container:
+                    format_label = f"{format_label} · {container}"
         history_repo.upsert(
             {
                 "id": job.id,
@@ -289,6 +483,7 @@ class DownloadManager:
                 "status": job.stage.value,
                 "error_message": job.error_message,
                 "request_json": job.request.model_dump_json(),
+                "user_id": job.user_id,
             }
         )
 
