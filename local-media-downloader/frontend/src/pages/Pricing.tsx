@@ -110,7 +110,7 @@ export default function Pricing() {
   const currentPlan = account?.subscription.plan;
 
   return (
-    <div className="relative overflow-hidden">
+    <div className="pricing-page relative overflow-hidden">
       {/* Section-transition glows from the supplied design asset pack,
           per docs/ASSET_PLACEMENT.md ("section transitions / pricing / CTA
           backgrounds") - a soft blue sweep from the lower-left and a
@@ -119,16 +119,16 @@ export default function Pricing() {
         src={`${ASSETS}/backgrounds/section-wave-left.svg`}
         alt=""
         aria-hidden="true"
-        className="pointer-events-none absolute -bottom-24 -left-32 -z-10 h-[44rem] w-[44rem] opacity-70"
+        className="pointer-events-none absolute -bottom-24 -left-32 -z-10 h-[44rem] w-[44rem] opacity-35"
       />
       <img
         src={`${ASSETS}/backgrounds/section-wave-right.svg`}
         alt=""
         aria-hidden="true"
-        className="pointer-events-none absolute -right-32 top-0 -z-10 h-[44rem] w-[44rem] opacity-60"
+        className="pointer-events-none absolute -right-32 top-0 -z-10 h-[44rem] w-[44rem] opacity-30"
       />
 
-      <div className="relative z-10 mx-auto flex max-w-6xl flex-col gap-12 px-5 py-20 sm:px-8 sm:py-24">
+      <div className="relative z-10 mx-auto flex max-w-6xl flex-col gap-8 px-5 py-14 sm:px-8 sm:py-16 lg:py-20">
       <div className="flex flex-col items-center gap-3 text-center">
         <span className="section-kicker">Choose your pace</span>
         <h1 className="font-display text-4xl font-bold tracking-[-0.045em] text-slate-50 sm:text-6xl">
@@ -175,7 +175,7 @@ export default function Pricing() {
           return (
             <div
               key={row.plan}
-              className={`relative flex flex-col gap-6 overflow-hidden rounded-3xl p-6 transition-all duration-200 sm:p-7 ${
+              className={`pricing-card relative flex flex-col gap-4 overflow-hidden rounded-3xl p-5 transition-all duration-200 sm:p-6 ${
                 isRecommended
                   ? "border border-brand-purple/40 bg-[linear-gradient(145deg,rgba(60,70,145,.16),rgba(255,255,255,.025))] shadow-[inset_0_1px_rgba(255,255,255,.1),0_28px_80px_rgba(35,32,95,.25)] md:-translate-y-3"
                   : "border border-white/[0.08] bg-[linear-gradient(145deg,rgba(255,255,255,.035),rgba(255,255,255,.012))] shadow-[inset_0_1px_rgba(255,255,255,.06),0_20px_55px_rgba(0,0,0,.18)] hover:-translate-y-1 hover:border-white/[0.14]"
@@ -222,7 +222,7 @@ export default function Pricing() {
                 )}
               </div>
               <div className="border-t border-white/[0.08]" />
-              <ul className="flex flex-1 flex-col gap-3 text-sm leading-5 text-slate-300">
+              <ul className="flex flex-1 flex-col gap-2.5 text-sm leading-5 text-slate-300">
                 {row.features.map((f) => (
                   <li key={f} className="flex items-start gap-2">
                     <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-brand-aqua/10 text-[10px] text-brand-aqua">✓</span>

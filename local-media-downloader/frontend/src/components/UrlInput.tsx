@@ -28,7 +28,7 @@ export default function UrlInput({ onAnalyze, loading }: UrlInputProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="mx-auto w-full max-w-2xl">
+    <form onSubmit={handleSubmit} className="dashboard-url mx-auto w-full max-w-2xl">
       <div className="flex flex-col gap-3 sm:flex-row">
         <div className="relative flex-1">
           <input

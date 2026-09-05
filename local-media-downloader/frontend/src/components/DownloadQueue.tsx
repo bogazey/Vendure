@@ -9,8 +9,9 @@ interface DownloadQueueProps {
 export default function DownloadQueue({ jobs, onCancel }: DownloadQueueProps) {
   if (jobs.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-6 text-center text-sm text-slate-500 backdrop-blur-xl">
-        No downloads yet. Paste a URL above to get started.
+      <div className="download-empty rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-8 text-center text-sm text-slate-400 backdrop-blur-xl">
+        <span className="mb-3 inline-block h-2 w-2 rounded-full bg-brand-aqua/70 shadow-[0_0_14px_rgba(34,211,238,.5)]" />
+        <p>No downloads yet. Paste a URL above to get started.</p>
       </div>
     );
   }

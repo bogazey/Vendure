@@ -36,7 +36,7 @@ export default function Signup() {
   };
 
   return (
-    <div className="relative z-10 mx-auto flex max-w-md flex-col gap-6 px-6 py-16">
+    <div className="auth-page relative z-10 mx-auto flex max-w-md flex-col gap-6 px-6 py-14 sm:py-16">
       <div className="flex flex-col items-center gap-4 text-center">
         <LoadyLogo size={36} withWordmark={false} />
         <div>

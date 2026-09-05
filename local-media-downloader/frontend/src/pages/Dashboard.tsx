@@ -99,7 +99,7 @@ export default function Dashboard() {
 
   return (
     <div className={appPageShell}>
-      <div className="flex flex-col gap-3 text-center">
+      <div className="dashboard-intro flex flex-col gap-3 text-center">
         <h1 className="font-display text-2xl font-bold tracking-tight text-slate-50">Download media from a URL</h1>
         <p className="text-sm text-slate-400">
           Supports YouTube, TikTok, Instagram, and Facebook. Only content you're lawfully allowed to access.
@@ -124,7 +124,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="flex flex-col gap-3">
+      <div className="download-area flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Active &amp; Recent Downloads</h2>
           <span className="flex items-center gap-1.5 text-xs text-slate-500">
