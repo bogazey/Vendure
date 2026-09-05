@@ -402,7 +402,8 @@
       "users": "Users",
       "billing": "Billing",
       "activity": "Activity",
-      "system": "System"
+      "system": "System",
+      "ads": "Ads"
     },
     "overview": {
       "loadError": "Could not load the overview.",
@@ -450,17 +451,33 @@
       "detailRole": "Role",
       "detailIncluded": "Included credits",
       "detailBonus": "Bonus credits",
-      "detailCreated": "Created"
+      "detailCreated": "Created",
+      "searchButton": "Search"
     },
     "billing": {
       "loadError": "Could not load billing events.",
       "subtitle": "Paddle webhook events, most recent first. Failed payments are highlighted.",
       "columnEvent": "Event",
       "columnUser": "User",
-      "columnStatus": "Status",
+      "columnOutcome": "Outcome",
+      "columnWebhook": "Webhook",
       "columnTime": "Time",
       "empty": "No billing events yet.",
-      "unknownUser": "Unknown"
+      "unknownUser": "Unknown",
+      "outcomeCompleted": "Completed",
+      "outcomeFailed": "Payment failed",
+      "outcomeCreated": "Created",
+      "outcomeActivated": "Activated",
+      "outcomeUpdated": "Updated",
+      "outcomeCanceled": "Canceled",
+      "outcomePaused": "Paused",
+      "outcomeResumed": "Resumed",
+      "outcomeUnknown": "Unknown",
+      "webhookStatus": {
+        "processed": "Processed",
+        "ignored": "Ignored",
+        "failed": "Failed"
+      }
     },
     "activity": {
       "loadError": "Could not load the audit log.",
@@ -481,13 +498,48 @@
       "database": "Database",
       "ffmpeg": "FFmpeg",
       "ytdlp": "yt-dlp",
-      "downloadDir": "Download folder",
+      "downloadDir": "Download storage",
       "ready": "Ready",
       "degraded": "Degraded",
       "found": "Found",
       "missing": "Missing",
       "writable": "Writable",
       "notWritable": "Not writable"
+    },
+    "ads": {
+      "loadError": "Could not load ad placements.",
+      "updateError": "Could not update this placement.",
+      "subtitle": "Control where ad slots may appear. No ad network is connected yet - this is configuration only.",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "provider": "Provider",
+      "slotId": "Slot ID",
+      "notConfigured": "Not configured",
+      "configure": "Configure",
+      "enable": "Enable",
+      "disable": "Disable",
+      "configureTitle": "Configure {{placement}}",
+      "providerPlaceholder": "e.g. google_adsense",
+      "slotIdPlaceholder": "e.g. slot-1234",
+      "save": "Save",
+      "placements": {
+        "LANDING_DOWNLOADER": {
+          "label": "Landing downloader",
+          "description": "Below the URL input on the marketing landing page downloader."
+        },
+        "DOWNLOAD_RESULT": {
+          "label": "Download result",
+          "description": "Alongside a completed download's result card."
+        },
+        "USER_DASHBOARD": {
+          "label": "User dashboard",
+          "description": "In the authenticated dashboard, away from download controls."
+        },
+        "DOWNLOAD_HISTORY": {
+          "label": "Download history",
+          "description": "Within the download history / media library list."
+        }
+      }
     }
   }
 }

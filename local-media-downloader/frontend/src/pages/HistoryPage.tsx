@@ -86,7 +86,7 @@ export default function HistoryPage() {
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
-      <AdSlot placement="history-page" />
+      <AdSlot placement="DOWNLOAD_HISTORY" />
 
       {confirmClear && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 backdrop-blur-xl">

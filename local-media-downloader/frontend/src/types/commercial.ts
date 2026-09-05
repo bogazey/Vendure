@@ -124,6 +124,17 @@ export interface AdminActionLogOut {
   created_at: string;
 }
 
+/** Admin System page health snapshot - deliberately excludes ffmpeg_path and
+ * download_dir (see HealthResponse in types/api.ts): the admin panel must
+ * never display absolute server filesystem paths. */
+export interface AdminHealthOut {
+  status: string;
+  database_ok: boolean;
+  ffmpeg_available: boolean;
+  ytdlp_version: string | null;
+  download_dir_writable: boolean;
+}
+
 export interface AdminOverviewOut {
   total_users: number;
   active_users: number;
@@ -135,6 +146,28 @@ export interface AdminOverviewOut {
   credits_consumed_current_period: number;
   recent_billing_failures: AdminBillingEventOut[];
   recent_admin_actions: AdminActionLogOut[];
+}
+
+/** Public, non-secret ad placement config - what AdSlot needs at runtime.
+ * Never carries API keys or private ad network tokens. */
+export type AdPlacementName = "LANDING_DOWNLOADER" | "DOWNLOAD_RESULT" | "USER_DASHBOARD" | "DOWNLOAD_HISTORY";
+
+export interface AdPlacementOut {
+  id: string;
+  enabled: boolean;
+  provider: string | null;
+  public_slot_id: string | null;
+}
+
+export interface AdminAdPlacementOut extends AdPlacementOut {
+  description: string;
+  updated_at: string;
+}
+
+export interface AdminUpdateAdPlacementRequest {
+  enabled?: boolean;
+  provider?: string | null;
+  public_slot_id?: string | null;
 }
 
 export const PLAN_LABELS: Record<Plan, string> = {

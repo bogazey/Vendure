@@ -11,6 +11,7 @@ import Sidebar from "./components/Sidebar";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Account from "./pages/Account";
 import AdminActivity from "./pages/admin/AdminActivity";
+import AdminAds from "./pages/admin/AdminAds";
 import AdminBilling from "./pages/admin/AdminBilling";
 import AdminOverview from "./pages/admin/AdminOverview";
 import AdminSystem from "./pages/admin/AdminSystem";
@@ -119,6 +120,7 @@ function AppShell() {
               <Route path="/admin/billing" element={<AdminRoute><AdminBilling /></AdminRoute>} />
               <Route path="/admin/activity" element={<AdminRoute><AdminActivity /></AdminRoute>} />
               <Route path="/admin/system" element={<AdminRoute><AdminSystem /></AdminRoute>} />
+              <Route path="/admin/ads" element={<AdminRoute><AdminAds /></AdminRoute>} />
             </Routes>
           </div>
           {!showSidebar && <Footer />}

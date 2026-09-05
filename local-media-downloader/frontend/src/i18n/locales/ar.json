@@ -402,7 +402,8 @@
       "users": "المستخدمون",
       "billing": "الفوترة",
       "activity": "النشاط",
-      "system": "النظام"
+      "system": "النظام",
+      "ads": "الإعلانات"
     },
     "overview": {
       "loadError": "تعذر تحميل النظرة العامة.",
@@ -450,17 +451,33 @@
       "detailRole": "الدور",
       "detailIncluded": "الأرصدة المشمولة",
       "detailBonus": "الأرصدة الإضافية",
-      "detailCreated": "تاريخ الإنشاء"
+      "detailCreated": "تاريخ الإنشاء",
+      "searchButton": "بحث"
     },
     "billing": {
       "loadError": "تعذر تحميل أحداث الفوترة.",
       "subtitle": "أحداث Paddle عبر الويب هوك، الأحدث أولاً. المدفوعات الفاشلة مميزة بوضوح.",
       "columnEvent": "الحدث",
       "columnUser": "المستخدم",
-      "columnStatus": "الحالة",
+      "columnOutcome": "النتيجة",
+      "columnWebhook": "الويب هوك",
       "columnTime": "الوقت",
       "empty": "لا توجد أحداث فوترة بعد.",
-      "unknownUser": "غير معروف"
+      "unknownUser": "غير معروف",
+      "outcomeCompleted": "مكتمل",
+      "outcomeFailed": "فشل الدفع",
+      "outcomeCreated": "تم الإنشاء",
+      "outcomeActivated": "مفعّل",
+      "outcomeUpdated": "تم التحديث",
+      "outcomeCanceled": "ملغى",
+      "outcomePaused": "متوقف مؤقتًا",
+      "outcomeResumed": "تم الاستئناف",
+      "outcomeUnknown": "غير معروف",
+      "webhookStatus": {
+        "processed": "تمت المعالجة",
+        "ignored": "تم التجاهل",
+        "failed": "فشلت المعالجة"
+      }
     },
     "activity": {
       "loadError": "تعذر تحميل سجل التدقيق.",
@@ -481,13 +498,48 @@
       "database": "قاعدة البيانات",
       "ffmpeg": "FFmpeg",
       "ytdlp": "yt-dlp",
-      "downloadDir": "مجلد التنزيلات",
+      "downloadDir": "تخزين التنزيلات",
       "ready": "جاهز",
       "degraded": "متدهور",
       "found": "موجود",
       "missing": "غير موجود",
       "writable": "قابل للكتابة",
       "notWritable": "غير قابل للكتابة"
+    },
+    "ads": {
+      "loadError": "تعذر تحميل مواضع الإعلانات.",
+      "updateError": "تعذر تحديث هذا الموضع.",
+      "subtitle": "تحكم بأماكن ظهور مساحات الإعلانات. لا توجد شبكة إعلانية متصلة بعد - هذا إعداد فقط.",
+      "enabled": "مفعّل",
+      "disabled": "معطّل",
+      "provider": "المزوّد",
+      "slotId": "معرّف المساحة",
+      "notConfigured": "غير مُعد",
+      "configure": "إعداد",
+      "enable": "تفعيل",
+      "disable": "تعطيل",
+      "configureTitle": "إعداد {{placement}}",
+      "providerPlaceholder": "مثال: google_adsense",
+      "slotIdPlaceholder": "مثال: slot-1234",
+      "save": "حفظ",
+      "placements": {
+        "LANDING_DOWNLOADER": {
+          "label": "أداة التنزيل في الصفحة الرئيسية",
+          "description": "أسفل حقل الرابط في أداة التنزيل بالصفحة الرئيسية التسويقية."
+        },
+        "DOWNLOAD_RESULT": {
+          "label": "نتيجة التنزيل",
+          "description": "بجانب بطاقة نتيجة تنزيل مكتمل."
+        },
+        "USER_DASHBOARD": {
+          "label": "لوحة تحكم المستخدم",
+          "description": "في لوحة التحكم للمستخدمين المسجلين، بعيدًا عن أدوات التنزيل."
+        },
+        "DOWNLOAD_HISTORY": {
+          "label": "سجل التنزيلات",
+          "description": "ضمن قائمة سجل التنزيلات / مكتبة الوسائط."
+        }
+      }
     }
   }
 }

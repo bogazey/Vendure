@@ -3,8 +3,7 @@ import { useTranslation } from "react-i18next";
 import ErrorBanner from "../../components/ErrorBanner";
 import { ApiError, api } from "../../services/api";
 import { statLabel, statTile, statValue } from "../../styles/ui";
-import type { AdminOverviewOut } from "../../types/commercial";
-import type { HealthResponse } from "../../types/api";
+import type { AdminHealthOut, AdminOverviewOut } from "../../types/commercial";
 import { formatDate } from "../../utils/format";
 import AdminLayout from "./AdminLayout";
 import { actionLabelKey, HealthDot } from "./adminShared";
@@ -12,7 +11,7 @@ import { actionLabelKey, HealthDot } from "./adminShared";
 export default function AdminOverview() {
   const { t } = useTranslation();
   const [overview, setOverview] = useState<AdminOverviewOut | null>(null);
-  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [health, setHealth] = useState<AdminHealthOut | null>(null);
   const [healthError, setHealthError] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -24,7 +23,7 @@ export default function AdminOverview() {
         setError(err instanceof ApiError ? err.message : t("admin.overview.loadError"));
         return null;
       }),
-      api.health().then(setHealth).catch(() => setHealthError(true)),
+      api.adminGetHealth().then(setHealth).catch(() => setHealthError(true)),
     ])
       .then(([overviewResult]) => {
         if (overviewResult) setOverview(overviewResult);

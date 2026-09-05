@@ -28,6 +28,13 @@ const USERS = {
   total: 42,
 };
 
+const AD_PLACEMENTS = [
+  { id: "LANDING_DOWNLOADER", description: "Below the URL input on the marketing landing page downloader.", enabled: false, provider: null, public_slot_id: null, updated_at: "2026-01-01T00:00:00Z" },
+  { id: "DOWNLOAD_RESULT", description: "Alongside a completed download's result card.", enabled: false, provider: null, public_slot_id: null, updated_at: "2026-01-01T00:00:00Z" },
+  { id: "USER_DASHBOARD", description: "In the authenticated dashboard, away from download controls.", enabled: false, provider: null, public_slot_id: null, updated_at: "2026-01-01T00:00:00Z" },
+  { id: "DOWNLOAD_HISTORY", description: "Within the download history / media library list.", enabled: false, provider: null, public_slot_id: null, updated_at: "2026-01-01T00:00:00Z" },
+];
+
 async function mockAdminApi(page: Page) {
   await page.route("http://127.0.0.1:8000/api/**", async (route) => {
     const url = new URL(route.request().url());
@@ -39,10 +46,15 @@ async function mockAdminApi(page: Page) {
     if (pathname.endsWith("/api/health")) {
       return json({ status: "ok", ytdlp_version: "2026.01.01", ffmpeg_available: true, ffmpeg_path: "/usr/bin/ffmpeg", download_dir: "/data/downloads", download_dir_writable: true, database_ok: true });
     }
+    if (pathname.endsWith("/api/admin/health")) {
+      return json({ status: "ok", ytdlp_version: "2026.01.01", ffmpeg_available: true, download_dir_writable: true, database_ok: true });
+    }
     if (pathname.endsWith("/api/admin/overview")) return json(OVERVIEW);
     if (pathname.endsWith("/api/admin/users")) return json(USERS);
     if (pathname.endsWith("/api/admin/billing-events")) return json([]);
     if (pathname.endsWith("/api/admin/audit-log")) return json([]);
+    if (pathname.endsWith("/api/admin/ads/placements")) return json(AD_PLACEMENTS);
+    if (pathname.endsWith("/api/ads/placements")) return json(AD_PLACEMENTS);
     return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
 }
@@ -75,9 +87,13 @@ test("admin sections navigate via the tab strip", async ({ page }) => {
   await page.getByRole("navigation", { name: "Admin sections" }).getByRole("link", { name: "System" }).click();
   await expect(page).toHaveURL(/\/admin\/system$/);
   await expect(page.getByText("FFmpeg", { exact: true })).toBeVisible();
+
+  await page.getByRole("navigation", { name: "Admin sections" }).getByRole("link", { name: "Ads" }).click();
+  await expect(page).toHaveURL(/\/admin\/ads$/);
+  await expect(page.getByText("Landing downloader")).toBeVisible();
 });
 
-const ADMIN_PAGES = ["/admin", "/admin/users", "/admin/billing", "/admin/activity", "/admin/system"];
+const ADMIN_PAGES = ["/admin", "/admin/users", "/admin/billing", "/admin/activity", "/admin/system", "/admin/ads"];
 
 for (const viewport of [
   { width: 1440, height: 900 },

@@ -1,11 +1,16 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import AdSlot from "./AdSlot";
 import { useAuth } from "../context/AuthContext";
-import type { AccountOut } from "../types/commercial";
+import { api } from "../services/api";
+import type { AccountOut, AdPlacementOut } from "../types/commercial";
 
 vi.mock("../context/AuthContext", () => ({
   useAuth: vi.fn(),
+}));
+
+vi.mock("../services/api", () => ({
+  api: { listAdPlacements: vi.fn() },
 }));
 
 function accountWith(overrides: Partial<AccountOut["features"]>): AccountOut {
@@ -17,29 +22,59 @@ function accountWith(overrides: Partial<AccountOut["features"]>): AccountOut {
   };
 }
 
+function placement(overrides: Partial<AdPlacementOut> = {}): AdPlacementOut {
+  return { id: "LANDING_DOWNLOADER", enabled: true, provider: null, public_slot_id: null, ...overrides };
+}
+
+function mockAuth(account: AccountOut | null) {
+  vi.mocked(useAuth).mockReturnValue({ account, loading: false, refresh: vi.fn(), login: vi.fn(), signup: vi.fn(), logout: vi.fn() });
+}
+
 describe("AdSlot", () => {
-  it("renders a placeholder for a Free account (ads enabled)", () => {
-    vi.mocked(useAuth).mockReturnValue({ account: accountWith({}), loading: false, refresh: vi.fn(), login: vi.fn(), signup: vi.fn(), logout: vi.fn() });
-    render(<AdSlot placement="below-url-input" />);
-    expect(screen.getByText(/Ad space reserved/i)).toBeInTheDocument();
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it("renders nothing for a Pro account (ads disabled)", () => {
-    vi.mocked(useAuth).mockReturnValue({
-      account: accountWith({ ads_enabled: false }),
-      loading: false,
-      refresh: vi.fn(),
-      login: vi.fn(),
-      signup: vi.fn(),
-      logout: vi.fn(),
-    });
-    const { container } = render(<AdSlot placement="below-url-input" />);
+  it("renders a placeholder for a Free account when the placement is enabled", async () => {
+    vi.mocked(api.listAdPlacements).mockResolvedValue([placement({ enabled: true })]);
+    mockAuth(accountWith({}));
+    render(<AdSlot placement="LANDING_DOWNLOADER" />);
+    expect(await screen.findByText(/Ad space reserved/i)).toBeInTheDocument();
+  });
+
+  it("renders nothing for a Pro account (ads ineligible)", () => {
+    mockAuth(accountWith({ ads_enabled: false }));
+    const { container } = render(<AdSlot placement="LANDING_DOWNLOADER" />);
     expect(container).toBeEmptyDOMElement();
+    expect(api.listAdPlacements).not.toHaveBeenCalled();
   });
 
   it("renders nothing when signed out", () => {
-    vi.mocked(useAuth).mockReturnValue({ account: null, loading: false, refresh: vi.fn(), login: vi.fn(), signup: vi.fn(), logout: vi.fn() });
-    const { container } = render(<AdSlot placement="below-url-input" />);
+    mockAuth(null);
+    const { container } = render(<AdSlot placement="LANDING_DOWNLOADER" />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("renders nothing when the placement is disabled", async () => {
+    vi.mocked(api.listAdPlacements).mockResolvedValue([placement({ enabled: false })]);
+    mockAuth(accountWith({}));
+    const { container } = render(<AdSlot placement="LANDING_DOWNLOADER" />);
+    await vi.waitFor(() => expect(api.listAdPlacements).toHaveBeenCalled());
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("fails gracefully (renders the neutral placeholder, not a fake ad) when no provider is configured", async () => {
+    vi.mocked(api.listAdPlacements).mockResolvedValue([placement({ enabled: true, provider: null, public_slot_id: null })]);
+    mockAuth(accountWith({}));
+    render(<AdSlot placement="LANDING_DOWNLOADER" />);
+    expect(await screen.findByText(/Ad space reserved/i)).toBeInTheDocument();
+  });
+
+  it("renders nothing for a placement id that doesn't exist in the registry", async () => {
+    vi.mocked(api.listAdPlacements).mockResolvedValue([placement({ id: "DOWNLOAD_RESULT", enabled: true })]);
+    mockAuth(accountWith({}));
+    const { container } = render(<AdSlot placement="LANDING_DOWNLOADER" />);
+    await vi.waitFor(() => expect(api.listAdPlacements).toHaveBeenCalled());
     expect(container).toBeEmptyDOMElement();
   });
 });

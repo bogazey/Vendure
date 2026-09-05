@@ -39,14 +39,27 @@ describe("AdminBilling", () => {
     expect(screen.getByText("target@example.com")).toBeInTheDocument();
   });
 
-  it("visually distinguishes failed payment events", async () => {
+  it("shows a clearly failed outcome for a payment_failed event, separate from webhook status", async () => {
     vi.mocked(api.adminListBillingEvents).mockResolvedValue([
-      makeEvent({ provider_event_id: "evt-2", event_type: "transaction.payment_failed", status: "failed" }),
+      makeEvent({ provider_event_id: "evt-2", event_type: "transaction.payment_failed", status: "processed" }),
     ]);
     renderPage();
 
-    const eventCell = await screen.findByText("transaction.payment_failed");
-    expect(eventCell.className).toMatch(/text-red-400/);
+    const outcomeCell = await screen.findByText("Payment failed");
+    expect(outcomeCell.className).toMatch(/text-red-400/);
+    // The webhook itself was processed successfully - that must not read as
+    // a payment success signal (this was the bug: "processed" showed green).
+    const webhookCell = await screen.findByText("Processed");
+    expect(webhookCell.className).not.toMatch(/text-emerald-400/);
+    expect(webhookCell.className).not.toMatch(/text-red-400/);
+  });
+
+  it("shows a green outcome for a completed transaction", async () => {
+    vi.mocked(api.adminListBillingEvents).mockResolvedValue([makeEvent({ event_type: "transaction.completed" })]);
+    renderPage();
+
+    const outcomeCell = await screen.findByText("Completed");
+    expect(outcomeCell.className).toMatch(/text-emerald-400/);
   });
 
   it("shows an empty state when there are no billing events", async () => {

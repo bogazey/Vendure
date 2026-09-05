@@ -12,7 +12,7 @@ import { api } from "../services/api";
 
 vi.mock("../context/AuthContext", () => ({ useAuth: vi.fn() }));
 vi.mock("../services/api", () => ({
-  api: { adminGetOverview: vi.fn(), health: vi.fn() },
+  api: { adminGetOverview: vi.fn(), adminGetHealth: vi.fn() },
   ApiError: class ApiError extends Error {},
 }));
 
@@ -80,12 +80,10 @@ describe("English and Arabic internationalization", () => {
       recent_billing_failures: [],
       recent_admin_actions: [],
     });
-    vi.mocked(api.health).mockResolvedValue({
+    vi.mocked(api.adminGetHealth).mockResolvedValue({
       status: "ok",
       ytdlp_version: "2026.01.01",
       ffmpeg_available: true,
-      ffmpeg_path: "/usr/bin/ffmpeg",
-      download_dir: "/data/downloads",
       download_dir_writable: true,
       database_ok: true,
     });

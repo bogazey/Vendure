@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import AdminUsers from "./AdminUsers";
+import i18n from "../../i18n";
 import { api } from "../../services/api";
 import type { AdminUserOut } from "../../types/commercial";
 
@@ -118,5 +119,19 @@ describe("AdminUsers", () => {
 
     expect(await screen.findByText("user-1")).toBeInTheDocument();
     expect(screen.getByText("150")).toBeInTheDocument();
+  });
+
+  it("shows the admin-specific Search button text in English, not the downloader's search string", async () => {
+    renderPage();
+    await screen.findByText("target@example.com");
+    expect(screen.getByRole("button", { name: "Search" })).toBeInTheDocument();
+    expect(screen.queryByText(/title, uploader, or url/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the admin-specific Search button text in Arabic", async () => {
+    await i18n.changeLanguage("ar");
+    renderPage();
+    await screen.findByText("target@example.com");
+    expect(screen.getByRole("button", { name: "بحث" })).toBeInTheDocument();
   });
 });

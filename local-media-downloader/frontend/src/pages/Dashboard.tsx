@@ -109,7 +109,7 @@ export default function Dashboard() {
       </div>
 
       <UrlInput onAnalyze={handleAnalyze} loading={analyzing} />
-      <AdSlot placement="below-url-input" />
+      <AdSlot placement="LANDING_DOWNLOADER" />
 
       {error && <ErrorBanner message={error.message} technical={error.technical} onDismiss={() => setError(null)} />}
 
@@ -122,7 +122,6 @@ export default function Dashboard() {
               {queuedMessage}
             </p>
           )}
-          <AdSlot placement="processing-state" />
         </div>
       )}
 
@@ -135,8 +134,10 @@ export default function Dashboard() {
           </span>
         </div>
         <DownloadQueue jobs={jobs} onCancel={handleCancel} />
-        {jobs.some((j) => j.stage === "completed") && <AdSlot placement="post-download" />}
+        {jobs.some((j) => j.stage === "completed") && <AdSlot placement="DOWNLOAD_RESULT" />}
       </div>
+
+      <AdSlot placement="USER_DASHBOARD" />
     </div>
   );
 }

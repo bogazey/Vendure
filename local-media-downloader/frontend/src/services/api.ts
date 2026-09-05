@@ -11,10 +11,14 @@ import type {
 import type {
   AccountOut,
   AdminActionLogOut,
+  AdminAdPlacementOut,
   AdminBillingEventOut,
+  AdminHealthOut,
   AdminOverviewOut,
+  AdminUpdateAdPlacementRequest,
   AdminUserListOut,
   AdminUserOut,
+  AdPlacementOut,
   BillingPeriod,
   BillingPortalResponse,
   CheckoutResponse,
@@ -195,6 +199,8 @@ export const api = {
 
   adminGetOverview: () => request<AdminOverviewOut>("/api/admin/overview"),
 
+  adminGetHealth: () => request<AdminHealthOut>("/api/admin/health"),
+
   adminGetUser: (userId: string) => request<AdminUserOut>(`/api/admin/users/${userId}`),
 
   adminListAuditLog: (params: { limit?: number; targetUserId?: string } = {}) => {
@@ -204,6 +210,17 @@ export const api = {
     const qs = query.toString();
     return request<AdminActionLogOut[]>(`/api/admin/audit-log${qs ? `?${qs}` : ""}`);
   },
+
+  // --- Ads ---
+  listAdPlacements: () => request<AdPlacementOut[]>("/api/ads/placements"),
+
+  adminListAdPlacements: () => request<AdminAdPlacementOut[]>("/api/admin/ads/placements"),
+
+  adminUpdateAdPlacement: (placementId: string, payload: AdminUpdateAdPlacementRequest) =>
+    request<AdminAdPlacementOut>(`/api/admin/ads/placements/${placementId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
 };
 
 export const PROGRESS_STREAM_URL = `${API_BASE}/api/progress/stream`;

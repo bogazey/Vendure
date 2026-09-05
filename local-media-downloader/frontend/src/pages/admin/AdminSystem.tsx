@@ -3,19 +3,19 @@ import { useTranslation } from "react-i18next";
 import ErrorBanner from "../../components/ErrorBanner";
 import { api } from "../../services/api";
 import { statLabel, statTile, statValue } from "../../styles/ui";
-import type { HealthResponse } from "../../types/api";
+import type { AdminHealthOut } from "../../types/commercial";
 import AdminLayout from "./AdminLayout";
 import { HealthDot } from "./adminShared";
 
 export default function AdminSystem() {
   const { t } = useTranslation();
-  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [health, setHealth] = useState<AdminHealthOut | null>(null);
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     api
-      .health()
+      .adminGetHealth()
       .then(setHealth)
       .catch(() => setError(true))
       .finally(() => setLoading(false));
@@ -53,11 +53,6 @@ export default function AdminSystem() {
               <HealthDot ok={!!health?.ffmpeg_available} />
               <span className={statValue}>{health?.ffmpeg_available ? t("admin.system.found") : t("admin.system.missing")}</span>
             </span>
-            {health?.ffmpeg_path && (
-              <span className="truncate text-xs text-slate-500" dir="ltr" title={health.ffmpeg_path}>
-                {health.ffmpeg_path}
-              </span>
-            )}
           </div>
 
           <div className={statTile}>
@@ -73,11 +68,6 @@ export default function AdminSystem() {
               <HealthDot ok={!!health?.download_dir_writable} />
               <span className={statValue}>{health?.download_dir_writable ? t("admin.system.writable") : t("admin.system.notWritable")}</span>
             </span>
-            {health?.download_dir && (
-              <span className="truncate text-xs text-slate-500" dir="ltr" title={health.download_dir}>
-                {health.download_dir}
-              </span>
-            )}
           </div>
         </div>
       )}

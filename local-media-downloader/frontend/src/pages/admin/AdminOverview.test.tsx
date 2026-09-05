@@ -3,13 +3,12 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import AdminOverview from "./AdminOverview";
 import { api } from "../../services/api";
-import type { AdminOverviewOut } from "../../types/commercial";
-import type { HealthResponse } from "../../types/api";
+import type { AdminHealthOut, AdminOverviewOut } from "../../types/commercial";
 
 vi.mock("../../services/api", () => ({
   api: {
     adminGetOverview: vi.fn(),
-    health: vi.fn(),
+    adminGetHealth: vi.fn(),
   },
   ApiError: class ApiError extends Error {},
 }));
@@ -30,17 +29,15 @@ function makeOverview(overrides: Partial<AdminOverviewOut> = {}): AdminOverviewO
   };
 }
 
-function makeHealth(overrides: Partial<HealthResponse> = {}): HealthResponse {
+function makeHealth(overrides: Partial<AdminHealthOut> = {}): AdminHealthOut {
   return {
     status: "ok",
     database_ok: true,
     ffmpeg_available: true,
-    ffmpeg_path: "/usr/bin/ffmpeg",
     ytdlp_version: "2026.01.01",
-    download_dir: "/data/downloads",
     download_dir_writable: true,
     ...overrides,
-  } as HealthResponse;
+  };
 }
 
 function renderPage() {
@@ -52,7 +49,7 @@ function renderPage() {
 }
 
 beforeEach(() => {
-  vi.mocked(api.health).mockResolvedValue(makeHealth());
+  vi.mocked(api.adminGetHealth).mockResolvedValue(makeHealth());
 });
 
 describe("AdminOverview", () => {

@@ -5,8 +5,7 @@ import { ApiError, api } from "../../services/api";
 import type { AdminBillingEventOut } from "../../types/commercial";
 import { formatDate } from "../../utils/format";
 import AdminLayout from "./AdminLayout";
-
-const FAILURE_EVENT_TYPES = new Set(["transaction.payment_failed"]);
+import { billingOutcome, billingOutcomeClass } from "./adminShared";
 
 export default function AdminBilling() {
   const { t } = useTranslation();
@@ -33,39 +32,41 @@ export default function AdminBilling() {
             <tr>
               <th className="px-4 py-2 text-start">{t("admin.billing.columnEvent")}</th>
               <th className="px-4 py-2 text-start">{t("admin.billing.columnUser")}</th>
-              <th className="px-4 py-2 text-start">{t("admin.billing.columnStatus")}</th>
+              <th className="px-4 py-2 text-start">{t("admin.billing.columnOutcome")}</th>
+              <th className="px-4 py-2 text-start">{t("admin.billing.columnWebhook")}</th>
               <th className="px-4 py-2 text-start">{t("admin.billing.columnTime")}</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
+                <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
                   {t("app.loading")}
                 </td>
               </tr>
             )}
             {!loading && events.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
+                <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
                   {t("admin.billing.empty")}
                 </td>
               </tr>
             )}
             {events.map((event) => {
-              const isFailure = FAILURE_EVENT_TYPES.has(event.event_type) || event.status === "failed";
+              const outcome = billingOutcome(event.event_type);
               return (
                 <tr key={event.provider_event_id} className="border-t border-white/[0.06]">
-                  <td className="px-4 py-2" dir="ltr">
-                    <span className={isFailure ? "font-medium text-red-400" : "text-slate-200"}>{event.event_type}</span>
+                  <td className="px-4 py-2 text-slate-200" dir="ltr">
+                    {event.event_type}
                   </td>
                   <td className="px-4 py-2 text-slate-400" dir="ltr">
                     {event.user_email || event.user_id || t("admin.billing.unknownUser")}
                   </td>
                   <td className="px-4 py-2">
-                    <span className={isFailure ? "text-red-400" : event.status === "processed" ? "text-emerald-400" : "text-slate-400"}>
-                      {event.status}
-                    </span>
+                    <span className={billingOutcomeClass(outcome.tone)}>{t(outcome.key)}</span>
+                  </td>
+                  <td className="px-4 py-2 text-slate-500">
+                    {t(`admin.billing.webhookStatus.${event.status}`, { defaultValue: event.status })}
                   </td>
                   <td className="px-4 py-2 text-slate-500" dir="ltr">
                     {formatDate(event.processed_at)}
