@@ -10,7 +10,9 @@ import type {
 } from "../types/api";
 import type {
   AccountOut,
+  AdminActionLogOut,
   AdminBillingEventOut,
+  AdminOverviewOut,
   AdminUserListOut,
   AdminUserOut,
   BillingPeriod,
@@ -190,6 +192,18 @@ export const api = {
 
   adminListBillingEvents: (limit = 50) =>
     request<AdminBillingEventOut[]>(`/api/admin/billing-events?limit=${limit}`),
+
+  adminGetOverview: () => request<AdminOverviewOut>("/api/admin/overview"),
+
+  adminGetUser: (userId: string) => request<AdminUserOut>(`/api/admin/users/${userId}`),
+
+  adminListAuditLog: (params: { limit?: number; targetUserId?: string } = {}) => {
+    const query = new URLSearchParams();
+    if (params.limit) query.set("limit", String(params.limit));
+    if (params.targetUserId) query.set("target_user_id", params.targetUserId);
+    const qs = query.toString();
+    return request<AdminActionLogOut[]>(`/api/admin/audit-log${qs ? `?${qs}` : ""}`);
+  },
 };
 
 export const PROGRESS_STREAM_URL = `${API_BASE}/api/progress/stream`;

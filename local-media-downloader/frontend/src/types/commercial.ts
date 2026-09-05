@@ -90,6 +90,10 @@ export interface AdminUserOut {
   subscription_status: SubscriptionStatus;
   credits_used: number;
   credits_included: number | null;
+  /** Portion of credits_included beyond the plan's own base allocation
+   * (i.e. cumulative admin grants this period) - null wherever
+   * credits_included itself is null (Free plan). */
+  credits_bonus: number | null;
   created_at: string;
 }
 
@@ -98,11 +102,39 @@ export interface AdminUserListOut {
   total: number;
 }
 
+export type AdminActionType = "grant_credits" | "disable_account" | "reactivate_account";
+
 export interface AdminBillingEventOut {
   provider_event_id: string;
   event_type: string;
   processed_at: string;
   status: string;
+  user_id: string | null;
+  user_email: string | null;
+}
+
+export interface AdminActionLogOut {
+  id: string;
+  admin_id: string;
+  admin_email: string | null;
+  action: AdminActionType;
+  target_user_id: string | null;
+  target_email: string | null;
+  details: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AdminOverviewOut {
+  total_users: number;
+  active_users: number;
+  disabled_users: number;
+  paid_subscribers: number;
+  free_count: number;
+  pro_count: number;
+  creator_count: number;
+  credits_consumed_current_period: number;
+  recent_billing_failures: AdminBillingEventOut[];
+  recent_admin_actions: AdminActionLogOut[];
 }
 
 export const PLAN_LABELS: Record<Plan, string> = {

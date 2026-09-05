@@ -5,10 +5,16 @@ import { describe, expect, it, vi } from "vitest";
 import Header from "../components/Header";
 import HeroUrlInput from "../components/HeroUrlInput";
 import Sidebar from "../components/Sidebar";
+import AdminOverview from "../pages/admin/AdminOverview";
 import i18n, { LANGUAGE_STORAGE_KEY } from ".";
 import { useAuth } from "../context/AuthContext";
+import { api } from "../services/api";
 
 vi.mock("../context/AuthContext", () => ({ useAuth: vi.fn() }));
+vi.mock("../services/api", () => ({
+  api: { adminGetOverview: vi.fn(), health: vi.fn() },
+  ApiError: class ApiError extends Error {},
+}));
 
 const signedOut = { account: null, loading: false, refresh: vi.fn(), login: vi.fn(), signup: vi.fn(), logout: vi.fn() };
 
@@ -55,5 +61,45 @@ describe("English and Arabic internationalization", () => {
     expect(screen.getByText("تنزيلاتي")).toBeInTheDocument();
     expect(screen.getByText("الإعدادات")).toBeInTheDocument();
     expect(screen.getByText("الفوترة")).toBeInTheDocument();
+  });
+
+  it("renders the admin panel in Arabic with RTL direction and translated tabs", async () => {
+    vi.mocked(useAuth).mockReturnValue({
+      account: { user: { role: "admin" } },
+      logout: vi.fn(),
+    } as unknown as ReturnType<typeof useAuth>);
+    vi.mocked(api.adminGetOverview).mockResolvedValue({
+      total_users: 5,
+      active_users: 5,
+      disabled_users: 0,
+      paid_subscribers: 1,
+      free_count: 4,
+      pro_count: 1,
+      creator_count: 0,
+      credits_consumed_current_period: 12,
+      recent_billing_failures: [],
+      recent_admin_actions: [],
+    });
+    vi.mocked(api.health).mockResolvedValue({
+      status: "ok",
+      ytdlp_version: "2026.01.01",
+      ffmpeg_available: true,
+      ffmpeg_path: "/usr/bin/ffmpeg",
+      download_dir: "/data/downloads",
+      download_dir_writable: true,
+      database_ok: true,
+    });
+    await i18n.changeLanguage("ar");
+    render(<MemoryRouter><AdminOverview /></MemoryRouter>);
+
+    expect(document.documentElement).toHaveAttribute("dir", "rtl");
+    expect(screen.getByText("الإدارة")).toBeInTheDocument();
+    expect(screen.getByText("نظرة عامة")).toBeInTheDocument();
+    expect(screen.getByText("المستخدمون")).toBeInTheDocument();
+    expect(screen.getByText("الفوترة")).toBeInTheDocument();
+    expect(await screen.findByText("إجمالي المستخدمين")).toBeInTheDocument();
+    expect(screen.getAllByText("5").length).toBeGreaterThan(0);
+
+    await i18n.changeLanguage("en");
   });
 });

@@ -10,7 +10,11 @@ import ProtectedRoute, { AdminRoute } from "./components/ProtectedRoute";
 import Sidebar from "./components/Sidebar";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Account from "./pages/Account";
-import Admin from "./pages/Admin";
+import AdminActivity from "./pages/admin/AdminActivity";
+import AdminBilling from "./pages/admin/AdminBilling";
+import AdminOverview from "./pages/admin/AdminOverview";
+import AdminSystem from "./pages/admin/AdminSystem";
+import AdminUsers from "./pages/admin/AdminUsers";
 import ForgotPassword from "./pages/auth/ForgotPassword";
 import Login from "./pages/auth/Login";
 import ResetPassword from "./pages/auth/ResetPassword";
@@ -36,7 +40,7 @@ const HEALTH_POLL_MS = 15000;
 // left Sidebar (desktop) instead of the marketing top nav, and no footer,
 // per the master website reference. Mobile is unaffected: it keeps the
 // existing Header hamburger drawer everywhere, sidebar or not.
-const APP_ROUTE_PREFIXES = ["/dashboard", "/history", "/settings", "/account", "/billing", "/usage"];
+const APP_ROUTE_PREFIXES = ["/dashboard", "/history", "/settings", "/account", "/billing", "/usage", "/admin"];
 
 function AppShell() {
   const { account } = useAuth();
@@ -89,9 +93,9 @@ function AppShell() {
       <AuroraBackground />
       <div className="relative z-10 flex min-h-screen">
         {showSidebar && <Sidebar />}
-        <div className="flex min-h-screen flex-1 flex-col">
+        <div className="flex min-h-screen min-w-0 flex-1 flex-col">
           <Header health={health} healthError={healthError} appShell={showSidebar} />
-          <div className="flex flex-1 flex-col">
+          <div className="flex min-w-0 flex-1 flex-col">
             <Routes>
               <Route path="/" element={<Landing />} />
               <Route path="/pricing" element={<Pricing />} />
@@ -110,7 +114,11 @@ function AppShell() {
               <Route path="/account" element={<ProtectedRoute><Account /></ProtectedRoute>} />
               <Route path="/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
               <Route path="/usage" element={<ProtectedRoute><Usage /></ProtectedRoute>} />
-              <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
+              <Route path="/admin" element={<AdminRoute><AdminOverview /></AdminRoute>} />
+              <Route path="/admin/users" element={<AdminRoute><AdminUsers /></AdminRoute>} />
+              <Route path="/admin/billing" element={<AdminRoute><AdminBilling /></AdminRoute>} />
+              <Route path="/admin/activity" element={<AdminRoute><AdminActivity /></AdminRoute>} />
+              <Route path="/admin/system" element={<AdminRoute><AdminSystem /></AdminRoute>} />
             </Routes>
           </div>
           {!showSidebar && <Footer />}

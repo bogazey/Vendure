@@ -60,7 +60,7 @@ export default function Sidebar() {
         {account?.user.role === "admin" && (
           <NavLink to="/admin" className={(state) => `mt-1 ${linkClass(state)}`}>
             {icon("M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4Z")}
-            Admin
+            {t("nav.admin")}
           </NavLink>
         )}
       </nav>

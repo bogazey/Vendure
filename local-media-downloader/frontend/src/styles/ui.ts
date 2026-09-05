@@ -45,3 +45,16 @@ export const wideShell = `${pageShell} max-w-6xl`;
  */
 export const appPageShell =
   "app-page relative z-10 mx-auto flex w-full max-w-5xl flex-col gap-6 px-5 py-8 sm:px-8 lg:px-10 lg:py-10";
+
+/**
+ * Admin gets its own, wider shell - it's meant to be information-dense
+ * (data tables, stat grids) rather than a single narrow reading column, but
+ * still the same restrained glass/dark-navy language as the rest of the app.
+ */
+export const adminPageShell =
+  "app-page relative z-10 mx-auto flex w-full max-w-7xl flex-col gap-6 px-5 py-8 sm:px-8 lg:px-10 lg:py-10";
+
+// A compact stat tile for admin overview grids.
+export const statTile = "glass-panel flex flex-col gap-1.5 p-4";
+export const statValue = "font-display text-2xl font-bold tracking-tight text-slate-50";
+export const statLabel = "text-xs font-medium uppercase tracking-wide text-slate-500";

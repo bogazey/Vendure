@@ -80,6 +80,9 @@ export default function Header({ appShell = false }: HeaderProps) {
               <NavLink to="/account" className={mobileClass} onClick={closeMobile}>{t("nav.account")}</NavLink>
               <NavLink to="/settings" className={mobileClass} onClick={closeMobile}>{t("nav.settings")}</NavLink>
               <NavLink to="/billing" className={mobileClass} onClick={closeMobile}>{t("nav.billing")}</NavLink>
+              {account.user.role === "admin" && (
+                <NavLink to="/admin" className={mobileClass} onClick={closeMobile}>{t("nav.admin")}</NavLink>
+              )}
               <button type="button" onClick={handleSignOut} className="mobile-nav-link text-start text-red-300">{t("nav.signout")}</button>
             </> : <>
               <Link to="/#features" className="mobile-nav-link" onClick={closeMobile}>{t("nav.features")}</Link>
