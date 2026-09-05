@@ -34,11 +34,12 @@ export default function Header({ health, healthError, appShell = false }: Header
   const backendOk = !!health && health.status === "ok";
   const ffmpegOk = !!health?.ffmpeg_available;
 
-  // Plain text links with an active underline, not a pill/capsule - matches
-  // the master reference's minimal top nav treatment.
+  // Filled rounded-pill highlight behind the active item, matching the
+  // master reference's header exactly (confirmed against the high-fidelity
+  // loady-reference.png supplied with the asset pack) - plain text otherwise.
   const navClass = ({ isActive }: { isActive: boolean }) =>
-    `border-b-2 px-1 pb-0.5 text-sm font-medium transition-colors ${
-      isActive ? "border-brand-blue text-slate-50" : "border-transparent text-slate-400 hover:text-slate-100"
+    `rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+      isActive ? "bg-white/[0.08] text-slate-50" : "text-slate-400 hover:text-slate-100"
     }`;
 
   const mobileNavClass = ({ isActive }: { isActive: boolean }) =>
@@ -65,7 +66,7 @@ export default function Header({ health, healthError, appShell = false }: Header
         </Link>
 
         {!appShell && (
-          <div className="hidden items-center gap-8 sm:flex">
+          <div className="hidden items-center gap-8 lg:flex">
             {account ? (
               <>
                 <NavLink to="/dashboard" className={navClass}>
@@ -86,6 +87,12 @@ export default function Header({ health, healthError, appShell = false }: Header
                 <NavLink to="/pricing" className={navClass}>
                   Pricing
                 </NavLink>
+                <Link to="/#features" className={navClass({ isActive: false })}>
+                  Features
+                </Link>
+                <Link to="/#how-it-works" className={navClass({ isActive: false })}>
+                  How it works
+                </Link>
               </>
             )}
           </div>
@@ -200,9 +207,7 @@ export default function Header({ health, healthError, appShell = false }: Header
             onClick={() => setMobileNavOpen((v) => !v)}
             aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
             aria-expanded={mobileNavOpen}
-            className={`flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-slate-200 backdrop-blur-xl transition-colors hover:border-white/20 hover:bg-white/[0.07] ${
-              appShell ? "lg:hidden" : "sm:hidden"
-            }`}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-slate-200 backdrop-blur-xl transition-colors hover:border-white/20 hover:bg-white/[0.07] lg:hidden"
           >
             <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
               {mobileNavOpen ? <path d="M6 6l12 12M18 6 6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
@@ -212,7 +217,7 @@ export default function Header({ health, healthError, appShell = false }: Header
       </div>
 
       {mobileNavOpen && (
-        <div className={`border-t border-white/10 px-4 pb-4 pt-2 ${appShell ? "lg:hidden" : "sm:hidden"}`}>
+        <div className="border-t border-white/10 px-4 pb-4 pt-2 lg:hidden">
           <nav className="flex flex-col gap-1">
             {account ? (
               <>
@@ -251,6 +256,12 @@ export default function Header({ health, healthError, appShell = false }: Header
                 <NavLink to="/pricing" className={mobileNavClass} onClick={() => setMobileNavOpen(false)}>
                   Pricing
                 </NavLink>
+                <Link to="/#features" className={mobileNavClass({ isActive: false })} onClick={() => setMobileNavOpen(false)}>
+                  Features
+                </Link>
+                <Link to="/#how-it-works" className={mobileNavClass({ isActive: false })} onClick={() => setMobileNavOpen(false)}>
+                  How it works
+                </Link>
               </>
             )}
           </nav>

@@ -1,97 +1,63 @@
-import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import HeroUrlInput from "../components/HeroUrlInput";
 import { useAuth } from "../context/AuthContext";
 import { gradientText, secondaryButton } from "../styles/ui";
 
+const ASSETS = "/assets/design";
+
 /**
- * Decorative floating tiles gesturing at "multi-platform support" around
- * the hero, per the master reference's composition. Deliberately abstract
- * (a generic play/note/aperture/chat glyph in each platform's brand-ish
- * color) rather than the real YouTube/TikTok/Instagram/Facebook marks -
- * tasteful and secondary, never implying affiliation with those platforms.
+ * Floating hero media tiles from the supplied Loady design asset pack
+ * (design-reference/loady-website-assets), positioned per its
+ * docs/ASSET_PLACEMENT.md guide: video top-left/right, audio lower-left,
+ * image right-mid. Decorative glass tiles, not real photos or platform
+ * logos - hidden below lg per the pack's own guidance.
  */
-function PlatformTile({ className, children }: { className: string; children: ReactNode }) {
+function MediaTile({ src, className, rotate }: { src: string; className: string; rotate: number }) {
   return (
-    <div
+    <img
+      src={src}
+      alt=""
       aria-hidden="true"
-      className={`absolute hidden h-14 w-14 rotate-6 items-center justify-center rounded-2xl shadow-lg lg:flex ${className}`}
-      style={{ boxShadow: "0 12px 30px -8px rgba(0,0,0,0.6)" }}
-    >
-      <svg viewBox="0 0 24 24" width={22} height={22} fill="white" stroke="none">
-        {children}
-      </svg>
-    </div>
+      className={`pointer-events-none absolute hidden h-32 w-32 lg:block xl:h-40 xl:w-40 ${className}`}
+      style={{ transform: `rotate(${rotate}deg)` }}
+    />
   );
 }
 
-const ICON_TINTS = {
-  blue: "border-brand-blue/25 bg-brand-blue/10 text-brand-blue",
-  purple: "border-brand-purple/25 bg-brand-purple/10 text-brand-purple",
-  aqua: "border-brand-aqua/25 bg-brand-aqua/10 text-brand-aqua",
-} as const;
-
-function FeatureIcon({ tint, children }: { tint: keyof typeof ICON_TINTS; children: ReactNode }) {
-  return (
-    <span className={`flex h-10 w-10 items-center justify-center rounded-xl border ${ICON_TINTS[tint]}`}>
-      <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
-        {children}
-      </svg>
-    </span>
-  );
-}
-
-const FEATURES: { title: string; body: string; icon: ReactNode }[] = [
+const FEATURES: { title: string; body: string; icon: string }[] = [
   {
     title: "Save",
     body: "Pull video and audio from YouTube, TikTok, Instagram, and Facebook straight to your device.",
-    icon: (
-      <FeatureIcon tint="blue">
-        <path d="M12 4v11" />
-        <path d="m7 11 5 5 5-5" />
-        <path d="M5 19h14" />
-      </FeatureIcon>
-    ),
+    icon: `${ASSETS}/icons/features/save.svg`,
   },
   {
     title: "Convert",
     body: "Every video lands as a genuine, playable MP4 by default - or keep the original container if you'd rather.",
-    icon: (
-      <FeatureIcon tint="purple">
-        <path d="M4 7h13l-3-3" />
-        <path d="M20 17H7l3 3" />
-      </FeatureIcon>
-    ),
+    icon: `${ASSETS}/icons/features/convert.svg`,
   },
   {
     title: "Organize",
     body: "A searchable library of everything you've saved, with quick access to every file.",
-    icon: (
-      <FeatureIcon tint="aqua">
-        <rect x="4" y="5" width="16" height="14" rx="2" />
-        <path d="M4 10h16" />
-      </FeatureIcon>
-    ),
+    icon: `${ASSETS}/icons/features/organize.svg`,
   },
   {
     title: "Process",
     body: "Clip ranges, pick exact formats and bitrates, and batch through a whole playlist at once on paid plans.",
-    icon: (
-      <FeatureIcon tint="purple">
-        <path d="M5 6h14" />
-        <path d="M5 12h9" />
-        <path d="M5 18h14" />
-        <circle cx="16" cy="6" r="1.5" fill="currentColor" stroke="none" />
-        <circle cx="10" cy="18" r="1.5" fill="currentColor" stroke="none" />
-      </FeatureIcon>
-    ),
+    icon: `${ASSETS}/icons/features/process.svg`,
   },
 ];
 
 const STEPS = [
-  { step: "1", body: "Paste a link to content you're authorized to use." },
-  { step: "2", body: "Pick a quality, format, or clip range." },
-  { step: "3", body: "Keep it - converted and ready, yours to access offline." },
+  { step: "1", title: "Paste", icon: `${ASSETS}/icons/steps/paste.svg`, body: "Add a link from YouTube, TikTok, Instagram or Facebook." },
+  { step: "2", title: "Pick", icon: `${ASSETS}/icons/steps/pick.svg`, body: "Choose your format, quality, and options." },
+  { step: "3", title: "Keep", icon: `${ASSETS}/icons/steps/keep.svg`, body: "Download and enjoy it offline, anytime." },
+];
+
+const SUPPORTED_PLATFORMS = [
+  { name: "YouTube", icon: `${ASSETS}/icons/social/youtube.svg` },
+  { name: "TikTok", icon: `${ASSETS}/icons/social/tiktok.svg` },
+  { name: "Instagram", icon: `${ASSETS}/icons/social/instagram.svg` },
+  { name: "Facebook", icon: `${ASSETS}/icons/social/facebook.svg` },
 ];
 
 export default function Landing() {
@@ -99,87 +65,92 @@ export default function Landing() {
 
   return (
     <div className="relative z-10 flex flex-col">
-      <section className="relative mx-auto flex max-w-3xl flex-col items-center gap-6 px-6 pb-14 pt-20 text-center sm:pt-28">
-        {/* Layered atmospheric light sources rather than one flat gradient -
-            a centered glow behind the headline/downloader plus two smaller,
-            asymmetric sweeps (blue upper-left, aqua lower-right) for a bit
-            of movement. All restrained: low opacity, heavily blurred,
-            z-indexed behind content, never affecting text contrast. */}
-        <div
+      <section className="relative overflow-hidden">
+        {/* Hero background from the supplied Loady design asset pack
+            (design-reference/loady-website-assets), full-bleed behind the
+            whole hero, placed per its own docs/ASSET_PLACEMENT.md rather
+            than approximated with CSS gradients - the asset already
+            contains the radial glows and wave-line strokes the previous
+            hand-rolled divs were chasing. */}
+        <img
+          src={`${ASSETS}/backgrounds/hero-cinematic-wave.svg`}
+          alt=""
           aria-hidden="true"
-          className="pointer-events-none absolute left-1/2 top-0 -z-10 h-[32rem] w-[52rem] -translate-x-1/2 rounded-full bg-brand-gradient-soft opacity-70 blur-3xl"
+          className="pointer-events-none absolute inset-0 -z-20 h-full w-full object-cover"
         />
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -left-24 top-10 -z-10 h-72 w-72 rounded-full bg-brand-radial-1 opacity-60 blur-3xl"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -right-16 bottom-0 -z-10 h-80 w-80 rounded-full bg-brand-radial-3 opacity-50 blur-3xl"
-        />
-        {/* A sharper diagonal beam, layered over the soft blurred glows above
-            for a bit of the reference's "light cutting through darkness"
-            quality rather than only diffuse blobs. */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -right-10 top-0 -z-10 h-[36rem] w-40 origin-top-right rotate-[24deg] bg-gradient-to-b from-brand-aqua/25 via-brand-blue/10 to-transparent blur-2xl"
+          className="pointer-events-none absolute inset-0 -z-10 opacity-40"
+          style={{ backgroundImage: `url(${ASSETS}/textures/subtle-grid.svg)`, backgroundRepeat: "repeat" }}
         />
 
-        <PlatformTile className="-left-8 top-16 bg-red-500/90">
-          <path d="M8 6.5v11l9-5.5-9-5.5Z" />
-        </PlatformTile>
-        <PlatformTile className="-right-6 top-24 bg-gradient-to-br from-amber-400 via-pink-500 to-purple-600">
-          <circle cx="12" cy="12" r="5.5" />
-        </PlatformTile>
-        <PlatformTile className="-left-4 bottom-24 bg-neutral-900 ring-1 ring-white/20">
-          <path d="M14 6c0 2.2 1.8 4 4 4v3a7 7 0 0 1-4-1.3V16a5 5 0 1 1-5-5c.3 0 .7 0 1 .1v3a2 2 0 1 0 1 1.8V4h3Z" />
-        </PlatformTile>
-        <PlatformTile className="-right-10 bottom-8 bg-blue-600">
-          <path d="M12 5a7 7 0 0 0-1 13.9V15h-2v-3h2v-1.5c0-2 1.2-3.1 3-3.1.9 0 1.7.1 2 .1v2.3h-1.3c-1 0-1.2.5-1.2 1.1V12h2.4l-.3 3H14.5v3.9A7 7 0 0 0 12 5Z" />
-        </PlatformTile>
+        {/* Media tiles anchor to this wider (max-w-6xl) box rather than the
+            narrower text column below, so they sit clear in the margins
+            beside the headline instead of overlapping it - the tiles are
+            absolutely positioned so this wrapper takes its height from the
+            text column it contains. */}
+        <div className="relative mx-auto max-w-6xl px-6">
+          <MediaTile src={`${ASSETS}/hero/media-tiles/video-tile.svg`} className="left-0 top-6" rotate={-6} />
+          <MediaTile src={`${ASSETS}/hero/media-tiles/video-tile.svg`} className="right-0 top-0" rotate={6} />
+          <MediaTile src={`${ASSETS}/hero/media-tiles/audio-tile.svg`} className="left-6 bottom-16" rotate={5} />
+          <MediaTile src={`${ASSETS}/hero/media-tiles/image-tile.svg`} className="right-6 bottom-6" rotate={-5} />
 
-        <span className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-1.5 text-xs font-medium uppercase tracking-[0.14em] text-slate-400 backdrop-blur-xl">
-          Personal media, kept simple
-        </span>
+        <div className="relative mx-auto flex max-w-3xl flex-col items-center gap-6 pb-14 pt-20 text-center sm:pt-28">
+          <span className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-1.5 text-xs font-medium uppercase tracking-[0.14em] text-slate-400 backdrop-blur-xl">
+            Personal media, kept simple
+          </span>
 
-        <h1 className="font-display text-4xl font-bold leading-[1.05] tracking-tight text-slate-50 sm:text-6xl lg:text-7xl">
-          Freedom to keep <span className={gradientText}>what you love.</span>
-        </h1>
+          <h1 className="font-display text-4xl font-bold leading-[1.05] tracking-tight text-slate-50 sm:text-6xl lg:text-7xl">
+            Freedom to keep <span className={gradientText}>what you love.</span>
+          </h1>
 
-        <p className="max-w-xl text-base text-slate-300 sm:text-lg">
-          Loady lets you save the media you care about - straight from YouTube, TikTok, Instagram, and Facebook -
-          for personal offline access, in the format you want.
-        </p>
+          <p className="max-w-xl text-base text-slate-300 sm:text-lg">
+            Loady lets you save the media you care about - straight from YouTube, TikTok, Instagram, and Facebook -
+            for personal offline access, in the format you want.
+          </p>
 
-        <div className="w-full pt-2">
-          <HeroUrlInput />
+          <div className="w-full pt-2">
+            <HeroUrlInput />
+          </div>
+
+          <div className="flex items-center gap-3">
+            <ul className="flex items-center -space-x-1.5" aria-label="Supported platforms">
+              {SUPPORTED_PLATFORMS.map((p) => (
+                <li key={p.name} className="rounded-full ring-2 ring-surface">
+                  <img src={p.icon} alt="" aria-hidden="true" className="h-7 w-7" />
+                  <span className="sr-only">{p.name}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-sm font-medium text-slate-400">Fast. Simple. Yours.</p>
+          </div>
+
+          {!account && (
+            <Link to="/pricing" className={`${secondaryButton} mt-2`}>
+              See pricing
+            </Link>
+          )}
         </div>
-
-        <p className="text-sm font-medium text-slate-400">Fast. Simple. Yours.</p>
-
-        {!account && (
-          <Link to="/pricing" className={`${secondaryButton} mt-2`}>
-            See pricing
-          </Link>
-        )}
+        </div>
       </section>
 
-      <section className="mx-auto grid w-full max-w-5xl gap-5 px-6 pb-14 sm:grid-cols-2 lg:grid-cols-4">
+      <section id="features" className="mx-auto grid w-full max-w-5xl scroll-mt-24 gap-5 px-6 pb-14 sm:grid-cols-2 lg:grid-cols-4">
         {FEATURES.map((f) => (
           <div
             key={f.title}
             className="flex flex-col gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.015] p-5 transition-all duration-200 hover:-translate-y-1 hover:border-white/20 hover:bg-white/[0.03] hover:shadow-glow-lg"
           >
-            {f.icon}
+            <img src={f.icon} alt="" aria-hidden="true" className="h-10 w-10" />
             <h3 className="font-display text-base font-semibold tracking-tight text-slate-50">{f.title}</h3>
             <p className="text-sm text-slate-300">{f.body}</p>
           </div>
         ))}
       </section>
 
-      <section className="px-6 py-14">
+      <section id="how-it-works" className="scroll-mt-24 px-6 py-14">
         <div className="mx-auto flex max-w-4xl flex-col gap-10">
           <h2 className="text-center font-display text-3xl font-bold text-slate-50 sm:text-4xl">How it works</h2>
+          <p className="-mt-6 text-center text-sm text-slate-400">Three simple steps. From link to your library.</p>
 
           <div className="relative grid gap-10 sm:grid-cols-3 sm:gap-6">
             {/* Connecting path: a horizontal gradient line through the three
@@ -191,10 +162,14 @@ export default function Landing() {
             />
             {STEPS.map((s) => (
               <div key={s.step} className="relative flex flex-col items-center gap-3 text-center">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-gradient text-sm font-semibold text-white shadow-glow ring-4 ring-surface">
-                  {s.step}
-                </span>
-                <p className="text-sm text-slate-300">{s.body}</p>
+                <img src={s.icon} alt="" aria-hidden="true" className="h-16 w-16 rounded-full bg-surface" />
+                <div className="flex items-center gap-2">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/10 text-[11px] font-semibold text-slate-300">
+                    {s.step}
+                  </span>
+                  <h3 className="font-display text-base font-semibold text-slate-50">{s.title}</h3>
+                </div>
+                <p className="max-w-[15rem] text-sm text-slate-300">{s.body}</p>
               </div>
             ))}
           </div>

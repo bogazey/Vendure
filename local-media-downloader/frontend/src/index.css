@@ -152,12 +152,12 @@ h3,
 .aurora-grid {
   position: absolute;
   inset: -1px;
-  /* Almost subliminal on the near-black foundation - texture, not a
-     visible pattern. */
-  background-image:
-    linear-gradient(to right, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
-  background-size: 64px 64px;
+  /* The supplied Loady design asset pack's own grid texture
+     (design-reference/loady-website-assets .../textures/subtle-grid.svg)
+     rather than an approximated CSS gradient - almost subliminal on the
+     near-black foundation, texture rather than a visible pattern. */
+  background-image: url("/assets/design/textures/subtle-grid.svg");
+  background-size: 72px 72px;
   mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%);
 }
 

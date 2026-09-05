@@ -59,6 +59,24 @@ export default function HeroUrlInput() {
         }`}
       >
         <div className="flex flex-1 items-center gap-2 px-2">
+          {!platform && (
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              width={16}
+              height={16}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.75}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="hidden shrink-0 text-slate-500 sm:block"
+            >
+              <path d="M9.5 14.5 14.5 9.5" />
+              <path d="M11 6.5 12.5 5a3.5 3.5 0 0 1 5 5L16 11.5" />
+              <path d="M13 17.5 11.5 19a3.5 3.5 0 0 1-5-5L8 12.5" />
+            </svg>
+          )}
           {platform && (
             <span className="hidden shrink-0 items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs font-medium text-slate-300 sm:flex">
               <span>{PLATFORM_ICONS[platform]}</span>
