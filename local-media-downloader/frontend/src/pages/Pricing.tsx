@@ -128,20 +128,21 @@ export default function Pricing() {
         className="pointer-events-none absolute -right-32 top-0 -z-10 h-[44rem] w-[44rem] opacity-60"
       />
 
-      <div className="relative z-10 mx-auto flex max-w-5xl flex-col gap-10 px-6 py-14">
+      <div className="relative z-10 mx-auto flex max-w-6xl flex-col gap-12 px-5 py-20 sm:px-8 sm:py-24">
       <div className="flex flex-col items-center gap-3 text-center">
-        <h1 className="font-display text-4xl font-bold tracking-tight text-slate-50 sm:text-5xl">
+        <span className="section-kicker">Choose your pace</span>
+        <h1 className="font-display text-4xl font-bold tracking-[-0.045em] text-slate-50 sm:text-6xl">
           Simple, transparent pricing
         </h1>
-        <p className="max-w-xl text-sm text-slate-400">
+        <p className="max-w-xl text-base leading-7 text-slate-400">
           Start free. Upgrade when you need higher quality, more downloads, or creator tools.
         </p>
 
-        <div className="mt-2 flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] p-1 backdrop-blur-xl">
+        <div className="mt-4 flex items-center gap-1 rounded-2xl border border-white/10 bg-white/[0.035] p-1.5 shadow-[inset_0_1px_rgba(255,255,255,.06)] backdrop-blur-xl">
           <button
             type="button"
             onClick={() => setPeriod("monthly")}
-            className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+            className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
               period === "monthly" ? "bg-brand-gradient text-white shadow-glow" : "text-slate-400 hover:text-slate-200"
             }`}
           >
@@ -150,7 +151,7 @@ export default function Pricing() {
           <button
             type="button"
             onClick={() => setPeriod("annual")}
-            className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+            className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
               period === "annual" ? "bg-brand-gradient text-white shadow-glow" : "text-slate-400 hover:text-slate-200"
             }`}
           >
@@ -166,7 +167,7 @@ export default function Pricing() {
         </p>
       )}
 
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid items-stretch gap-5 md:grid-cols-3 md:gap-4 lg:gap-6">
         {PLAN_ROWS.map((row) => {
           const price = row.plan === "free" ? 0 : PLAN_PRICES[row.plan][period];
           const isCurrent = currentPlan === row.plan;
@@ -174,10 +175,10 @@ export default function Pricing() {
           return (
             <div
               key={row.plan}
-              className={`relative flex flex-col gap-5 rounded-2xl p-6 transition-transform duration-200 ${
+              className={`relative flex flex-col gap-6 overflow-hidden rounded-3xl p-6 transition-all duration-200 sm:p-7 ${
                 isRecommended
-                  ? "border border-brand-purple/50 bg-white/[0.035] md:-translate-y-2"
-                  : "border border-white/[0.08] bg-white/[0.02] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]"
+                  ? "border border-brand-purple/40 bg-[linear-gradient(145deg,rgba(60,70,145,.16),rgba(255,255,255,.025))] shadow-[inset_0_1px_rgba(255,255,255,.1),0_28px_80px_rgba(35,32,95,.25)] md:-translate-y-3"
+                  : "border border-white/[0.08] bg-[linear-gradient(145deg,rgba(255,255,255,.035),rgba(255,255,255,.012))] shadow-[inset_0_1px_rgba(255,255,255,.06),0_20px_55px_rgba(0,0,0,.18)] hover:-translate-y-1 hover:border-white/[0.14]"
               }`}
             >
               {isRecommended && (
@@ -207,24 +208,24 @@ export default function Pricing() {
                 <img
                   src={`${ASSETS}/pricing/most-popular-badge.svg`}
                   alt="Most popular"
-                  className="absolute -top-11 right-2 h-[104px] w-[104px] object-contain"
+                  className="absolute -top-10 right-2 h-[100px] w-[100px] object-contain"
                 />
               )}
               <div>
-                <h2 className="font-display text-lg font-semibold text-slate-50">{row.name}</h2>
+                <h2 className="font-display text-xl font-semibold text-slate-50">{row.name}</h2>
                 <p className="text-sm text-slate-400">{row.tagline}</p>
               </div>
               <div>
-                <span className="font-display text-3xl font-bold text-slate-50">${price}</span>
+                <span className="font-display text-4xl font-bold tracking-tight text-slate-50">${price}</span>
                 {row.plan !== "free" && (
                   <span className="text-sm text-slate-500">/{period === "monthly" ? "mo" : "yr"}</span>
                 )}
               </div>
               <div className="border-t border-white/[0.08]" />
-              <ul className="flex flex-1 flex-col gap-2 text-sm text-slate-300">
+              <ul className="flex flex-1 flex-col gap-3 text-sm leading-5 text-slate-300">
                 {row.features.map((f) => (
                   <li key={f} className="flex items-start gap-2">
-                    <span className="mt-0.5 text-brand-aqua">✓</span>
+                    <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-brand-aqua/10 text-[10px] text-brand-aqua">✓</span>
                     <span>{f}</span>
                   </li>
                 ))}

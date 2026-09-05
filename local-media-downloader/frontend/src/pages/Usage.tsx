@@ -26,7 +26,7 @@ export default function Usage() {
   const remaining = isFree ? usage.daily_free_downloads_remaining ?? 0 : usage.credits_remaining ?? 0;
 
   return (
-    <div className="relative z-10 mx-auto flex max-w-2xl flex-col gap-6 px-6 py-10">
+    <div className="app-page relative z-10 mx-auto flex w-full max-w-5xl flex-col gap-6 px-5 py-8 sm:px-8 lg:px-10 lg:py-10">
       <h1 className="font-display text-xl font-bold text-slate-50">Usage</h1>
 
       <section className="glass-panel flex flex-col gap-4 p-5">

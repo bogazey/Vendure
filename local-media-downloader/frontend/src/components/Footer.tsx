@@ -23,11 +23,11 @@ export default function Footer() {
   const { account } = useAuth();
 
   return (
-    <footer className="border-t border-white/[0.06] px-6 py-12">
-      <div className="mx-auto grid max-w-6xl gap-10 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
+    <footer className="relative border-t border-white/[0.06] bg-[#05070d]/80 px-6 py-14">
+      <div className="mx-auto grid max-w-6xl gap-10 sm:grid-cols-2 lg:grid-cols-[1.6fr_1fr_1fr_1fr]">
         <div className="flex flex-col gap-2">
-          <LoadyLogo size={24} />
-          <p className="max-w-xs text-sm text-slate-500">Media Without Limits</p>
+          <LoadyLogo size={27} />
+          <p className="mt-2 max-w-xs text-sm leading-6 text-slate-400">Freedom to keep what you love.</p>
         </div>
 
         <FooterColumn heading="Product">
@@ -77,7 +77,7 @@ export default function Footer() {
         </FooterColumn>
       </div>
 
-      <div className="mx-auto mt-8 flex max-w-4xl flex-col items-center gap-1 text-center text-xs text-slate-500">
+      <div className="mx-auto mt-12 flex max-w-6xl flex-col gap-2 border-t border-white/[0.06] pt-7 text-xs leading-5 text-slate-500 sm:flex-row sm:items-end sm:justify-between">
         <p className="max-w-2xl">
           Loady is a personal media utility for content you own or are otherwise authorized to access and download.
           It is not intended to bypass copy protection, DRM, or paywalls.

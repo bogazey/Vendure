@@ -5,265 +5,80 @@ import type { HealthResponse } from "../types/api";
 import { PLAN_LABELS } from "../types/commercial";
 import LoadyLogo from "./LoadyLogo";
 
-interface HeaderProps {
-  health: HealthResponse | null;
-  healthError: boolean;
-  /** True on authenticated app routes, where the left Sidebar already owns
-   * branding and primary navigation. Collapses Header into a minimal
-   * utility bar (plan badge + account menu only) at desktop widths, so the
-   * Loady mark isn't shown twice. Sidebar is desktop-only (lg+), so below
-   * that breakpoint Header still shows the logo and its hamburger drawer -
-   * the only navigation available at tablet/mobile widths. */
-  appShell?: boolean;
-}
+interface HeaderProps { health: HealthResponse | null; healthError: boolean; appShell?: boolean }
 
-function StatusDot({ ok }: { ok: boolean }) {
-  return (
-    <span
-      className={`inline-block h-1.5 w-1.5 rounded-full ${ok ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" : "bg-amber-400"}`}
-      aria-hidden
-    />
-  );
-}
-
-export default function Header({ health, healthError, appShell = false }: HeaderProps) {
+export default function Header({ appShell = false }: HeaderProps) {
   const { account, logout } = useAuth();
   const navigate = useNavigate();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const backendOk = !!health && health.status === "ok";
-  const ffmpegOk = !!health?.ffmpeg_available;
-
-  // Filled rounded-pill highlight behind the active item, matching the
-  // master reference's header exactly (confirmed against the high-fidelity
-  // loady-reference.png supplied with the asset pack) - plain text otherwise.
-  const navClass = ({ isActive }: { isActive: boolean }) =>
-    `rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-      isActive ? "bg-white/[0.08] text-slate-50" : "text-slate-400 hover:text-slate-100"
-    }`;
-
-  const mobileNavClass = ({ isActive }: { isActive: boolean }) =>
-    `block rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
-      isActive ? "bg-white/10 text-slate-50" : "text-slate-300 hover:bg-white/[0.06] hover:text-slate-100"
-    }`;
-
-  const handleSignOut = async () => {
-    setMenuOpen(false);
-    setMobileNavOpen(false);
-    await logout();
-    navigate("/");
-  };
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const navClass = ({ isActive }: { isActive: boolean }) => `nav-pill ${isActive ? "nav-pill-active" : ""}`;
+  const mobileClass = ({ isActive }: { isActive: boolean }) => `mobile-nav-link ${isActive ? "mobile-nav-link-active" : ""}`;
+  const closeMobile = () => setMobileOpen(false);
+  const handleSignOut = async () => { setAccountOpen(false); setMobileOpen(false); await logout(); navigate("/"); };
 
   return (
-    <header className="glass-nav sticky top-0 z-20">
-      <div
-        className={`mx-auto flex max-w-6xl items-center gap-4 px-6 py-3 ${
-          appShell ? "justify-between lg:justify-end" : "justify-between"
-        }`}
-      >
-        <Link to="/" className={`shrink-0 ${appShell ? "lg:hidden" : ""}`}>
-          <LoadyLogo size={30} />
+    <header className="premium-header">
+      <div className={`premium-nav ${appShell ? "lg:justify-end" : ""}`}>
+        <Link to="/" className={`shrink-0 ${appShell ? "lg:hidden" : ""}`} aria-label="Loady home">
+          <LoadyLogo size={29} />
         </Link>
 
         {!appShell && (
-          <div className="hidden items-center gap-8 lg:flex">
-            {account ? (
-              <>
-                <NavLink to="/dashboard" className={navClass}>
-                  Download
-                </NavLink>
-                <NavLink to="/history" className={navClass}>
-                  My Downloads
-                </NavLink>
-                <NavLink to="/pricing" className={navClass}>
-                  Pricing
-                </NavLink>
-              </>
-            ) : (
-              <>
-                <NavLink to="/" end className={navClass}>
-                  Home
-                </NavLink>
-                <NavLink to="/pricing" className={navClass}>
-                  Pricing
-                </NavLink>
-                <Link to="/#features" className={navClass({ isActive: false })}>
-                  Features
-                </Link>
-                <Link to="/#how-it-works" className={navClass({ isActive: false })}>
-                  How it works
-                </Link>
-              </>
-            )}
-          </div>
+          <nav className="hidden items-center gap-1 lg:flex" aria-label="Primary navigation">
+            <Link to="/#features" className="nav-pill">Features</Link>
+            <Link to="/#how-it-works" className="nav-pill">How it works</Link>
+            <NavLink to="/pricing" className={navClass}>Pricing</NavLink>
+          </nav>
         )}
 
-        <div className="flex items-center gap-3">
-          {/* Server-health details are for operators, not marketing-page
-              visitors - only shown once signed in as an admin. */}
-          {account?.user.role === "admin" && (
-            <div
-              className="hidden items-center gap-3 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-slate-400 backdrop-blur-xl lg:flex"
-              title={
-                healthError
-                  ? "Backend unreachable"
-                  : `Backend: ${backendOk ? "ready" : "degraded"} · FFmpeg: ${ffmpegOk ? "found" : "missing"}`
-              }
-            >
-              <span className="flex items-center gap-1.5">
-                <StatusDot ok={!healthError && backendOk} />
-                Backend
-              </span>
-              <span className="flex items-center gap-1.5">
-                <StatusDot ok={!healthError && ffmpegOk} />
-                FFmpeg
-              </span>
-            </div>
-          )}
-
+        <div className="ml-auto flex items-center gap-2 lg:ml-0">
           {account ? (
             <div className="relative">
-              <button
-                type="button"
-                onClick={() => setMenuOpen((v) => !v)}
-                className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] py-1.5 pl-1.5 pr-3 text-sm text-slate-200 backdrop-blur-xl transition-colors hover:border-white/20 hover:bg-white/[0.07]"
-              >
-                <span className="rounded-full bg-brand-gradient px-2.5 py-1 text-xs font-semibold text-white shadow-glow">
-                  {PLAN_LABELS[account.subscription.plan]}
-                </span>
-                <span className="hidden max-w-[10rem] truncate sm:inline">{account.user.email}</span>
-                <span className="text-slate-500">▾</span>
+              <button type="button" onClick={() => setAccountOpen((v) => !v)} className="account-trigger" aria-expanded={accountOpen}>
+                <span className="hidden max-w-[170px] truncate text-slate-400 sm:inline">{account.user.email}</span>
+                <span className="sr-only">{PLAN_LABELS[account.subscription.plan]}</span>
+                <span className="avatar-chip">{account.user.email.slice(0, 1).toUpperCase()}</span>
               </button>
-              {menuOpen && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                  <div className="glass-panel-raised absolute right-0 z-20 mt-2 w-56 overflow-hidden p-1.5">
-                    <div className="border-b border-white/10 px-3 py-2.5 text-xs text-slate-400">
-                      {account.usage.plan === "free"
-                        ? `${account.usage.daily_free_downloads_remaining ?? 0} free download(s) left today`
-                        : `${account.usage.credits_remaining ?? 0} credit(s) remaining`}
-                    </div>
-                    <Link
-                      to="/account"
-                      onClick={() => setMenuOpen(false)}
-                      className="block rounded-xl px-3 py-2 text-sm text-slate-200 transition-colors hover:bg-white/[0.06]"
-                    >
-                      Account
-                    </Link>
-                    <Link
-                      to="/billing"
-                      onClick={() => setMenuOpen(false)}
-                      className="block rounded-xl px-3 py-2 text-sm text-slate-200 transition-colors hover:bg-white/[0.06]"
-                    >
-                      Billing
-                    </Link>
-                    <Link
-                      to="/usage"
-                      onClick={() => setMenuOpen(false)}
-                      className="block rounded-xl px-3 py-2 text-sm text-slate-200 transition-colors hover:bg-white/[0.06]"
-                    >
-                      Usage
-                    </Link>
-                    <Link
-                      to="/settings"
-                      onClick={() => setMenuOpen(false)}
-                      className="block rounded-xl px-3 py-2 text-sm text-slate-200 transition-colors hover:bg-white/[0.06]"
-                    >
-                      Settings
-                    </Link>
-                    {account.user.role === "admin" && (
-                      <Link
-                        to="/admin"
-                        onClick={() => setMenuOpen(false)}
-                        className="block rounded-xl px-3 py-2 text-sm text-slate-200 transition-colors hover:bg-white/[0.06]"
-                      >
-                        Admin
-                      </Link>
-                    )}
-                    <button
-                      type="button"
-                      onClick={handleSignOut}
-                      className="mt-0.5 block w-full rounded-xl px-3 py-2 text-left text-sm text-red-400 transition-colors hover:bg-red-500/10"
-                    >
-                      Sign out
-                    </button>
-                  </div>
-                </>
+              {accountOpen && (
+                <div className="account-menu">
+                  <p className="truncate border-b border-white/[0.08] px-3 py-2.5 text-xs text-slate-400">{account.user.email}</p>
+                  <p className="px-3 py-2 text-xs text-slate-500">{account.usage.plan === "free" ? `${account.usage.daily_free_downloads_remaining ?? 0} download(s) remaining today` : `${account.usage.credits_remaining ?? 0} credit(s) remaining`}</p>
+                  <Link to="/dashboard" onClick={() => setAccountOpen(false)}>Dashboard</Link>
+                  <Link to="/account" onClick={() => setAccountOpen(false)}>Account</Link>
+                  <button type="button" onClick={handleSignOut}>Sign out</button>
+                </div>
               )}
             </div>
           ) : (
-            <div className="flex items-center gap-2">
-              <Link to="/login" className="rounded-full px-3.5 py-2 text-sm font-medium text-slate-300 transition-colors hover:text-slate-100">
-                Sign in
-              </Link>
-              <Link to="/signup" className="btn-gradient !px-4 !py-2 text-sm">
-                Get started
-              </Link>
+            <div className="hidden items-center gap-2 sm:flex">
+              <Link to="/login" className="nav-pill">Sign in</Link>
+              <Link to="/signup" className="btn-gradient !px-5 !py-2.5">Get started</Link>
             </div>
           )}
-
-          <button
-            type="button"
-            onClick={() => setMobileNavOpen((v) => !v)}
-            aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
-            aria-expanded={mobileNavOpen}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-slate-200 backdrop-blur-xl transition-colors hover:border-white/20 hover:bg-white/[0.07] lg:hidden"
-          >
-            <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
-              {mobileNavOpen ? <path d="M6 6l12 12M18 6 6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
-            </svg>
+          <button type="button" className="menu-button lg:hidden" onClick={() => setMobileOpen((v) => !v)} aria-expanded={mobileOpen} aria-label={mobileOpen ? "Close navigation" : "Open navigation"}>
+            {mobileOpen ? <span className="text-xl leading-none">×</span> : <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>}
           </button>
         </div>
       </div>
 
-      {mobileNavOpen && (
-        <div className="border-t border-white/10 px-4 pb-4 pt-2 lg:hidden">
-          <nav className="flex flex-col gap-1">
-            {account ? (
-              <>
-                <NavLink to="/dashboard" className={mobileNavClass} onClick={() => setMobileNavOpen(false)}>
-                  Download
-                </NavLink>
-                <NavLink to="/history" className={mobileNavClass} onClick={() => setMobileNavOpen(false)}>
-                  My Downloads
-                </NavLink>
-                <NavLink to="/pricing" className={mobileNavClass} onClick={() => setMobileNavOpen(false)}>
-                  Pricing
-                </NavLink>
-                <div className="my-1 border-t border-white/10" />
-                <NavLink to="/account" className={mobileNavClass} onClick={() => setMobileNavOpen(false)}>
-                  Account
-                </NavLink>
-                <NavLink to="/billing" className={mobileNavClass} onClick={() => setMobileNavOpen(false)}>
-                  Billing
-                </NavLink>
-                <NavLink to="/settings" className={mobileNavClass} onClick={() => setMobileNavOpen(false)}>
-                  Settings
-                </NavLink>
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  className="mt-1 block rounded-xl px-3 py-2.5 text-left text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10"
-                >
-                  Sign out
-                </button>
-              </>
-            ) : (
-              <>
-                <NavLink to="/" end className={mobileNavClass} onClick={() => setMobileNavOpen(false)}>
-                  Home
-                </NavLink>
-                <NavLink to="/pricing" className={mobileNavClass} onClick={() => setMobileNavOpen(false)}>
-                  Pricing
-                </NavLink>
-                <Link to="/#features" className={mobileNavClass({ isActive: false })} onClick={() => setMobileNavOpen(false)}>
-                  Features
-                </Link>
-                <Link to="/#how-it-works" className={mobileNavClass({ isActive: false })} onClick={() => setMobileNavOpen(false)}>
-                  How it works
-                </Link>
-              </>
-            )}
+      {mobileOpen && (
+        <div className="mobile-menu lg:hidden">
+          <nav className="flex flex-col gap-1" aria-label="Mobile navigation">
+            {account ? <>
+              <NavLink to="/dashboard" className={mobileClass} onClick={closeMobile}>Download</NavLink>
+              <NavLink to="/history" className={mobileClass} onClick={closeMobile}>My downloads</NavLink>
+              <NavLink to="/account" className={mobileClass} onClick={closeMobile}>Account</NavLink>
+              <NavLink to="/settings" className={mobileClass} onClick={closeMobile}>Settings</NavLink>
+              <NavLink to="/billing" className={mobileClass} onClick={closeMobile}>Billing</NavLink>
+              <button type="button" onClick={handleSignOut} className="mobile-nav-link text-left text-red-300">Sign out</button>
+            </> : <>
+              <Link to="/#features" className="mobile-nav-link" onClick={closeMobile}>Features</Link>
+              <Link to="/#how-it-works" className="mobile-nav-link" onClick={closeMobile}>How it works</Link>
+              <NavLink to="/pricing" className={mobileClass} onClick={closeMobile}>Pricing</NavLink>
+              <NavLink to="/login" className={mobileClass} onClick={closeMobile}>Sign in</NavLink>
+              <Link to="/signup" className="btn-gradient mt-2 w-full" onClick={closeMobile}>Get started</Link>
+            </>}
           </nav>
         </div>
       )}

@@ -44,4 +44,4 @@ export const wideShell = `${pageShell} max-w-6xl`;
  * Sidebar rather than centered in whatever empty canvas is left over.
  */
 export const appPageShell =
-  "relative z-10 mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 py-8 sm:px-8 lg:px-10 lg:py-10";
+  "app-page relative z-10 mx-auto flex w-full max-w-5xl flex-col gap-6 px-5 py-8 sm:px-8 lg:px-10 lg:py-10";

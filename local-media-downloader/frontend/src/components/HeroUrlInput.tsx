@@ -52,10 +52,10 @@ export default function HeroUrlInput() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="mx-auto w-full max-w-2xl">
+    <form onSubmit={handleSubmit} className="mx-auto w-full max-w-3xl">
       <div
-        className={`glass-panel gradient-border flex flex-col gap-3 p-3 transition-all duration-300 sm:flex-row sm:items-center ${
-          focused ? "shadow-glow-lg ring-1 ring-brand-purple/40" : ""
+        className={`url-console flex flex-col gap-3 p-2.5 transition-all duration-300 sm:flex-row sm:items-center ${
+          focused ? "url-console-focused" : ""
         }`}
       >
         <div className="flex flex-1 items-center gap-2 px-2">
@@ -93,18 +93,18 @@ export default function HeroUrlInput() {
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
             placeholder="Paste a YouTube, TikTok, Instagram or Facebook link…"
-            className="w-full bg-transparent py-3 text-base text-slate-100 placeholder:text-slate-400 focus:outline-none"
+            className="w-full bg-transparent py-3.5 text-[15px] text-slate-100 placeholder:text-slate-500 focus:outline-none sm:text-base"
           />
         </div>
         <div className="flex gap-2 px-1 pb-1 sm:pb-0">
           <button
             type="button"
             onClick={handlePaste}
-            className={`btn-glass !px-4 !py-3 text-sm transition-colors ${justPasted ? "!border-brand-aqua/50 !text-brand-aqua" : ""}`}
+            className={`paste-button ${justPasted ? "!border-brand-aqua/50 !text-brand-aqua" : ""}`}
           >
             {justPasted ? "Pasted" : "Paste"}
           </button>
-          <button type="submit" className="btn-gradient flex-1 !px-6 !py-3 text-sm sm:flex-none">
+          <button type="submit" className="btn-gradient flex-1 !px-7 !py-3.5 text-sm sm:flex-none">
             Continue
           </button>
         </div>
