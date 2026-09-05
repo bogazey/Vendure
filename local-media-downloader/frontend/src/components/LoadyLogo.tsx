@@ -1,45 +1,51 @@
 /**
- * Loady's mark: a rounded gradient badge (blue -> purple -> aqua) with an
- * abstract "keep what you flow through" glyph - a downward arrow
- * resolving into a solid bar, standing in for save/keep.
+ * The real Brand Identity #2 Loady logo - the official SVG masters from
+ * design-reference/brand-kit/logos/, served as static files from
+ * frontend/public/assets/brand/ and rendered via <img>, never redrawn or
+ * reconstructed in CSS. Per the kit's logo rules: don't stretch, rotate,
+ * recolor, or alter the gradient/geometry/proportions.
  *
- * No existing "Brand Identity #2" asset file was found anywhere in this
- * repository - this is an original mark built to the confirmed palette
- * and tone (see COMMERCIAL_ARCHITECTURE.md / PR notes). Swap the <svg>
- * markup below for the real asset the moment one is available; nothing
- * else needs to change since every caller just renders <LoadyLogo />.
+ * Two horizontal lockup variants ship in the kit, one per background
+ * ("dark" has near-white wordmark text for our dark UI, "light" has
+ * near-black text for the Settings-selectable light theme) - both are
+ * rendered and toggled with Tailwind's `dark:` variant, which already
+ * tracks the same `.dark`/`.light` class on <html> that src/utils/theme.ts
+ * applies everywhere else in the app.
  */
 interface LoadyLogoProps {
+  /** Height in px. For the icon-only mark this is also the width (it's square). */
   size?: number;
   withWordmark?: boolean;
   className?: string;
 }
 
 export default function LoadyLogo({ size = 32, withWordmark = true, className = "" }: LoadyLogoProps) {
+  if (!withWordmark) {
+    return (
+      <img
+        src="/assets/brand/loady-mark.svg"
+        alt="Loady"
+        width={size}
+        height={size}
+        className={className}
+      />
+    );
+  }
+
   return (
-    <span className={`inline-flex items-center gap-2.5 ${className}`}>
-      <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true">
-        <defs>
-          <linearGradient id="loady-mark-gradient" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#4F7CFF" />
-            <stop offset="55%" stopColor="#9D5CFF" />
-            <stop offset="100%" stopColor="#2DD9E8" />
-          </linearGradient>
-        </defs>
-        <rect width="64" height="64" rx="18" fill="url(#loady-mark-gradient)" />
-        <path
-          d="M32 15v22m0 0-9-9m9 9 9-9"
-          stroke="white"
-          strokeWidth="5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          fill="none"
-        />
-        <rect x="19" y="44" width="26" height="5" rx="2.5" fill="white" />
-      </svg>
-      {withWordmark && (
-        <span className="font-display text-lg font-semibold tracking-tight text-slate-50">Loady</span>
-      )}
+    <span className={`inline-flex items-center ${className}`}>
+      <img
+        src="/assets/brand/loady-horizontal-dark.svg"
+        alt="Loady"
+        style={{ height: size, width: "auto" }}
+        className="hidden dark:block"
+      />
+      <img
+        src="/assets/brand/loady-horizontal-light.svg"
+        alt="Loady"
+        style={{ height: size, width: "auto" }}
+        className="block dark:hidden"
+      />
     </span>
   );
 }

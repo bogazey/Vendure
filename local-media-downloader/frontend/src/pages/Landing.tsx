@@ -79,19 +79,29 @@ export default function Landing() {
   return (
     <div className="relative z-10 flex flex-col">
       <section className="relative mx-auto flex max-w-3xl flex-col items-center gap-6 px-6 pb-14 pt-20 text-center sm:pt-28">
-        {/* A richer, tightly-focused glow just behind the headline/downloader,
-            layered on top of the page-wide aurora for a bit more depth right
-            where the eye lands first - restrained, not neon. */}
+        {/* Layered atmospheric light sources rather than one flat gradient -
+            a centered glow behind the headline/downloader plus two smaller,
+            asymmetric sweeps (blue upper-left, aqua lower-right) for a bit
+            of movement. All restrained: low opacity, heavily blurred,
+            z-indexed behind content, never affecting text contrast. */}
         <div
           aria-hidden="true"
           className="pointer-events-none absolute left-1/2 top-0 -z-10 h-[32rem] w-[52rem] -translate-x-1/2 rounded-full bg-brand-gradient-soft opacity-70 blur-3xl"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -left-24 top-10 -z-10 h-72 w-72 rounded-full bg-brand-radial-1 opacity-60 blur-3xl"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-16 bottom-0 -z-10 h-80 w-80 rounded-full bg-brand-radial-3 opacity-50 blur-3xl"
         />
 
         <span className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-1.5 text-xs font-medium uppercase tracking-[0.14em] text-slate-400 backdrop-blur-xl">
           Personal media, kept simple
         </span>
 
-        <h1 className="font-display text-4xl font-bold leading-[1.05] tracking-tight text-slate-50 sm:text-6xl">
+        <h1 className="font-display text-4xl font-bold leading-[1.05] tracking-tight text-slate-50 sm:text-6xl lg:text-7xl">
           Freedom to keep <span className={gradientText}>what you love.</span>
         </h1>
 

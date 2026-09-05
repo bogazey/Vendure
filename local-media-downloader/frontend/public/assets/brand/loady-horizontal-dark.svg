@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 220">
+<defs>
+<linearGradient id="g1" x1="35" y1="25" x2="220" y2="220" gradientUnits="userSpaceOnUse">
+<stop stop-color="#22D3EE"/><stop offset=".55" stop-color="#3B82F6"/><stop offset="1" stop-color="#8B5CF6"/></linearGradient>
+<linearGradient id="g2" x1="210" y1="40" x2="55" y2="220" gradientUnits="userSpaceOnUse">
+<stop stop-color="#8B5CF6"/><stop offset=".58" stop-color="#3B82F6"/><stop offset="1" stop-color="#22D3EE"/></linearGradient>
+</defs>
+<g transform="translate(10 10) scale(.78)">
+<path d="M56 53c0-14 16-22 27-14l97 70c11 8 11 25 0 33l-97 70c-11 8-27 0-27-14V53z" fill="url(#g1)" opacity=".96"/>
+<path d="M93 37c0-14 16-22 27-14l81 59c11 8 11 25 0 33l-81 59c-11 8-27 0-27-14V37z" fill="url(#g2)" opacity=".82"/>
+</g>
+<text x="210" y="143" font-family="Sora,Arial,sans-serif" font-size="94" font-weight="700" fill="#F4F7FF">Loady</text>
+<text x="500" y="143" font-family="Sora,Arial,sans-serif" font-size="62" font-weight="600" fill="#94A3B8">.cc</text>
+</svg>

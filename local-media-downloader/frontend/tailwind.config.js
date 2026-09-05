@@ -22,23 +22,24 @@ export default {
           500: "var(--color-slate-500)",
           600: "var(--color-slate-600)",
         },
-        // Loady brand gradient stops - blue -> purple -> aqua. Named
-        // "brand" rather than reusing indigo/violet/cyan so every gradient
-        // in the app traces back to one deliberate palette.
+        // Loady Brand Identity #2's official palette - exact hex values from
+        // design-reference/brand-kit/README.md + guidelines PDF +
+        // web/loady-tokens.css (all three agree). "purple" here is the
+        // kit's "Violet" token; named to match the existing blue/purple/aqua
+        // vocabulary used throughout the app's classNames.
         brand: {
-          blue: "#4F7CFF",
-          purple: "#9D5CFF",
-          aqua: "#2DD9E8",
-          blueDeep: "#2F5CE0",
-          purpleDeep: "#7C3AED",
+          blue: "#3B82F6",
+          purple: "#8B5CF6",
+          aqua: "#22D3EE",
         },
       },
       backgroundImage: {
-        "brand-gradient": "linear-gradient(115deg, #4F7CFF 0%, #9D5CFF 55%, #2DD9E8 100%)",
-        "brand-gradient-soft": "linear-gradient(135deg, rgba(79,124,255,0.18) 0%, rgba(157,92,255,0.16) 50%, rgba(45,217,232,0.14) 100%)",
-        "brand-radial-1": "radial-gradient(closest-side, rgba(79,124,255,0.55), transparent)",
-        "brand-radial-2": "radial-gradient(closest-side, rgba(157,92,255,0.5), transparent)",
-        "brand-radial-3": "radial-gradient(closest-side, rgba(45,217,232,0.4), transparent)",
+        // Official primary gradient, verbatim: 135deg, aqua -> blue -> violet.
+        "brand-gradient": "linear-gradient(135deg, #22D3EE 0%, #3B82F6 55%, #8B5CF6 100%)",
+        "brand-gradient-soft": "linear-gradient(135deg, rgba(34,211,238,0.16) 0%, rgba(59,130,246,0.18) 50%, rgba(139,92,246,0.16) 100%)",
+        "brand-radial-1": "radial-gradient(closest-side, rgba(59,130,246,0.5), transparent)",
+        "brand-radial-2": "radial-gradient(closest-side, rgba(139,92,246,0.45), transparent)",
+        "brand-radial-3": "radial-gradient(closest-side, rgba(34,211,238,0.38), transparent)",
       },
       boxShadow: {
         // "glow"/"glow-lg" are used directly as `shadow-glow`/`shadow-glow-lg`
@@ -46,12 +47,15 @@ export default {
         // The equivalent glass-panel/btn-gradient shadows are hardcoded as
         // plain CSS in index.css instead of a custom key applied via
         // `@apply` - see the comments there for why.
-        glow: "0 0 0 1px rgba(157,92,255,0.15), 0 8px 30px -6px rgba(79,124,255,0.35), 0 2px 12px -2px rgba(45,217,232,0.2)",
-        "glow-lg": "0 0 0 1px rgba(157,92,255,0.18), 0 20px 60px -12px rgba(79,124,255,0.45), 0 8px 30px -8px rgba(157,92,255,0.3)",
+        glow: "0 0 0 1px rgba(139,92,246,0.15), 0 8px 30px -6px rgba(59,130,246,0.35), 0 2px 12px -2px rgba(34,211,238,0.2)",
+        "glow-lg": "0 0 0 1px rgba(139,92,246,0.18), 0 20px 60px -12px rgba(59,130,246,0.45), 0 8px 30px -8px rgba(139,92,246,0.3)",
       },
       fontFamily: {
-        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
-        display: ["\"Space Grotesk\"", "Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        // Sora is Brand Identity #2's official typeface (both headings and
+        // body, per the guidelines PDF's weight table); Inter/system-ui are
+        // the kit's own specified fallback, not a deliberate second voice.
+        sans: ["Sora", "Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["Sora", "Inter", "ui-sans-serif", "system-ui", "sans-serif"],
       },
       animation: {
         "aurora-drift-1": "auroraDrift1 26s ease-in-out infinite",
