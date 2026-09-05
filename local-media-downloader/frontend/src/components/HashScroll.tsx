@@ -1,15 +1,18 @@
 import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 
-/** Scrolls routed hash links after their destination view has mounted. */
+/** Restores route scroll position after the destination view has mounted. */
 export default function HashScroll() {
   const { hash, pathname } = useLocation();
 
   useEffect(() => {
-    if (!hash) return;
-
-    const id = decodeURIComponent(hash.slice(1));
     const frame = window.requestAnimationFrame(() => {
+      if (!hash) {
+        window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+        return;
+      }
+
+      const id = decodeURIComponent(hash.slice(1));
       const target = document.getElementById(id);
       if (!target) return;
 
