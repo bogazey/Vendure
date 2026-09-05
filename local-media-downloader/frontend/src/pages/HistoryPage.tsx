@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import AdSlot from "../components/AdSlot";
 import ErrorBanner from "../components/ErrorBanner";
 import { ApiError, api } from "../services/api";
+import { appPageShell } from "../styles/ui";
 import type { HistoryRecordOut, Platform } from "../types/api";
 import { formatBytes, formatDate } from "../utils/format";
 import { PLATFORM_LABELS } from "../utils/platform";
@@ -59,8 +61,16 @@ export default function HistoryPage() {
     }
   };
 
+  const filtersActive = !!(search || platform || status);
+
+  const clearFilters = () => {
+    setSearch("");
+    setPlatform("");
+    setStatus("");
+  };
+
   return (
-    <div className="relative z-10 mx-auto flex max-w-5xl flex-col gap-6 px-6 py-10">
+    <div className={appPageShell}>
       <div className="flex items-center justify-between">
         <h1 className="font-display text-xl font-bold text-slate-50">Download History</h1>
         <button
@@ -136,15 +146,61 @@ export default function HistoryPage() {
       </div>
 
       <div className="flex flex-col gap-2">
-        {records.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-8 text-center text-sm text-slate-500 backdrop-blur-xl">
-            No history records match your filters.
-          </div>
-        )}
+        {records.length === 0 &&
+          (filtersActive ? (
+            <FilteredEmptyState onClearFilters={clearFilters} />
+          ) : (
+            <NoDownloadsEmptyState />
+          ))}
         {records.map((record) => (
           <HistoryRow key={record.id} record={record} onDelete={handleDelete} onRetry={handleRetry} />
         ))}
       </div>
+    </div>
+  );
+}
+
+function NoDownloadsEmptyState() {
+  return (
+    <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.015] px-8 py-14 text-center">
+      <span className="flex h-14 w-14 items-center justify-center rounded-2xl border border-brand-blue/25 bg-brand-blue/10 text-brand-blue">
+        <svg viewBox="0 0 24 24" width={26} height={26} fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 4v11" />
+          <path d="m7 11 5 5 5-5" />
+          <path d="M5 19h14" />
+        </svg>
+      </span>
+      <div className="flex flex-col gap-1.5">
+        <h3 className="font-display text-base font-semibold text-slate-100">Nothing here yet</h3>
+        <p className="max-w-xs text-sm text-slate-400">
+          Everything you save from YouTube, TikTok, Instagram, or Facebook will show up here.
+        </p>
+      </div>
+      <Link to="/dashboard" className="btn-gradient !px-4 !py-2 text-sm">
+        Download something
+      </Link>
+    </div>
+  );
+}
+
+function FilteredEmptyState({ onClearFilters }: { onClearFilters: () => void }) {
+  return (
+    <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.015] px-8 py-14 text-center">
+      <span className="flex h-14 w-14 items-center justify-center rounded-2xl border border-brand-purple/25 bg-brand-purple/10 text-brand-purple">
+        <svg viewBox="0 0 24 24" width={26} height={26} fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="6.5" />
+          <path d="m20 20-3.2-3.2" />
+        </svg>
+      </span>
+      <div className="flex flex-col gap-1.5">
+        <h3 className="font-display text-base font-semibold text-slate-100">No matches for these filters</h3>
+        <p className="max-w-xs text-sm text-slate-400">
+          Nothing in your download history matches the current search or filters.
+        </p>
+      </div>
+      <button type="button" onClick={onClearFilters} className="btn-glass !px-4 !py-2 text-sm">
+        Clear filters
+      </button>
     </div>
   );
 }

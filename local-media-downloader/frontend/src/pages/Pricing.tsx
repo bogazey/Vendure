@@ -154,8 +154,10 @@ export default function Pricing() {
           return (
             <div
               key={row.plan}
-              className={`glass-panel-raised relative flex flex-col gap-5 p-6 transition-transform duration-200 ${
-                isRecommended ? "gradient-border shadow-glow-lg md:-translate-y-3" : ""
+              className={`relative flex flex-col gap-5 rounded-2xl p-6 transition-transform duration-200 ${
+                isRecommended
+                  ? "gradient-border border border-transparent bg-white/[0.035] shadow-glow md:-translate-y-2"
+                  : "border border-white/[0.08] bg-white/[0.02] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]"
               }`}
             >
               {isRecommended && (

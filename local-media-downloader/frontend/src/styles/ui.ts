@@ -36,3 +36,12 @@ export const pageShell = "relative z-10 mx-auto flex w-full flex-col gap-8 px-6 
 export const narrowShell = `${pageShell} max-w-lg`;
 export const mediumShell = `${pageShell} max-w-3xl`;
 export const wideShell = `${pageShell} max-w-6xl`;
+
+/**
+ * One shared container for every authenticated app-shell page (Dashboard,
+ * My Downloads, Account, Settings, Billing) - a single consistent
+ * max-width/gutter so content reads as deliberately positioned next to the
+ * Sidebar rather than centered in whatever empty canvas is left over.
+ */
+export const appPageShell =
+  "relative z-10 mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 py-8 sm:px-8 lg:px-10 lg:py-10";

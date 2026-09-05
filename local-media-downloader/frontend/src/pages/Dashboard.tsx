@@ -9,6 +9,7 @@ import UrlInput from "../components/UrlInput";
 import { useDownloadProgress } from "../hooks/useDownloadProgress";
 import { track } from "../lib/analytics";
 import { ApiError, api } from "../services/api";
+import { appPageShell } from "../styles/ui";
 import type { AnalyzeResponse, CreateDownloadRequest, DownloadStage } from "../types/api";
 
 const UPGRADE_ERROR_CODES = new Set(["PLAN_LIMIT_REACHED", "DAILY_LIMIT_REACHED", "FEATURE_NOT_INCLUDED", "UPGRADE_REQUIRED"]);
@@ -97,7 +98,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="relative z-10 mx-auto flex max-w-3xl flex-col gap-8 px-6 py-10">
+    <div className={appPageShell}>
       <div className="flex flex-col gap-3 text-center">
         <h1 className="font-display text-2xl font-bold tracking-tight text-slate-50">Download media from a URL</h1>
         <p className="text-sm text-slate-400">

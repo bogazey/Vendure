@@ -88,7 +88,7 @@ function AppShell() {
       <div className="relative z-10 flex min-h-screen">
         {showSidebar && <Sidebar />}
         <div className="flex min-h-screen flex-1 flex-col">
-          <Header health={health} healthError={healthError} showNav={!showSidebar} />
+          <Header health={health} healthError={healthError} appShell={showSidebar} />
           <div className="flex flex-1 flex-col">
             <Routes>
               <Route path="/" element={<Landing />} />

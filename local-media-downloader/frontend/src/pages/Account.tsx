@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import ErrorBanner from "../components/ErrorBanner";
 import { useAuth } from "../context/AuthContext";
 import { ApiError, api } from "../services/api";
-import { brandLink } from "../styles/ui";
+import { appPageShell, brandLink } from "../styles/ui";
 import { PLAN_LABELS } from "../types/commercial";
 
 export default function Account() {
@@ -29,7 +29,7 @@ export default function Account() {
   };
 
   return (
-    <div className="relative z-10 mx-auto flex max-w-2xl flex-col gap-6 px-6 py-10">
+    <div className={appPageShell}>
       <h1 className="font-display text-xl font-bold text-slate-50">Account</h1>
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}

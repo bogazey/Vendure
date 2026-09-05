@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import ErrorBanner from "../components/ErrorBanner";
 import { ApiError, api } from "../services/api";
+import { appPageShell } from "../styles/ui";
 import type { AppSettings, CookieSource, HealthResponse, Theme } from "../types/api";
 import type { DownloadPreferencesOut } from "../types/commercial";
 import { applyTheme } from "../utils/theme";
@@ -88,7 +89,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="relative z-10 mx-auto flex max-w-3xl flex-col gap-6 px-6 py-10">
+    <div className={appPageShell}>
       <div className="flex items-center justify-between">
         <h1 className="font-display text-xl font-bold text-slate-50">Settings</h1>
         {saveMessage && <span className="text-xs text-emerald-400">{saveMessage}</span>}
@@ -96,6 +97,7 @@ export default function SettingsPage() {
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
+      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6">
       <Section title="General">
         <Field label="Download folder">
           <div className="flex gap-2">
@@ -296,6 +298,7 @@ export default function SettingsPage() {
           />
         </Field>
       </Section>
+      </div>
     </div>
   );
 }

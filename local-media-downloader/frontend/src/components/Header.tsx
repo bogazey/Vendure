@@ -8,9 +8,13 @@ import LoadyLogo from "./LoadyLogo";
 interface HeaderProps {
   health: HealthResponse | null;
   healthError: boolean;
-  /** Hides the desktop center nav pill - used on authenticated app routes
-   * where Sidebar already owns primary navigation, so it isn't duplicated. */
-  showNav?: boolean;
+  /** True on authenticated app routes, where the left Sidebar already owns
+   * branding and primary navigation. Collapses Header into a minimal
+   * utility bar (plan badge + account menu only) at desktop widths, so the
+   * Loady mark isn't shown twice. Sidebar is desktop-only (lg+), so below
+   * that breakpoint Header still shows the logo and its hamburger drawer -
+   * the only navigation available at tablet/mobile widths. */
+  appShell?: boolean;
 }
 
 function StatusDot({ ok }: { ok: boolean }) {
@@ -22,7 +26,7 @@ function StatusDot({ ok }: { ok: boolean }) {
   );
 }
 
-export default function Header({ health, healthError, showNav = true }: HeaderProps) {
+export default function Header({ health, healthError, appShell = false }: HeaderProps) {
   const { account, logout } = useAuth();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -51,12 +55,16 @@ export default function Header({ health, healthError, showNav = true }: HeaderPr
 
   return (
     <header className="glass-nav sticky top-0 z-20">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3">
-        <Link to="/" className="shrink-0">
+      <div
+        className={`mx-auto flex max-w-6xl items-center gap-4 px-6 py-3 ${
+          appShell ? "justify-between lg:justify-end" : "justify-between"
+        }`}
+      >
+        <Link to="/" className={`shrink-0 ${appShell ? "lg:hidden" : ""}`}>
           <LoadyLogo size={30} />
         </Link>
 
-        {showNav && (
+        {!appShell && (
           <div className="hidden items-center gap-8 sm:flex">
             {account ? (
               <>
@@ -192,7 +200,9 @@ export default function Header({ health, healthError, showNav = true }: HeaderPr
             onClick={() => setMobileNavOpen((v) => !v)}
             aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
             aria-expanded={mobileNavOpen}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-slate-200 backdrop-blur-xl transition-colors hover:border-white/20 hover:bg-white/[0.07] sm:hidden"
+            className={`flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-slate-200 backdrop-blur-xl transition-colors hover:border-white/20 hover:bg-white/[0.07] ${
+              appShell ? "lg:hidden" : "sm:hidden"
+            }`}
           >
             <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
               {mobileNavOpen ? <path d="M6 6l12 12M18 6 6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
@@ -202,12 +212,12 @@ export default function Header({ health, healthError, showNav = true }: HeaderPr
       </div>
 
       {mobileNavOpen && (
-        <div className="border-t border-white/10 px-4 pb-4 pt-2 sm:hidden">
+        <div className={`border-t border-white/10 px-4 pb-4 pt-2 ${appShell ? "lg:hidden" : "sm:hidden"}`}>
           <nav className="flex flex-col gap-1">
             {account ? (
               <>
                 <NavLink to="/dashboard" className={mobileNavClass} onClick={() => setMobileNavOpen(false)}>
-                  Downloader
+                  Download
                 </NavLink>
                 <NavLink to="/history" className={mobileNavClass} onClick={() => setMobileNavOpen(false)}>
                   My Downloads
