@@ -61,7 +61,12 @@ export default function Login() {
         </label>
 
         <label className="flex flex-col gap-1.5 text-sm">
-          <span className="text-slate-400">Password</span>
+          <div className="flex items-center justify-between">
+            <span className="text-slate-400">Password</span>
+            <Link to="/forgot-password" className="text-xs text-brand-aqua transition-colors hover:text-brand-blue">
+              Forgot password?
+            </Link>
+          </div>
           <input
             type="password"
             required
@@ -76,14 +81,16 @@ export default function Login() {
           {submitting ? "Signing in…" : "Sign in"}
         </button>
 
-        <div className="flex items-center justify-between text-xs text-slate-500">
-          <Link to="/forgot-password" className="hover:text-slate-300">
-            Forgot password?
+        <p className="text-center text-xs text-slate-500">
+          Don't have an account?{" "}
+          <Link
+            to="/signup"
+            state={initialUrl ? { initialUrl } : undefined}
+            className="text-brand-aqua transition-colors hover:text-brand-blue"
+          >
+            Create one
           </Link>
-          <Link to="/signup" state={initialUrl ? { initialUrl } : undefined} className="hover:text-slate-300">
-            Create an account
-          </Link>
-        </div>
+        </p>
       </form>
     </div>
   );

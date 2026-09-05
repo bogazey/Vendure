@@ -8,6 +8,9 @@ import LoadyLogo from "./LoadyLogo";
 interface HeaderProps {
   health: HealthResponse | null;
   healthError: boolean;
+  /** Hides the desktop center nav pill - used on authenticated app routes
+   * where Sidebar already owns primary navigation, so it isn't duplicated. */
+  showNav?: boolean;
 }
 
 function StatusDot({ ok }: { ok: boolean }) {
@@ -19,7 +22,7 @@ function StatusDot({ ok }: { ok: boolean }) {
   );
 }
 
-export default function Header({ health, healthError }: HeaderProps) {
+export default function Header({ health, healthError, showNav = true }: HeaderProps) {
   const { account, logout } = useAuth();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -27,9 +30,11 @@ export default function Header({ health, healthError }: HeaderProps) {
   const backendOk = !!health && health.status === "ok";
   const ffmpegOk = !!health?.ffmpeg_available;
 
+  // Plain text links with an active underline, not a pill/capsule - matches
+  // the master reference's minimal top nav treatment.
   const navClass = ({ isActive }: { isActive: boolean }) =>
-    `rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
-      isActive ? "bg-white/10 text-slate-50" : "text-slate-400 hover:text-slate-100"
+    `border-b-2 px-1 pb-0.5 text-sm font-medium transition-colors ${
+      isActive ? "border-brand-blue text-slate-50" : "border-transparent text-slate-400 hover:text-slate-100"
     }`;
 
   const mobileNavClass = ({ isActive }: { isActive: boolean }) =>
@@ -51,30 +56,32 @@ export default function Header({ health, healthError }: HeaderProps) {
           <LoadyLogo size={30} />
         </Link>
 
-        <div className="hidden items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] p-1 backdrop-blur-xl sm:flex">
-          {account ? (
-            <>
-              <NavLink to="/dashboard" className={navClass}>
-                Downloader
-              </NavLink>
-              <NavLink to="/history" className={navClass}>
-                My Downloads
-              </NavLink>
-              <NavLink to="/pricing" className={navClass}>
-                Pricing
-              </NavLink>
-            </>
-          ) : (
-            <>
-              <NavLink to="/" end className={navClass}>
-                Home
-              </NavLink>
-              <NavLink to="/pricing" className={navClass}>
-                Pricing
-              </NavLink>
-            </>
-          )}
-        </div>
+        {showNav && (
+          <div className="hidden items-center gap-8 sm:flex">
+            {account ? (
+              <>
+                <NavLink to="/dashboard" className={navClass}>
+                  Download
+                </NavLink>
+                <NavLink to="/history" className={navClass}>
+                  My Downloads
+                </NavLink>
+                <NavLink to="/pricing" className={navClass}>
+                  Pricing
+                </NavLink>
+              </>
+            ) : (
+              <>
+                <NavLink to="/" end className={navClass}>
+                  Home
+                </NavLink>
+                <NavLink to="/pricing" className={navClass}>
+                  Pricing
+                </NavLink>
+              </>
+            )}
+          </div>
+        )}
 
         <div className="flex items-center gap-3">
           {/* Server-health details are for operators, not marketing-page

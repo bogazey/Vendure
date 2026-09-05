@@ -110,7 +110,9 @@ export default function Pricing() {
   return (
     <div className="relative z-10 mx-auto flex max-w-5xl flex-col gap-10 px-6 py-14">
       <div className="flex flex-col items-center gap-3 text-center">
-        <h1 className="font-display text-3xl font-bold tracking-tight text-slate-50">Simple, transparent pricing</h1>
+        <h1 className="font-display text-4xl font-bold tracking-tight text-slate-50 sm:text-5xl">
+          Simple, transparent pricing
+        </h1>
         <p className="max-w-xl text-sm text-slate-400">
           Start free. Upgrade when you need higher quality, more downloads, or creator tools.
         </p>
@@ -152,12 +154,12 @@ export default function Pricing() {
           return (
             <div
               key={row.plan}
-              className={`glass-panel-raised relative flex flex-col gap-5 p-6 ${
-                isRecommended ? "gradient-border shadow-glow-lg" : ""
+              className={`glass-panel-raised relative flex flex-col gap-5 p-6 transition-transform duration-200 ${
+                isRecommended ? "gradient-border shadow-glow-lg md:-translate-y-3" : ""
               }`}
             >
               {isRecommended && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-brand-gradient px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white shadow-glow">
+                <span className="absolute -top-3 right-6 rounded-full bg-brand-gradient px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white shadow-glow">
                   Most popular
                 </span>
               )}
@@ -171,6 +173,7 @@ export default function Pricing() {
                   <span className="text-sm text-slate-500">/{period === "monthly" ? "mo" : "yr"}</span>
                 )}
               </div>
+              <div className="border-t border-white/[0.08]" />
               <ul className="flex flex-1 flex-col gap-2 text-sm text-slate-300">
                 {row.features.map((f) => (
                   <li key={f} className="flex items-start gap-2">

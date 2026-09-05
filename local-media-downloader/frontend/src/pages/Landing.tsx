@@ -4,6 +4,27 @@ import HeroUrlInput from "../components/HeroUrlInput";
 import { useAuth } from "../context/AuthContext";
 import { gradientText, secondaryButton } from "../styles/ui";
 
+/**
+ * Decorative floating tiles gesturing at "multi-platform support" around
+ * the hero, per the master reference's composition. Deliberately abstract
+ * (a generic play/note/aperture/chat glyph in each platform's brand-ish
+ * color) rather than the real YouTube/TikTok/Instagram/Facebook marks -
+ * tasteful and secondary, never implying affiliation with those platforms.
+ */
+function PlatformTile({ className, children }: { className: string; children: ReactNode }) {
+  return (
+    <div
+      aria-hidden="true"
+      className={`absolute hidden h-14 w-14 rotate-6 items-center justify-center rounded-2xl shadow-lg lg:flex ${className}`}
+      style={{ boxShadow: "0 12px 30px -8px rgba(0,0,0,0.6)" }}
+    >
+      <svg viewBox="0 0 24 24" width={22} height={22} fill="white" stroke="none">
+        {children}
+      </svg>
+    </div>
+  );
+}
+
 const ICON_TINTS = {
   blue: "border-brand-blue/25 bg-brand-blue/10 text-brand-blue",
   purple: "border-brand-purple/25 bg-brand-purple/10 text-brand-purple",
@@ -96,6 +117,26 @@ export default function Landing() {
           aria-hidden="true"
           className="pointer-events-none absolute -right-16 bottom-0 -z-10 h-80 w-80 rounded-full bg-brand-radial-3 opacity-50 blur-3xl"
         />
+        {/* A sharper diagonal beam, layered over the soft blurred glows above
+            for a bit of the reference's "light cutting through darkness"
+            quality rather than only diffuse blobs. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-10 top-0 -z-10 h-[36rem] w-40 origin-top-right rotate-[24deg] bg-gradient-to-b from-brand-aqua/25 via-brand-blue/10 to-transparent blur-2xl"
+        />
+
+        <PlatformTile className="-left-8 top-16 bg-red-500/90">
+          <path d="M8 6.5v11l9-5.5-9-5.5Z" />
+        </PlatformTile>
+        <PlatformTile className="-right-6 top-24 bg-gradient-to-br from-amber-400 via-pink-500 to-purple-600">
+          <circle cx="12" cy="12" r="5.5" />
+        </PlatformTile>
+        <PlatformTile className="-left-4 bottom-24 bg-neutral-900 ring-1 ring-white/20">
+          <path d="M14 6c0 2.2 1.8 4 4 4v3a7 7 0 0 1-4-1.3V16a5 5 0 1 1-5-5c.3 0 .7 0 1 .1v3a2 2 0 1 0 1 1.8V4h3Z" />
+        </PlatformTile>
+        <PlatformTile className="-right-10 bottom-8 bg-blue-600">
+          <path d="M12 5a7 7 0 0 0-1 13.9V15h-2v-3h2v-1.5c0-2 1.2-3.1 3-3.1.9 0 1.7.1 2 .1v2.3h-1.3c-1 0-1.2.5-1.2 1.1V12h2.4l-.3 3H14.5v3.9A7 7 0 0 0 12 5Z" />
+        </PlatformTile>
 
         <span className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-1.5 text-xs font-medium uppercase tracking-[0.14em] text-slate-400 backdrop-blur-xl">
           Personal media, kept simple
@@ -127,7 +168,7 @@ export default function Landing() {
         {FEATURES.map((f) => (
           <div
             key={f.title}
-            className="glass-panel-raised flex flex-col gap-3 p-5 transition-all duration-200 hover:-translate-y-1 hover:border-white/20 hover:shadow-glow-lg"
+            className="flex flex-col gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.015] p-5 transition-all duration-200 hover:-translate-y-1 hover:border-white/20 hover:bg-white/[0.03] hover:shadow-glow-lg"
           >
             {f.icon}
             <h3 className="font-display text-base font-semibold tracking-tight text-slate-50">{f.title}</h3>
@@ -138,7 +179,7 @@ export default function Landing() {
 
       <section className="px-6 py-14">
         <div className="mx-auto flex max-w-4xl flex-col gap-10">
-          <h2 className="text-center font-display text-xl font-semibold text-slate-50">How it works</h2>
+          <h2 className="text-center font-display text-3xl font-bold text-slate-50 sm:text-4xl">How it works</h2>
 
           <div className="relative grid gap-10 sm:grid-cols-3 sm:gap-6">
             {/* Connecting path: a horizontal gradient line through the three
@@ -161,7 +202,7 @@ export default function Landing() {
       </section>
 
       <section className="mx-auto flex max-w-3xl flex-col items-center gap-4 px-6 pb-20 pt-6 text-center">
-        <h2 className="font-display text-2xl font-semibold text-slate-50">Ready to try it?</h2>
+        <h2 className="font-display text-3xl font-bold text-slate-50 sm:text-4xl">Ready to try it?</h2>
         <p className="text-sm text-slate-300">Free forever for light use. Upgrade any time.</p>
         <Link to={account ? "/dashboard" : "/signup"} className="btn-gradient">
           {account ? "Go to Downloader" : "Create your free account"}

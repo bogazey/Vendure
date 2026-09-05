@@ -77,10 +77,13 @@ export default function Footer() {
         </FooterColumn>
       </div>
 
-      <p className="mx-auto mt-8 max-w-2xl text-center text-xs text-slate-500">
-        Loady is a personal media utility for content you own or are otherwise authorized to access and download. It
-        is not intended to bypass copy protection, DRM, or paywalls. &copy; {new Date().getFullYear()} Loady.
-      </p>
+      <div className="mx-auto mt-8 flex max-w-4xl flex-col items-center gap-1 text-center text-xs text-slate-500">
+        <p className="max-w-2xl">
+          Loady is a personal media utility for content you own or are otherwise authorized to access and download.
+          It is not intended to bypass copy protection, DRM, or paywalls.
+        </p>
+        <p>&copy; {new Date().getFullYear()} Loady. Not affiliated with YouTube, TikTok, Instagram, or Facebook.</p>
+      </div>
     </footer>
   );
 }
