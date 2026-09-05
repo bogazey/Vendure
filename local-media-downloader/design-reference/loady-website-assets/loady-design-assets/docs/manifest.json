@@ -1,0 +1,42 @@
+{
+  "brand": [
+    "official assets to be supplied"
+  ],
+  "backgrounds": [
+    "hero-cinematic-wave.svg",
+    "section-wave-left.svg",
+    "section-wave-right.svg"
+  ],
+  "textures": [
+    "subtle-grid.svg",
+    "noise-overlay.svg"
+  ],
+  "hero_media_tiles": [
+    "video-tile.svg",
+    "audio-tile.svg",
+    "image-tile.svg",
+    "link-tile.svg"
+  ],
+  "feature_icons": [
+    "save.svg",
+    "convert.svg",
+    "organize.svg",
+    "process.svg"
+  ],
+  "step_icons": [
+    "paste.svg",
+    "pick.svg",
+    "keep.svg"
+  ],
+  "social_icons": [
+    "youtube.svg",
+    "tiktok.svg",
+    "instagram.svg",
+    "facebook.svg",
+    "x.svg"
+  ],
+  "pricing": [
+    "pro-glow.svg",
+    "most-popular-badge.svg"
+  ]
+}
