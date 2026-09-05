@@ -1,23 +1,31 @@
-"""Minimal admin surface: view/search users, inspect plan+usage+billing
-state, grant credits, enable/disable accounts. All routes require the
-`admin` role (see api/deps.require_admin) - never trust a frontend-only
-"isAdmin" flag.
+"""Admin surface: overview metrics, user search/detail/credit-grants/status,
+Paddle billing-event visibility, and the admin action audit log. All routes
+require the `admin` role (see api/deps.require_admin) - never trust a
+frontend-only "isAdmin" flag.
 """
 from __future__ import annotations
+
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, require_admin
-from app.database.commercial_models import BillingEvent, User
+from app.database.commercial_models import AdminActionLog, BillingEvent, Subscription, UsagePeriod, User
+from app.models.commercial_enums import AdminActionType, Plan, UserStatus
 from app.models.commercial_schemas import (
+    AdminActionLogOut,
+    AdminBillingEventOut,
     AdminGrantCreditsRequest,
+    AdminOverviewOut,
     AdminSetAccountStatusRequest,
     AdminUserListOut,
     AdminUserOut,
 )
-from app.services.account_service import account_service
+from app.services.account_service import ACTIVE_SUBSCRIPTION_STATUSES, account_service
+from app.services.admin_audit_service import admin_audit_service
+from app.services.plan_policy import get_policy
 from app.services.usage_service import usage_service
 from app.utils.exceptions import ForbiddenError, UnavailableMediaError
 
@@ -27,6 +35,10 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 def _to_admin_user_out(session: Session, user: User) -> AdminUserOut:
     plan, subscription = account_service.get_current_plan(session, user.id)
     usage = usage_service.get_usage_out(session, user, plan, subscription)
+    plan_base_credits = get_policy(plan).monthly_credits
+    credits_bonus = None
+    if usage.credits_included is not None and plan_base_credits is not None:
+        credits_bonus = max(0, usage.credits_included - plan_base_credits)
     return AdminUserOut(
         id=user.id,
         email=user.email,
@@ -36,7 +48,118 @@ def _to_admin_user_out(session: Session, user: User) -> AdminUserOut:
         subscription_status=subscription.status if subscription else "none",
         credits_used=usage.credits_used,
         credits_included=usage.credits_included,
+        credits_bonus=credits_bonus,
         created_at=user.created_at,
+    )
+
+
+def _emails_by_id(session: Session, user_ids: set[str]) -> dict[str, str]:
+    ids = [uid for uid in user_ids if uid]
+    if not ids:
+        return {}
+    rows = session.execute(select(User.id, User.email).where(User.id.in_(ids))).all()
+    return {row[0]: row[1] for row in rows}
+
+
+def _to_billing_event_out_list(session: Session, events: list[BillingEvent]) -> list[AdminBillingEventOut]:
+    emails = _emails_by_id(session, {e.user_id for e in events if e.user_id})
+    return [
+        AdminBillingEventOut(
+            provider_event_id=e.provider_event_id,
+            event_type=e.event_type,
+            processed_at=e.processed_at,
+            status=e.status,
+            user_id=e.user_id,
+            user_email=emails.get(e.user_id) if e.user_id else None,
+        )
+        for e in events
+    ]
+
+
+def _to_admin_action_log_out_list(session: Session, entries: list[AdminActionLog]) -> list[AdminActionLogOut]:
+    ids: set[str] = set()
+    for entry in entries:
+        ids.add(entry.admin_id)
+        if entry.target_user_id:
+            ids.add(entry.target_user_id)
+    emails = _emails_by_id(session, ids)
+    return [
+        AdminActionLogOut(
+            id=entry.id,
+            admin_id=entry.admin_id,
+            admin_email=emails.get(entry.admin_id),
+            action=entry.action,
+            target_user_id=entry.target_user_id,
+            target_email=emails.get(entry.target_user_id) if entry.target_user_id else None,
+            details=entry.details,
+            created_at=entry.created_at,
+        )
+        for entry in entries
+    ]
+
+
+@router.get("/overview", response_model=AdminOverviewOut, dependencies=[Depends(require_admin)])
+async def get_overview(db: Session = Depends(get_db)) -> AdminOverviewOut:
+    total_users = db.execute(select(func.count()).select_from(User)).scalar_one()
+    active_users = db.execute(
+        select(func.count()).select_from(User).where(User.status == UserStatus.ACTIVE.value)
+    ).scalar_one()
+
+    # Plan breakdown: for each user_id with a currently-active-ish
+    # subscription, take only their most-recently-updated such row (a user
+    # should have at most one, but this stays correct even if not) via a
+    # subquery-join rather than a window function, so it runs unchanged on
+    # both SQLite (dev) and PostgreSQL (production).
+    latest_active_sub = (
+        select(Subscription.user_id, func.max(Subscription.updated_at).label("max_updated"))
+        .where(Subscription.status.in_(ACTIVE_SUBSCRIPTION_STATUSES))
+        .group_by(Subscription.user_id)
+        .subquery()
+    )
+    plan_rows = db.execute(
+        select(Subscription.plan, func.count())
+        .select_from(Subscription)
+        .join(
+            latest_active_sub,
+            (Subscription.user_id == latest_active_sub.c.user_id)
+            & (Subscription.updated_at == latest_active_sub.c.max_updated),
+        )
+        .where(Subscription.status.in_(ACTIVE_SUBSCRIPTION_STATUSES))
+        .group_by(Subscription.plan)
+    ).all()
+    plan_counts = {plan: count for plan, count in plan_rows}
+    pro_count = plan_counts.get(Plan.PRO.value, 0)
+    creator_count = plan_counts.get(Plan.CREATOR.value, 0)
+    paid_subscribers = pro_count + creator_count
+    free_count = max(0, total_users - paid_subscribers)
+
+    now = datetime.now(timezone.utc)
+    credits_consumed = db.execute(
+        select(func.coalesce(func.sum(UsagePeriod.credits_used), 0)).where(UsagePeriod.period_end >= now)
+    ).scalar_one()
+
+    failure_rows = list(
+        db.execute(
+            select(BillingEvent)
+            .where(BillingEvent.event_type == "transaction.payment_failed")
+            .order_by(BillingEvent.processed_at.desc())
+            .limit(10)
+        ).scalars()
+    )
+
+    recent_actions = admin_audit_service.list_recent(db, limit=10)
+
+    return AdminOverviewOut(
+        total_users=total_users,
+        active_users=active_users,
+        disabled_users=max(0, total_users - active_users),
+        paid_subscribers=paid_subscribers,
+        free_count=free_count,
+        pro_count=pro_count,
+        creator_count=creator_count,
+        credits_consumed_current_period=int(credits_consumed),
+        recent_billing_failures=_to_billing_event_out_list(db, failure_rows),
+        recent_admin_actions=_to_admin_action_log_out_list(db, recent_actions),
     )
 
 
@@ -68,12 +191,20 @@ async def get_user(user_id: str, db: Session = Depends(get_db)) -> AdminUserOut:
 
 
 @router.post("/users/{user_id}/grant-credits", response_model=AdminUserOut, dependencies=[Depends(require_admin)])
-async def grant_credits(user_id: str, payload: AdminGrantCreditsRequest, db: Session = Depends(get_db)) -> AdminUserOut:
+async def grant_credits(
+    user_id: str,
+    payload: AdminGrantCreditsRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> AdminUserOut:
     user = db.get(User, user_id)
     if user is None:
         raise UnavailableMediaError("User not found.")
     plan, subscription = account_service.get_current_plan(db, user.id)
     usage_service.admin_grant(db, user, plan, subscription, payload.credits, payload.reason)
+    admin_audit_service.record(
+        db, admin, AdminActionType.GRANT_CREDITS, user.id, {"credits": payload.credits, "reason": payload.reason}
+    )
     return _to_admin_user_out(db, user)
 
 
@@ -86,24 +217,34 @@ async def set_account_status(
         raise UnavailableMediaError("User not found.")
     if user.id == admin.id and payload.status == "disabled":
         raise ForbiddenError("You can't disable your own admin account.")
+    previous_status = user.status
     user.status = payload.status
+    if previous_status != payload.status:
+        action = (
+            AdminActionType.DISABLE_ACCOUNT if payload.status == "disabled" else AdminActionType.REACTIVATE_ACCOUNT
+        )
+        admin_audit_service.record(
+            db, admin, action, user.id, {"previous_status": previous_status, "new_status": payload.status}
+        )
     return _to_admin_user_out(db, user)
 
 
-@router.get("/billing-events", dependencies=[Depends(require_admin)])
+@router.get("/billing-events", response_model=list[AdminBillingEventOut], dependencies=[Depends(require_admin)])
 async def list_billing_events(
     db: Session = Depends(get_db),
     limit: int = Query(default=50, ge=1, le=200),
-) -> list[dict]:
-    events = db.execute(
-        select(BillingEvent).order_by(BillingEvent.processed_at.desc()).limit(limit)
-    ).scalars().all()
-    return [
-        {
-            "provider_event_id": e.provider_event_id,
-            "event_type": e.event_type,
-            "processed_at": e.processed_at.isoformat(),
-            "status": e.status,
-        }
-        for e in events
-    ]
+) -> list[AdminBillingEventOut]:
+    events = list(
+        db.execute(select(BillingEvent).order_by(BillingEvent.processed_at.desc()).limit(limit)).scalars()
+    )
+    return _to_billing_event_out_list(db, events)
+
+
+@router.get("/audit-log", response_model=list[AdminActionLogOut], dependencies=[Depends(require_admin)])
+async def list_audit_log(
+    db: Session = Depends(get_db),
+    limit: int = Query(default=50, ge=1, le=200),
+    target_user_id: str | None = Query(default=None),
+) -> list[AdminActionLogOut]:
+    entries = admin_audit_service.list_recent(db, limit=limit, target_user_id=target_user_id)
+    return _to_admin_action_log_out_list(db, entries)

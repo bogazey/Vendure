@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.database.commercial_models import Subscription, User
 from app.models.commercial_enums import Plan, SubscriptionStatus
 
-_ACTIVE_STATUSES = {
+ACTIVE_SUBSCRIPTION_STATUSES = {
     SubscriptionStatus.ACTIVE.value,
     SubscriptionStatus.TRIALING.value,
     SubscriptionStatus.PAST_DUE.value,  # still entitled while payment is retried
@@ -20,7 +20,7 @@ class AccountService:
     def get_active_subscription(self, session: Session, user_id: str) -> Subscription | None:
         return session.execute(
             select(Subscription)
-            .where(Subscription.user_id == user_id, Subscription.status.in_(_ACTIVE_STATUSES))
+            .where(Subscription.user_id == user_id, Subscription.status.in_(ACTIVE_SUBSCRIPTION_STATUSES))
             .order_by(Subscription.updated_at.desc())
         ).scalars().first()
 

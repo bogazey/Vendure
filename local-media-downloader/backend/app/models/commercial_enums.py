@@ -55,3 +55,13 @@ class BillingEventStatus(str, Enum):
     PROCESSED = "processed"
     IGNORED = "ignored"
     FAILED = "failed"
+
+
+class AdminActionType(str, Enum):
+    """Administrative action types recorded in AdminActionLog - see
+    admin_audit_service.py. Keep this list narrow and additive; it's an
+    accountability trail, not a general event bus."""
+
+    GRANT_CREDITS = "grant_credits"
+    DISABLE_ACCOUNT = "disable_account"
+    REACTIVATE_ACCOUNT = "reactivate_account"

@@ -135,6 +135,30 @@ class BillingEvent(Base):
     processed_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Best-effort denormalized reference for admin display only (see
+    # paddle_service._resolve_user_id_for_billing_event) - resolved from the
+    # webhook's own custom_data/subscription lookup at write time. Nullable:
+    # older rows predate this column, and some event shapes never carry a
+    # resolvable user. Never used for any authorization or billing decision.
+    user_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"), index=True, nullable=True)
+
+
+class AdminActionLog(Base):
+    """Append-only accountability trail for administrative actions - who
+    (admin_id) did what (action) to whom (target_user_id) and why (details).
+    Deliberately separate from UsageEvent, which is the credit-lifecycle
+    ledger and has its own unrelated meaning; overloading it with admin
+    actions that aren't credit transactions (e.g. account disable) would
+    make that table harder to reason about."""
+
+    __tablename__ = "admin_action_logs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    admin_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True, nullable=False)
+    action: Mapped[str] = mapped_column(String(40), nullable=False)
+    target_user_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"), index=True, nullable=True)
+    details: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, index=True, nullable=False)
 
 
 class RefreshToken(Base):

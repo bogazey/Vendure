@@ -6,7 +6,7 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from app.models.commercial_enums import BillingPeriod, Plan, SubscriptionStatus, UserRole
+from app.models.commercial_enums import AdminActionType, BillingPeriod, Plan, SubscriptionStatus, UserRole
 from app.models.enums import ContainerMode, CookieSource
 
 
@@ -156,6 +156,11 @@ class AdminUserOut(BaseModel):
     subscription_status: SubscriptionStatus
     credits_used: int
     credits_included: Optional[int]
+    # Portion of credits_included beyond the plan's own base allocation -
+    # i.e. cumulative admin grants this period. Derived, not stored
+    # separately (see routes_admin._to_admin_user_out): None wherever
+    # credits_included itself is None (Free plan, which doesn't use credits).
+    credits_bonus: Optional[int]
     created_at: datetime
 
 
@@ -171,3 +176,38 @@ class AdminGrantCreditsRequest(BaseModel):
 
 class AdminSetAccountStatusRequest(BaseModel):
     status: str = Field(pattern="^(active|disabled)$")
+
+
+class AdminBillingEventOut(BaseModel):
+    provider_event_id: str
+    event_type: str
+    processed_at: datetime
+    status: str
+    # Best-effort - see BillingEvent.user_id. Both None for events that
+    # predate the column or never carried a resolvable user reference.
+    user_id: Optional[str] = None
+    user_email: Optional[str] = None
+
+
+class AdminActionLogOut(BaseModel):
+    id: str
+    admin_id: str
+    admin_email: Optional[str] = None
+    action: AdminActionType
+    target_user_id: Optional[str] = None
+    target_email: Optional[str] = None
+    details: dict
+    created_at: datetime
+
+
+class AdminOverviewOut(BaseModel):
+    total_users: int
+    active_users: int
+    disabled_users: int
+    paid_subscribers: int
+    free_count: int
+    pro_count: int
+    creator_count: int
+    credits_consumed_current_period: int
+    recent_billing_failures: list[AdminBillingEventOut]
+    recent_admin_actions: list[AdminActionLogOut]

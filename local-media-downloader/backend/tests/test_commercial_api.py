@@ -7,8 +7,10 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from datetime import datetime, timedelta, timezone
+
 from app.database.commercial_db import get_session_factory
-from app.database.commercial_models import User
+from app.database.commercial_models import Subscription, User
 from app.main import app
 from app.services.download_manager import DownloadManager
 
@@ -83,6 +85,16 @@ class TestAuthRequirement:
         assert c.post("/api/fs/validate-folder", json={"path": "/tmp"}).status_code == 401
 
 
+def _promote(email: str) -> None:
+    session = get_session_factory()()
+    try:
+        db_user = session.execute(select(User).where(User.email == email)).scalars().first()
+        db_user.role = "admin"
+        session.commit()
+    finally:
+        session.close()
+
+
 class TestAdminAuthorization:
     def test_regular_user_cannot_list_admin_users(self):
         c, _ = _signup()
@@ -95,18 +107,221 @@ class TestAdminAuthorization:
         resp = c.post(f"/api/admin/users/{uuid.uuid4()}/grant-credits", json={"credits": 10, "reason": "test"})
         assert resp.status_code == 403
 
+    def test_regular_user_cannot_get_user_detail(self):
+        c, _ = _signup()
+        resp = c.get(f"/api/admin/users/{uuid.uuid4()}")
+        assert resp.status_code == 403
+
+    def test_regular_user_cannot_set_account_status(self):
+        c, _ = _signup()
+        resp = c.post(f"/api/admin/users/{uuid.uuid4()}/status", json={"status": "disabled"})
+        assert resp.status_code == 403
+
+    def test_regular_user_cannot_list_billing_events(self):
+        c, _ = _signup()
+        resp = c.get("/api/admin/billing-events")
+        assert resp.status_code == 403
+
+    def test_regular_user_cannot_list_overview(self):
+        c, _ = _signup()
+        resp = c.get("/api/admin/overview")
+        assert resp.status_code == 403
+
+    def test_regular_user_cannot_list_audit_log(self):
+        c, _ = _signup()
+        resp = c.get("/api/admin/audit-log")
+        assert resp.status_code == 403
+
     def test_admin_can_list_users(self):
         c, email = _signup()
-        session = get_session_factory()()
-        try:
-            db_user = session.execute(select(User).where(User.email == email)).scalars().first()
-            db_user.role = "admin"
-            session.commit()
-        finally:
-            session.close()
+        _promote(email)
         resp = c.get("/api/admin/users?search=" + email)
         assert resp.status_code == 200
         assert resp.json()["total"] >= 1
+
+    def test_admin_can_get_user_detail(self):
+        c, email = _signup()
+        _promote(email)
+        session = get_session_factory()()
+        try:
+            user_id = session.execute(select(User.id).where(User.email == email)).scalar_one()
+        finally:
+            session.close()
+        resp = c.get(f"/api/admin/users/{user_id}")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["email"] == email
+        assert body["role"] == "admin"
+
+    def test_admin_get_unknown_user_detail_is_404(self):
+        c, email = _signup()
+        _promote(email)
+        resp = c.get(f"/api/admin/users/{uuid.uuid4()}")
+        assert resp.status_code == 404
+
+
+class TestAdminCreditsAndStatus:
+    def test_grant_credits_increases_included_credits_and_is_audited(self):
+        c, admin_email = _signup()
+        _promote(admin_email)
+        target_c, target_email = _signup()
+        session = get_session_factory()()
+        try:
+            target_id = session.execute(select(User.id).where(User.email == target_email)).scalar_one()
+        finally:
+            session.close()
+
+        resp = c.post(
+            f"/api/admin/users/{target_id}/grant-credits",
+            json={"credits": 25, "reason": "support case #123"},
+        )
+        assert resp.status_code == 200
+
+        audit = c.get("/api/admin/audit-log")
+        assert audit.status_code == 200
+        entries = audit.json()
+        grant_entries = [e for e in entries if e["action"] == "grant_credits" and e["target_user_id"] == target_id]
+        assert len(grant_entries) == 1
+        assert grant_entries[0]["details"]["credits"] == 25
+        assert grant_entries[0]["details"]["reason"] == "support case #123"
+        assert grant_entries[0]["admin_email"] == admin_email
+        assert grant_entries[0]["target_email"] == target_email
+
+    def test_grant_credits_reports_bonus_separately_from_plan_base(self):
+        """credits_bonus should reflect only the admin-granted top-up, not
+        the plan's own base allocation - the two must never be conflated."""
+        c, admin_email = _signup()
+        _promote(admin_email)
+        target_c, target_email = _signup()
+        session = get_session_factory()()
+        try:
+            target = session.execute(select(User).where(User.email == target_email)).scalars().first()
+            now = datetime.now(timezone.utc)
+            session.add(
+                Subscription(
+                    user_id=target.id,
+                    provider="paddle",
+                    provider_subscription_id=f"sub_{uuid.uuid4().hex[:12]}",
+                    plan="pro",
+                    status="active",
+                    current_period_start=now,
+                    current_period_end=now + timedelta(days=30),
+                )
+            )
+            session.commit()
+            target_id = target.id
+        finally:
+            session.close()
+
+        before = c.get(f"/api/admin/users/{target_id}").json()
+        assert before["plan"] == "pro"
+        assert before["credits_included"] == 150  # Pro's base monthly allocation
+        assert before["credits_bonus"] == 0
+
+        resp = c.post(f"/api/admin/users/{target_id}/grant-credits", json={"credits": 30, "reason": "bonus"})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["credits_included"] == 180  # 150 base + 30 granted
+        assert body["credits_bonus"] == 30
+
+    def test_grant_credits_unknown_user_is_404(self):
+        c, admin_email = _signup()
+        _promote(admin_email)
+        resp = c.post(f"/api/admin/users/{uuid.uuid4()}/grant-credits", json={"credits": 10, "reason": "x"})
+        assert resp.status_code == 404
+
+    def test_disable_and_reactivate_are_audited(self):
+        c, admin_email = _signup()
+        _promote(admin_email)
+        target_c, target_email = _signup()
+        session = get_session_factory()()
+        try:
+            target_id = session.execute(select(User.id).where(User.email == target_email)).scalar_one()
+        finally:
+            session.close()
+
+        disable_resp = c.post(f"/api/admin/users/{target_id}/status", json={"status": "disabled"})
+        assert disable_resp.status_code == 200
+        assert disable_resp.json()["status"] == "disabled"
+
+        reactivate_resp = c.post(f"/api/admin/users/{target_id}/status", json={"status": "active"})
+        assert reactivate_resp.status_code == 200
+        assert reactivate_resp.json()["status"] == "active"
+
+        audit = c.get(f"/api/admin/audit-log?target_user_id={target_id}").json()
+        actions = [e["action"] for e in audit]
+        assert "disable_account" in actions
+        assert "reactivate_account" in actions
+
+    def test_self_disable_is_rejected_and_not_audited(self):
+        c, admin_email = _signup()
+        _promote(admin_email)
+        session = get_session_factory()()
+        try:
+            admin_id = session.execute(select(User.id).where(User.email == admin_email)).scalar_one()
+        finally:
+            session.close()
+
+        resp = c.post(f"/api/admin/users/{admin_id}/status", json={"status": "disabled"})
+        assert resp.status_code == 403
+
+        audit = c.get("/api/admin/audit-log").json()
+        assert not any(e["target_user_id"] == admin_id and e["action"] == "disable_account" for e in audit)
+
+    def test_disabled_status_unchanged_is_not_re_audited(self):
+        """Re-submitting the same status shouldn't add a duplicate audit
+        entry - only an actual transition is logged."""
+        c, admin_email = _signup()
+        _promote(admin_email)
+        target_c, target_email = _signup()
+        session = get_session_factory()()
+        try:
+            target_id = session.execute(select(User.id).where(User.email == target_email)).scalar_one()
+        finally:
+            session.close()
+
+        c.post(f"/api/admin/users/{target_id}/status", json={"status": "active"})
+        audit = c.get(f"/api/admin/audit-log?target_user_id={target_id}").json()
+        assert len(audit) == 0
+
+
+class TestAdminOverview:
+    def test_overview_counts_reflect_real_users(self):
+        c, admin_email = _signup()
+        _promote(admin_email)
+        resp = c.get("/api/admin/overview")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total_users"] >= 1
+        assert body["active_users"] >= 1
+        assert body["free_count"] + body["paid_subscribers"] == body["total_users"]
+        assert body["pro_count"] + body["creator_count"] == body["paid_subscribers"]
+        assert isinstance(body["recent_billing_failures"], list)
+        assert isinstance(body["recent_admin_actions"], list)
+
+    def test_overview_reflects_recent_admin_action(self):
+        c, admin_email = _signup()
+        _promote(admin_email)
+        target_c, target_email = _signup()
+        session = get_session_factory()()
+        try:
+            target_id = session.execute(select(User.id).where(User.email == target_email)).scalar_one()
+        finally:
+            session.close()
+        c.post(f"/api/admin/users/{target_id}/grant-credits", json={"credits": 5, "reason": "test"})
+
+        resp = c.get("/api/admin/overview")
+        recent = resp.json()["recent_admin_actions"]
+        assert any(a["target_user_id"] == target_id and a["action"] == "grant_credits" for a in recent)
+
+
+class TestAdminBillingEvents:
+    def test_admin_can_list_billing_events(self):
+        c, admin_email = _signup()
+        _promote(admin_email)
+        resp = c.get("/api/admin/billing-events")
+        assert resp.status_code == 200
+        assert isinstance(resp.json(), list)
 
 
 class TestCheckoutValidation:

@@ -124,6 +124,66 @@ class TestWebhookIdempotency:
             select(Subscription).where(Subscription.provider_subscription_id == "sub_orphan")
         ).scalars().first()
         assert sub is None
+        # BillingEvent.user_id is a real FK to users.id - a forged/stale
+        # custom_data.user_id (from an attacker-controlled or replayed
+        # payload) must be verified against a real user before being stored,
+        # not written through blindly (that would violate the FK constraint
+        # and take the whole webhook write down with it).
+        event = db_session.get(BillingEvent, event_id)
+        assert event is not None
+        assert event.user_id is None
+
+    def test_webhook_for_real_user_records_the_reference(self, db_session):
+        result = auth_service.signup(db_session, f"paddle-ref-{uuid.uuid4().hex[:10]}@example.com", "correcthorse9!")
+        db_session.flush()
+
+        event_id = f"evt_{uuid.uuid4().hex}"
+        data = {"id": "sub_realowner", "custom_data": {"user_id": result.user.id}, "status": "active"}
+        paddle_service.process_webhook_event(db_session, event_id, "subscription.created", data, "hash4")
+        db_session.commit()
+
+        event = db_session.get(BillingEvent, event_id)
+        assert event is not None
+        assert event.user_id == result.user.id
+
+    def test_payment_failed_resolves_user_via_subscription_lookup(self, db_session, monkeypatch):
+        """transaction.payment_failed doesn't carry custom_data - the user
+        reference has to come from looking up the subscription_id it does
+        carry."""
+        monkeypatch.setattr(
+            "app.services.paddle_service.get_commercial_settings",
+            lambda: type("S", (), {"paddle_pro_monthly_price_id": "pri_pro_monthly", "paddle_pro_annual_price_id": "",
+                                    "paddle_creator_monthly_price_id": "", "paddle_creator_annual_price_id": ""})(),
+        )
+        result = auth_service.signup(db_session, f"paddle-fail-{uuid.uuid4().hex[:10]}@example.com", "correcthorse9!")
+        db_session.flush()
+        paddle_service.process_webhook_event(
+            db_session,
+            f"evt_{uuid.uuid4().hex}",
+            "subscription.created",
+            {
+                "id": "sub_willfail",
+                "custom_data": {"user_id": result.user.id},
+                "items": [{"price": {"id": "pri_pro_monthly"}}],
+                "status": "active",
+            },
+            "hash5",
+        )
+        db_session.commit()
+
+        failed_event_id = f"evt_{uuid.uuid4().hex}"
+        paddle_service.process_webhook_event(
+            db_session,
+            failed_event_id,
+            "transaction.payment_failed",
+            {"subscription_id": "sub_willfail"},
+            "hash6",
+        )
+        db_session.commit()
+
+        event = db_session.get(BillingEvent, failed_event_id)
+        assert event is not None
+        assert event.user_id == result.user.id
 
 
 class TestMidCyclePlanChangeCreditSync:

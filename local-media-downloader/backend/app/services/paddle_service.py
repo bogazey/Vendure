@@ -122,6 +122,33 @@ def _extract_user_id(data: dict) -> str | None:
     return custom_data.get("user_id")
 
 
+def _resolve_user_id_for_billing_event(session: Session, data: dict) -> str | None:
+    """Best-effort user reference for the admin billing view only - never
+    used for any authorization or billing decision. Tries custom_data first
+    (present on subscription.* events created through our own checkout),
+    then falls back to looking up the subscription a transaction.* event
+    references. BillingEvent.user_id is a real FK to users.id, so a
+    resolved id is verified to actually exist before use - custom_data is
+    attacker/webhook-payload-controlled and a stale or forged user_id must
+    never reach the INSERT (it would fail the FK constraint and, if this
+    weren't wrapped, take the whole webhook write down with it). Deliberately
+    tolerant throughout: any failure here must never break actual webhook
+    processing, so this only ever returns None on trouble."""
+    try:
+        user_id = _extract_user_id(data)
+        if user_id and session.get(User, user_id) is not None:
+            return user_id
+        subscription_ref = data.get("subscription_id") or data.get("id")
+        if not subscription_ref:
+            return None
+        subscription = session.execute(
+            select(Subscription).where(Subscription.provider_subscription_id == subscription_ref)
+        ).scalars().first()
+        return subscription.user_id if subscription else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _upsert_subscription_from_event(session: Session, data: dict) -> None:
     provider_subscription_id = data.get("id")
     if not provider_subscription_id:
@@ -277,6 +304,7 @@ def process_webhook_event(session: Session, event_id: str, event_type: str, data
             processed_at=datetime.now(timezone.utc),
             payload_hash=payload_hash,
             status=status,
+            user_id=_resolve_user_id_for_billing_event(session, data),
         )
     )
     session.flush()
