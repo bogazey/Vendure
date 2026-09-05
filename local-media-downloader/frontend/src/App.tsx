@@ -4,6 +4,7 @@ import { Route, Routes, useLocation } from "react-router-dom";
 import AuroraBackground from "./components/AuroraBackground";
 import FirstRunSetup from "./components/FirstRunSetup";
 import Footer from "./components/Footer";
+import HashScroll from "./components/HashScroll";
 import Header from "./components/Header";
 import ProtectedRoute, { AdminRoute } from "./components/ProtectedRoute";
 import Sidebar from "./components/Sidebar";
@@ -84,6 +85,7 @@ function AppShell() {
 
   return (
     <div className="relative min-h-screen bg-surface">
+      <HashScroll />
       <AuroraBackground />
       <div className="relative z-10 flex min-h-screen">
         {showSidebar && <Sidebar />}
