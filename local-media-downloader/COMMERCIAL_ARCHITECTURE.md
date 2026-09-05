@@ -410,11 +410,10 @@ is the primary key — one row per account, see §4.1).
   guardrails (`ensure_path_permitted`, `resolve_safe_directory`) are
   untouched.
 - No admin self-service promotion endpoint exists on purpose — there is no
-  way to become an admin via the API. The first admin account has to be
-  promoted directly against the database (a one-line UPDATE against
-  `commercial.db`, or a small script) — a deliberate "no huge admin system"
-  scoping decision, but worth automating with a management command before
-  a real launch.
+  way to become an admin via the API. The first admin account is promoted
+  with `python -m app.scripts.promote_admin <email>` (§11), a CLI-only,
+  existing-user-only, idempotent operator action; it never runs
+  automatically and there is deliberately no HTTP path to it.
 - `npm audit` on the frontend still flags the same pre-existing
   Vite/react-router advisories noted in the personal app's README (dev-only,
   local-bind-only exposure) — unrelated to and not worsened by this branch's
@@ -448,3 +447,33 @@ is the primary key — one row per account, see §4.1).
   Whoever builds it should keep the spec's constraint in mind: never trust
   a frontend-only "I watched the ad" claim — the eventual ad provider's own
   server-to-server webhook must be the thing that actually grants credit.
+
+## 11. Admin Panel
+
+- **UI**: `/admin` is five pages sharing one tab strip (`AdminLayout`) —
+  Overview, Users, Billing, Activity, System — under `frontend/src/pages/admin/`.
+  Every route is guarded twice: `AdminRoute` (frontend, UX-only redirect)
+  and `require_admin` (backend, re-resolves the user from the DB on every
+  request — the only check that actually matters).
+- **Endpoints** (`app/api/routes_admin.py`, all `require_admin`):
+  `GET /api/admin/users`, `GET /api/admin/users/{id}`,
+  `POST /api/admin/users/{id}/grant-credits`,
+  `POST /api/admin/users/{id}/status` (disable/reactivate, with
+  self-disable rejected), `GET /api/admin/billing-events`,
+  `GET /api/admin/overview`, `GET /api/admin/audit-log`. None of them
+  return Paddle secrets, API keys, or raw webhook payloads.
+- **Audit log**: `AdminActionLog` (own table, not overloaded onto
+  `UsageEvent`) records every grant/disable/reactivate with the acting
+  admin's id, the action, the affected user, a small JSON `details` blob,
+  and a timestamp. Written by `admin_audit_service.record()` inside the
+  same request that performs the change; read back by `GET
+  /api/admin/audit-log` and by the Overview page's "recent admin actions"
+  panel.
+- **Provisioning**: `python -m app.scripts.promote_admin <email>` — see the
+  script's own docstring for the full contract (existing-user-only,
+  idempotent, no secrets in or out, exit codes 0/1/2). There is
+  deliberately no HTTP path to it.
+- **Credits shown to admins**: `credits_bonus` (Users page, user detail,
+  `AdminUserOut`) is derived at read time as
+  `max(0, credits_included - plan's own monthly_credits)` — it is never a
+  stored column, so it can't drift from the real credit ledger.
