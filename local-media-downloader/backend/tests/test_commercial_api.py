@@ -67,6 +67,21 @@ class TestAuthRequirement:
         resp = TestClient(app).get("/api/progress/stream")
         assert resp.status_code == 401
 
+    def test_settings_requires_auth(self):
+        """Previously wide open - anyone unauthenticated could rewrite the
+        shared download_dir/concurrency/theme/etc. for the whole server."""
+        c = TestClient(app)
+        assert c.get("/api/settings").status_code == 401
+        assert c.put("/api/settings", json={"theme": "dark"}).status_code == 401
+
+    def test_filesystem_open_requires_auth(self):
+        """Previously wide open - anyone unauthenticated could ask the
+        server to run its OS file-open handler on a path."""
+        c = TestClient(app)
+        assert c.post("/api/fs/open", json={"path": "/tmp"}).status_code == 401
+        assert c.post("/api/fs/open-folder", json={"path": "/tmp"}).status_code == 401
+        assert c.post("/api/fs/validate-folder", json={"path": "/tmp"}).status_code == 401
+
 
 class TestAdminAuthorization:
     def test_regular_user_cannot_list_admin_users(self):
@@ -103,6 +118,39 @@ class TestCheckoutValidation:
         c, _ = _signup()
         resp = c.post("/api/billing/checkout", json={"plan": "free", "billing_period": "monthly"})
         assert resp.status_code == 422  # Free doesn't go through checkout
+
+    def test_checkout_reports_a_clean_error_when_unconfigured(self):
+        """No PADDLE_*_PRICE_ID/PADDLE_CLIENT_TOKEN in this test environment
+        (there's no real Paddle Sandbox account here) - this must surface as
+        a clear 502 billing error, not an unhandled 500."""
+        c, _ = _signup()
+        resp = c.post("/api/billing/checkout", json={"plan": "pro", "billing_period": "monthly"})
+        assert resp.status_code == 502
+        assert resp.json()["code"] == "BILLING_ERROR"
+
+    def test_checkout_returns_environment_when_configured(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.services.paddle_service.get_commercial_settings",
+            lambda: type(
+                "S",
+                (),
+                {
+                    "paddle_pro_monthly_price_id": "pri_test_pro_monthly",
+                    "paddle_pro_annual_price_id": "",
+                    "paddle_creator_monthly_price_id": "",
+                    "paddle_creator_annual_price_id": "",
+                    "paddle_client_token": "test_client_token",
+                    "paddle_env": "sandbox",
+                },
+            )(),
+        )
+        c, _ = _signup()
+        resp = c.post("/api/billing/checkout", json={"plan": "pro", "billing_period": "monthly"})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["environment"] == "sandbox"
+        assert body["price_id"] == "pri_test_pro_monthly"
+        assert body["client_token"] == "test_client_token"
 
 
 class TestLoginRateLimiting:

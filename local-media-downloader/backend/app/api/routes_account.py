@@ -7,12 +7,28 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, get_db
 from app.database.commercial_models import User
 from app.models.commercial_enums import BillingPeriod, SubscriptionStatus
-from app.models.commercial_schemas import AccountOut, SubscriptionOut, UserOut
+from app.models.commercial_schemas import (
+    AccountOut,
+    DownloadPreferencesOut,
+    SubscriptionOut,
+    UpdateDownloadPreferencesRequest,
+    UserOut,
+)
 from app.services.account_service import account_service
 from app.services.entitlement_service import entitlement_service
 from app.services.usage_service import usage_service
+from app.services.user_preferences_service import user_preferences_service
+from app.utils.exceptions import InvalidPathError
 
 router = APIRouter(prefix="/api/account", tags=["account"])
+
+
+def _to_preferences_out(prefs) -> DownloadPreferencesOut:
+    return DownloadPreferencesOut(
+        container_mode=prefs.container_mode,
+        cookie_source=prefs.cookie_source,
+        cookie_file_path=prefs.cookie_file_path,
+    )
 
 
 def _billing_period_from_subscription(subscription) -> BillingPeriod | None:
@@ -45,3 +61,24 @@ async def get_account(user: User = Depends(get_current_user), db: Session = Depe
         usage=usage,
         features=features,
     )
+
+
+@router.get("/download-preferences", response_model=DownloadPreferencesOut)
+async def get_download_preferences(
+    user: User = Depends(get_current_user), db: Session = Depends(get_db)
+) -> DownloadPreferencesOut:
+    prefs = user_preferences_service.get_or_create(db, user.id)
+    return _to_preferences_out(prefs)
+
+
+@router.put("/download-preferences", response_model=DownloadPreferencesOut)
+async def update_download_preferences(
+    payload: UpdateDownloadPreferencesRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DownloadPreferencesOut:
+    try:
+        prefs = user_preferences_service.update(db, user.id, payload.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        raise InvalidPathError(str(exc)) from exc
+    return _to_preferences_out(prefs)

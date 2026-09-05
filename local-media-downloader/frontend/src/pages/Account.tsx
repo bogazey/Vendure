@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import ErrorBanner from "../components/ErrorBanner";
 import { useAuth } from "../context/AuthContext";
 import { ApiError, api } from "../services/api";
+import { appPageShell, brandLink } from "../styles/ui";
 import { PLAN_LABELS } from "../types/commercial";
 
 export default function Account() {
@@ -28,13 +29,17 @@ export default function Account() {
   };
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6 px-6 py-10">
-      <h1 className="text-xl font-bold text-slate-50">Account</h1>
+    <div className={appPageShell}>
+      <h1 className="font-display text-xl font-bold text-slate-50">Account</h1>
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
-      {message && <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300">{message}</p>}
+      {message && (
+        <p className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 backdrop-blur-xl">
+          {message}
+        </p>
+      )}
 
-      <section className="flex flex-col gap-3 rounded-xl border border-surface-border bg-surface-raised p-5">
+      <section className="glass-panel flex flex-col gap-3 p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Profile</h2>
         <div className="flex items-center justify-between text-sm">
           <span className="text-slate-400">Email</span>
@@ -42,7 +47,7 @@ export default function Account() {
         </div>
         <div className="flex items-center justify-between text-sm">
           <span className="text-slate-400">Plan</span>
-          <span className="rounded-full bg-indigo-500/20 px-2.5 py-0.5 text-xs font-semibold text-indigo-300">
+          <span className="rounded-full bg-brand-gradient px-2.5 py-0.5 text-xs font-semibold text-white shadow-glow">
             {PLAN_LABELS[subscription.plan]}
           </span>
         </div>
@@ -55,7 +60,7 @@ export default function Account() {
               type="button"
               onClick={handleResendVerification}
               disabled={sending}
-              className="text-xs text-indigo-400 underline decoration-dotted underline-offset-2 hover:text-indigo-300 disabled:opacity-60"
+              className={`text-xs ${brandLink} underline decoration-dotted underline-offset-2 disabled:opacity-60`}
             >
               {sending ? "Sending…" : "Not verified · resend email"}
             </button>
@@ -70,14 +75,14 @@ export default function Account() {
       <section className="grid gap-3 sm:grid-cols-2">
         <Link
           to="/billing"
-          className="flex flex-col gap-1 rounded-xl border border-surface-border bg-surface-raised p-5 hover:border-slate-500"
+          className="glass-panel flex flex-col gap-1 p-5 transition-colors hover:border-white/20"
         >
           <h3 className="text-sm font-semibold text-slate-50">Billing</h3>
           <p className="text-xs text-slate-500">Plan, renewal date, and payment management.</p>
         </Link>
         <Link
           to="/usage"
-          className="flex flex-col gap-1 rounded-xl border border-surface-border bg-surface-raised p-5 hover:border-slate-500"
+          className="glass-panel flex flex-col gap-1 p-5 transition-colors hover:border-white/20"
         >
           <h3 className="text-sm font-semibold text-slate-50">Usage</h3>
           <p className="text-xs text-slate-500">Credits and downloads remaining this period.</p>

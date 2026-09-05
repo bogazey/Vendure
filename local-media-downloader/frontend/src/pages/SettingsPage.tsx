@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import ErrorBanner from "../components/ErrorBanner";
 import { ApiError, api } from "../services/api";
+import { appPageShell } from "../styles/ui";
 import type { AppSettings, CookieSource, HealthResponse, Theme } from "../types/api";
+import type { DownloadPreferencesOut } from "../types/commercial";
 import { applyTheme } from "../utils/theme";
 
 const COOKIE_SOURCES: { value: CookieSource; label: string }[] = [
@@ -15,7 +17,7 @@ const COOKIE_SOURCES: { value: CookieSource; label: string }[] = [
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="flex flex-col gap-3 rounded-xl border border-surface-border bg-surface-raised p-5">
+    <section className="glass-panel flex flex-col gap-3 p-5">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">{title}</h2>
       <div className="flex flex-col gap-4">{children}</div>
     </section>
@@ -31,18 +33,21 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-const inputClass =
-  "rounded-md border border-surface-border bg-surface px-3 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none";
+const inputClass = "input-glass py-2";
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [preferences, setPreferences] = useState<DownloadPreferencesOut | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [folderStatus, setFolderStatus] = useState<string | null>(null);
 
   useEffect(() => {
     api.getSettings().then(setSettings).catch((err) => setError(err instanceof ApiError ? err.message : "Could not load settings."));
+    api
+      .getDownloadPreferences()
+      .then(setPreferences)
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load download preferences."));
     api.health().then(setHealth).catch(() => undefined);
   }, []);
 
@@ -61,52 +66,54 @@ export default function SettingsPage() {
     }
   };
 
-  const handleFolderChange = async (path: string) => {
-    setSettings((prev) => (prev ? { ...prev, download_dir: path } : prev));
-  };
-
-  const handleFolderBlur = async (path: string) => {
-    const result = await api.validateFolder(path).catch(() => null);
-    if (result?.valid) {
-      setFolderStatus(null);
-      await persist({ download_dir: path });
-    } else {
-      setFolderStatus(result?.reason || "This folder could not be used.");
+  // container_mode / cookie_source / cookie_file_path are per-account, not
+  // part of the shared AppSettings row above - see types/commercial.ts and
+  // COMMERCIAL_ARCHITECTURE.md for why. Persisted separately so one user's
+  // choice here can never affect anyone else's downloads.
+  const persistPreferences = async (patch: Partial<DownloadPreferencesOut>) => {
+    if (!preferences) return;
+    const next = { ...preferences, ...patch };
+    setPreferences(next);
+    try {
+      const saved = await api.updateDownloadPreferences(patch);
+      setPreferences(saved);
+      setSaveMessage("Saved");
+      setTimeout(() => setSaveMessage(null), 1500);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not save download preferences.");
     }
   };
 
-  if (!settings) {
-    return <div className="mx-auto max-w-3xl px-6 py-10 text-sm text-slate-500">Loading settings…</div>;
+  if (!settings || !preferences) {
+    return <div className="relative z-10 mx-auto max-w-3xl px-6 py-10 text-sm text-slate-500">Loading settings…</div>;
   }
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-10">
+    <div className={appPageShell}>
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-slate-50">Settings</h1>
+        <h1 className="font-display text-xl font-bold text-slate-50">Settings</h1>
         {saveMessage && <span className="text-xs text-emerald-400">{saveMessage}</span>}
       </div>
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
+      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6">
       <Section title="General">
         <Field label="Download folder">
           <div className="flex gap-2">
-            <input
-              type="text"
-              value={settings.download_dir}
-              onChange={(e) => handleFolderChange(e.target.value)}
-              onBlur={(e) => handleFolderBlur(e.target.value)}
-              className={`${inputClass} flex-1`}
-            />
-            <button
-              type="button"
-              onClick={() => api.openPath(settings.download_dir).catch(() => undefined)}
-              className="rounded-md border border-surface-border px-3 py-2 text-sm text-slate-300 hover:border-slate-500"
+            <span
+              className={`${inputClass} flex-1 truncate text-slate-400`}
+              title={settings.download_dir}
             >
+              {settings.download_dir}
+            </span>
+            <button type="button" onClick={() => api.openPath(settings.download_dir).catch(() => undefined)} className="btn-glass px-3 py-2">
               Open Downloads Folder
             </button>
           </div>
-          {folderStatus && <span className="text-xs text-red-400">{folderStatus}</span>}
+          <span className="text-xs text-slate-500">
+            Your downloads are stored in a private folder for your account and can't be changed to another location.
+          </span>
         </Field>
 
         <Field label="Maximum simultaneous downloads">
@@ -126,7 +133,10 @@ export default function SettingsPage() {
             onChange={(e) => persist({ theme: e.target.value as Theme })}
             className={inputClass}
           >
-            <option value="system">System</option>
+            {/* "system" no longer tracks the OS - Loady's dark identity is
+                fixed, so it's relabeled here to say what it actually does.
+                The stored value stays "system" for API/backend compatibility. */}
+            <option value="system">Dark (default)</option>
             <option value="light">Light</option>
             <option value="dark">Dark</option>
           </select>
@@ -150,15 +160,17 @@ export default function SettingsPage() {
 
         <Field label="Video output">
           <select
-            value={settings.container_mode}
-            onChange={(e) => persist({ container_mode: e.target.value as AppSettings["container_mode"] })}
+            value={preferences.container_mode}
+            onChange={(e) =>
+              persistPreferences({ container_mode: e.target.value as DownloadPreferencesOut["container_mode"] })
+            }
             className={inputClass}
           >
             <option value="compatibility">Compatibility MP4 (default)</option>
             <option value="original">Best Quality / Original Container</option>
           </select>
           <span className="text-xs text-slate-500">
-            {settings.container_mode === "compatibility"
+            {preferences.container_mode === "compatibility"
               ? "Always downloads a genuine, broadly-playable MP4 (H.264/AAC), converting with FFmpeg when the source is WebM/VP9/AV1/Opus."
               : "Keeps the best source streams' native codec/container as-is (may be WebM or MKV) — never converts."}
           </span>
@@ -169,7 +181,7 @@ export default function SettingsPage() {
             type="checkbox"
             checked={settings.embed_metadata}
             onChange={(e) => persist({ embed_metadata: e.target.checked })}
-            className="h-4 w-4 accent-indigo-500"
+            className="h-4 w-4 rounded border-white/20 bg-transparent accent-brand-aqua"
           />
           Embed metadata (title, uploader) into the file
         </label>
@@ -179,7 +191,7 @@ export default function SettingsPage() {
             type="checkbox"
             checked={settings.save_thumbnail}
             onChange={(e) => persist({ save_thumbnail: e.target.checked })}
-            className="h-4 w-4 accent-indigo-500"
+            className="h-4 w-4 rounded border-white/20 bg-transparent accent-brand-aqua"
           />
           Save thumbnail alongside downloaded files
         </label>
@@ -217,7 +229,7 @@ export default function SettingsPage() {
             type="checkbox"
             checked={settings.embed_thumbnail_in_audio}
             onChange={(e) => persist({ embed_thumbnail_in_audio: e.target.checked })}
-            className="h-4 w-4 accent-indigo-500"
+            className="h-4 w-4 rounded border-white/20 bg-transparent accent-brand-aqua"
           />
           Embed thumbnail into downloaded audio files
         </label>
@@ -226,12 +238,12 @@ export default function SettingsPage() {
       <Section title="Authentication">
         <p className="text-xs text-slate-500">
           Cookies remain on this computer and are only used locally by the downloader. They are never uploaded
-          anywhere.
+          anywhere, and these choices are private to your account — no other user's downloads are affected by them.
         </p>
         <Field label="Cookie source">
           <select
-            value={settings.cookie_source}
-            onChange={(e) => persist({ cookie_source: e.target.value as CookieSource })}
+            value={preferences.cookie_source}
+            onChange={(e) => persistPreferences({ cookie_source: e.target.value as CookieSource })}
             className={inputClass}
           >
             {COOKIE_SOURCES.map((opt) => (
@@ -242,13 +254,13 @@ export default function SettingsPage() {
           </select>
         </Field>
 
-        {settings.cookie_source === "file" && (
+        {preferences.cookie_source === "file" && (
           <Field label="Cookie file path (Netscape format)">
             <input
               type="text"
-              value={settings.cookie_file_path || ""}
-              onChange={(e) => setSettings({ ...settings, cookie_file_path: e.target.value })}
-              onBlur={(e) => persist({ cookie_file_path: e.target.value })}
+              value={preferences.cookie_file_path || ""}
+              onChange={(e) => setPreferences({ ...preferences, cookie_file_path: e.target.value })}
+              onBlur={(e) => persistPreferences({ cookie_file_path: e.target.value })}
               placeholder="/path/to/cookies.txt"
               className={inputClass}
             />
@@ -286,6 +298,7 @@ export default function SettingsPage() {
           />
         </Field>
       </Section>
+      </div>
     </div>
   );
 }

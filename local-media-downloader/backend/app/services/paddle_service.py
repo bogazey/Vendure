@@ -16,11 +16,12 @@ from sqlalchemy.orm import Session
 
 from app.config.commercial_settings import get_commercial_settings
 from app.config.logging_config import get_logger
-from app.database.commercial_models import BillingEvent, Subscription, User
+from app.database.commercial_models import BillingEvent, Subscription, UsagePeriod, User
 from app.models.commercial_enums import BillingEventStatus, BillingPeriod, Plan, SubscriptionStatus
 from app.models.commercial_schemas import CheckoutResponse
 from app.services import email_service
-from app.utils.exceptions import InvalidWebhookSignatureError
+from app.services.plan_policy import get_policy
+from app.utils.exceptions import BillingError, InvalidWebhookSignatureError
 
 logger = get_logger("paddle_service")
 
@@ -92,14 +93,15 @@ def _plan_and_period_for_price_id(price_id: str) -> tuple[Plan, BillingPeriod] |
 def build_checkout(user: User, plan: Plan, billing_period: BillingPeriod) -> CheckoutResponse:
     settings = get_commercial_settings()
     price_id = _price_id_for(plan, billing_period)
-    if not price_id:
-        raise ValueError(
-            f"No Paddle price configured for {plan.value}/{billing_period.value}. "
-            "Set the corresponding PADDLE_*_PRICE_ID environment variable."
+    if not price_id or not settings.paddle_client_token:
+        raise BillingError(
+            "Billing isn't configured on this server yet. See PADDLE_SANDBOX_TESTING.md for setup.",
+            technical=f"missing price id or client token for {plan.value}/{billing_period.value}",
         )
     return CheckoutResponse(
         price_id=price_id,
         client_token=settings.paddle_client_token,
+        environment=settings.paddle_env,
         plan=plan,
         billing_period=billing_period,
         custom_data={"user_id": user.id},
@@ -144,6 +146,8 @@ def _upsert_subscription_from_event(session: Session, data: dict) -> None:
         subscription = Subscription(user_id=user_id, provider="paddle", provider_subscription_id=provider_subscription_id, plan=Plan.FREE.value)
         session.add(subscription)
 
+    old_plan = subscription.plan
+
     items = data.get("items") or []
     price_id = items[0]["price"]["id"] if items and items[0].get("price") else None
     plan_period = _plan_and_period_for_price_id(price_id) if price_id else None
@@ -159,6 +163,36 @@ def _upsert_subscription_from_event(session: Session, data: dict) -> None:
     subscription.current_period_start = _parse_paddle_datetime(current_period.get("starts_at")) or subscription.current_period_start
     subscription.current_period_end = _parse_paddle_datetime(current_period.get("ends_at")) or subscription.current_period_end
     subscription.cancel_at_period_end = bool(data.get("scheduled_change"))
+
+    _sync_usage_period_credits_for_plan_change(session, subscription, old_plan, subscription.plan)
+
+
+def _sync_usage_period_credits_for_plan_change(
+    session: Session, subscription: Subscription, old_plan: str, new_plan: str
+) -> None:
+    """A mid-cycle plan change (e.g. Pro -> Creator) keeps the same
+    subscription.current_period_start/end, so usage_service's period lookup
+    (keyed on user_id + period_start) returns the SAME UsagePeriod row it
+    already created under the old plan - its credits_included would
+    otherwise be stuck at the old plan's allotment for the rest of the
+    cycle. Adjust it by the delta between the two plans' policies, which
+    preserves any already-used credits and any admin-granted bonus credits
+    (never overwrites credits_included outright)."""
+    if old_plan == new_plan or old_plan == Plan.FREE.value or new_plan == Plan.FREE.value:
+        return
+    if not subscription.current_period_start:
+        return
+    period = session.execute(
+        select(UsagePeriod).where(
+            UsagePeriod.user_id == subscription.user_id,
+            UsagePeriod.period_start == subscription.current_period_start,
+        )
+    ).scalars().first()
+    if period is None:
+        return
+    old_credits = get_policy(Plan(old_plan)).monthly_credits or 0
+    new_credits = get_policy(Plan(new_plan)).monthly_credits or 0
+    period.credits_included = max(0, period.credits_included + (new_credits - old_credits))
 
 
 def _handle_subscription_canceled(session: Session, data: dict) -> None:

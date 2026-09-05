@@ -23,3 +23,21 @@ export const PLATFORM_COLORS: Record<Platform, string> = {
   facebook: "bg-blue-500/15 text-blue-400 border-blue-500/30",
   unknown: "bg-slate-500/15 text-slate-300 border-slate-500/30",
 };
+
+/**
+ * Cosmetic, client-side-only mirror of the backend's url_detect.py, used
+ * purely to show a "we recognize this" badge as someone types into the
+ * hero URL input. Never used for validation or authorization - the
+ * backend is always the real source of truth for what's supported. Returns
+ * null (rather than "unknown") for an empty/unrecognized string so the
+ * hero input can distinguish "nothing typed yet" from "not supported".
+ */
+export function detectPlatformFromUrl(rawUrl: string): Platform | null {
+  const url = rawUrl.trim().toLowerCase();
+  if (!url) return null;
+  if (/(^|\.)youtube\.com|youtu\.be/.test(url)) return "youtube";
+  if (/(^|\.)tiktok\.com/.test(url)) return "tiktok";
+  if (/(^|\.)instagram\.com/.test(url)) return "instagram";
+  if (/(^|\.)facebook\.com|fb\.watch/.test(url)) return "facebook";
+  return "unknown";
+}

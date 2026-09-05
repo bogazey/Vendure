@@ -8,7 +8,7 @@ interface MediaCardProps {
 
 export default function MediaCard({ media }: MediaCardProps) {
   return (
-    <div className="flex flex-col gap-4 rounded-xl border border-surface-border bg-surface-raised p-4 sm:flex-row">
+    <div className="glass-panel-raised flex flex-col gap-4 p-4 sm:flex-row">
       <div className="aspect-video w-full shrink-0 overflow-hidden rounded-lg bg-black/40 sm:w-64">
         {media.thumbnail ? (
           <img src={media.thumbnail} alt={media.title} className="h-full w-full object-cover" />

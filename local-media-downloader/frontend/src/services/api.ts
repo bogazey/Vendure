@@ -16,7 +16,9 @@ import type {
   BillingPeriod,
   BillingPortalResponse,
   CheckoutResponse,
+  DownloadPreferencesOut,
   Plan,
+  UpdateDownloadPreferencesRequest,
   UserOut,
 } from "../types/commercial";
 
@@ -145,6 +147,15 @@ export const api = {
 
   // --- Account / billing ---
   getAccount: () => request<AccountOut>("/api/account"),
+
+  // Per-user - never shared with any other account. See types/commercial.ts.
+  getDownloadPreferences: () => request<DownloadPreferencesOut>("/api/account/download-preferences"),
+
+  updateDownloadPreferences: (patch: UpdateDownloadPreferencesRequest) =>
+    request<DownloadPreferencesOut>("/api/account/download-preferences", {
+      method: "PUT",
+      body: JSON.stringify(patch),
+    }),
 
   createCheckout: (plan: Plan, billingPeriod: BillingPeriod) =>
     request<CheckoutResponse>("/api/billing/checkout", {

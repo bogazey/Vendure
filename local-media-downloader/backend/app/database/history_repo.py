@@ -126,14 +126,20 @@ def clear_all(user_id: Optional[str] = None) -> list[HistoryRecordOut]:
     return rows
 
 
-def filepath_exists(filepath: str) -> bool:
-    """Whether any history row currently references this exact file path.
+def filepath_exists(filepath: str, user_id: Optional[str] = None) -> bool:
+    """Whether a history row currently references this exact file path.
 
     Used to allow opening/deleting a file from an older download after the
-    user has since changed their download folder in Settings.
+    user has since changed their download folder in Settings. Always pass
+    `user_id` from an authenticated caller - without it this would let one
+    account probe/act on whether *any other* account ever downloaded a file
+    at a given path.
     """
     with get_cursor() as cur:
-        cur.execute("SELECT 1 FROM history WHERE filepath = ? LIMIT 1", (filepath,))
+        if user_id is not None:
+            cur.execute("SELECT 1 FROM history WHERE filepath = ? AND user_id = ? LIMIT 1", (filepath, user_id))
+        else:
+            cur.execute("SELECT 1 FROM history WHERE filepath = ? LIMIT 1", (filepath,))
         return cur.fetchone() is not None
 
 

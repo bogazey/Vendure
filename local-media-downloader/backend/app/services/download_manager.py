@@ -27,9 +27,12 @@ from app.models.schemas import AppSettings, CreateDownloadRequest, DownloadJobOu
 from app.services import ytdlp_service
 from app.services.settings_service import get_settings
 from app.services.usage_service import usage_service
+from app.services.user_preferences_service import user_preferences_service
+from app.services.user_storage_service import ensure_within_user_dir, user_download_dir
 from app.utils.exceptions import (
     FfmpegMissingError,
     FfmpegProcessingError,
+    InvalidPathError,
     JobNotFoundError,
     UnavailableMediaError,
 )
@@ -176,6 +179,33 @@ class DownloadManager:
             request = CreateDownloadRequest(url=record.url)
         return self.create_job(request)
 
+    def _effective_settings(self, job: DownloadJob) -> AppSettings:
+        """Global AppSettings (concurrency, audio/video presets, timeouts,
+        ...) with:
+        - container_mode/cookie_source/cookie_file_path overridden by this
+          job's owning user's own preferences (see user_preferences_service.py
+          for why those three fields can never come from the shared row), and
+        - download_dir overridden to this user's own, non-configurable
+          <DOWNLOAD_ROOT>/<user_id>/ directory (see user_storage_service.py) -
+          never the shared global download_dir, which would both mix
+          different accounts' files together and let any authenticated user
+          redirect downloads to an arbitrary server path."""
+        settings = get_settings()
+        if not job.user_id:
+            return settings
+        session = session_scope()
+        try:
+            effective = user_preferences_service.get_effective_settings(session, job.user_id, settings)
+            session.commit()  # persist a lazily-created default row rather than rolling it back on close
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+        user_dir = user_download_dir(job.user_id)
+        return effective.model_copy(update={"download_dir": str(user_dir)})
+
     async def _run_job(self, job_id: str) -> None:
         job = self.get_job(job_id)
         semaphore = await self._get_semaphore()
@@ -191,7 +221,7 @@ class DownloadManager:
                 # still "in progress" gets marked failed and stays retryable
                 # instead of vanishing silently (see history_repo.mark_interrupted_as_failed).
                 self._save_history(job)
-                settings = get_settings()
+                settings = self._effective_settings(job)
                 await asyncio.to_thread(self._blocking_download, job, settings)
                 if job.cancel_event.is_set():
                     # The download finished before we could interrupt it (e.g.
@@ -214,9 +244,19 @@ class DownloadManager:
             return
         try:
             path = Path(job.filepath)
+            if job.user_id:
+                # Defense-in-depth: job.filepath was written by this exact
+                # process into this user's own effective download_dir, so
+                # this should never actually reject anything - but a
+                # cleanup action is exactly the kind of place a future bug
+                # (or a job replayed with a stale/tampered filepath) should
+                # never be trusted to unlink outside the account it belongs to.
+                path = ensure_within_user_dir(path, job.user_id)
             if path.is_file():
                 path.unlink()
                 logger.info("Removed file for cancelled job %s", job.id)
+        except InvalidPathError as exc:
+            logger.warning("Refused to remove out-of-bounds file for cancelled job %s: %s", job.id, exc)
         except OSError as exc:
             logger.warning("Could not remove file for cancelled job %s: %s", job.id, exc)
 
@@ -228,6 +268,13 @@ class DownloadManager:
             )
 
         download_dir = resolve_safe_directory(settings.download_dir)
+        if job.user_id:
+            # Belt-and-suspenders: _effective_settings() already computed
+            # download_dir as this user's own <DOWNLOAD_ROOT>/<user_id>/,
+            # but the actual write to disk is the single most consequential
+            # step in this whole flow - never trust a value this many
+            # layers removed from its source without re-checking it here too.
+            download_dir = ensure_within_user_dir(download_dir, job.user_id)
         ok, reason = validate_directory_writable(download_dir)
         if not ok:
             raise PermissionError(reason or "Download folder is not writable.")

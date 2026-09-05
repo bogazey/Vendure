@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import AdSlot from "../components/AdSlot";
 import ErrorBanner from "../components/ErrorBanner";
 import { ApiError, api } from "../services/api";
+import { appPageShell } from "../styles/ui";
 import type { HistoryRecordOut, Platform } from "../types/api";
 import { formatBytes, formatDate } from "../utils/format";
 import { PLATFORM_LABELS } from "../utils/platform";
@@ -59,14 +61,22 @@ export default function HistoryPage() {
     }
   };
 
+  const filtersActive = !!(search || platform || status);
+
+  const clearFilters = () => {
+    setSearch("");
+    setPlatform("");
+    setStatus("");
+  };
+
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-6 px-6 py-10">
+    <div className={appPageShell}>
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-slate-50">Download History</h1>
+        <h1 className="font-display text-xl font-bold text-slate-50">Download History</h1>
         <button
           type="button"
           onClick={() => setConfirmClear(true)}
-          className="rounded-md border border-surface-border px-3 py-1.5 text-sm text-slate-400 hover:border-red-500/40 hover:text-red-300"
+          className="rounded-full border border-white/10 px-3 py-1.5 text-sm text-slate-400 transition-colors hover:border-red-500/40 hover:text-red-300"
         >
           Clear History
         </button>
@@ -77,34 +87,34 @@ export default function HistoryPage() {
       <AdSlot placement="history-page" />
 
       {confirmClear && (
-        <div className="flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 backdrop-blur-xl">
           <span>Clear all history records? Files on disk are kept unless you choose to delete them too.</span>
           <div className="flex gap-2">
-            <button onClick={() => handleClear(false)} className="rounded-md bg-amber-500 px-3 py-1 text-black">
+            <button onClick={() => handleClear(false)} className="rounded-full bg-amber-500 px-3 py-1 text-black">
               Clear records only
             </button>
-            <button onClick={() => handleClear(true)} className="rounded-md bg-red-600 px-3 py-1 text-white">
+            <button onClick={() => handleClear(true)} className="rounded-full bg-red-600 px-3 py-1 text-white">
               Clear + delete files
             </button>
-            <button onClick={() => setConfirmClear(false)} className="rounded-md px-3 py-1 text-amber-200/70">
+            <button onClick={() => setConfirmClear(false)} className="rounded-full px-3 py-1 text-amber-200/70">
               Cancel
             </button>
           </div>
         </div>
       )}
 
-      <div className="flex flex-wrap gap-3">
+      <div className="glass-panel flex flex-wrap gap-3 p-3">
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search title, uploader, or URL"
-          className="min-w-[220px] flex-1 rounded-md border border-surface-border bg-surface-raised px-3 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
+          className="input-glass min-w-[220px] flex-1 py-2"
         />
         <select
           value={platform}
           onChange={(e) => setPlatform(e.target.value)}
-          className="rounded-md border border-surface-border bg-surface-raised px-3 py-2 text-sm text-slate-200"
+          className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-200 backdrop-blur-xl focus:border-brand-purple/60 focus:outline-none"
         >
           <option value="">All platforms</option>
           {PLATFORM_OPTIONS.map((p) => (
@@ -116,7 +126,7 @@ export default function HistoryPage() {
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
-          className="rounded-md border border-surface-border bg-surface-raised px-3 py-2 text-sm text-slate-200"
+          className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-200 backdrop-blur-xl focus:border-brand-purple/60 focus:outline-none"
         >
           <option value="">All statuses</option>
           {STATUS_OPTIONS.map((s) => (
@@ -128,7 +138,7 @@ export default function HistoryPage() {
         <select
           value={order}
           onChange={(e) => setOrder(e.target.value as "newest" | "oldest")}
-          className="rounded-md border border-surface-border bg-surface-raised px-3 py-2 text-sm text-slate-200"
+          className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-200 backdrop-blur-xl focus:border-brand-purple/60 focus:outline-none"
         >
           <option value="newest">Newest first</option>
           <option value="oldest">Oldest first</option>
@@ -136,15 +146,61 @@ export default function HistoryPage() {
       </div>
 
       <div className="flex flex-col gap-2">
-        {records.length === 0 && (
-          <div className="rounded-xl border border-dashed border-surface-border p-8 text-center text-sm text-slate-500">
-            No history records match your filters.
-          </div>
-        )}
+        {records.length === 0 &&
+          (filtersActive ? (
+            <FilteredEmptyState onClearFilters={clearFilters} />
+          ) : (
+            <NoDownloadsEmptyState />
+          ))}
         {records.map((record) => (
           <HistoryRow key={record.id} record={record} onDelete={handleDelete} onRetry={handleRetry} />
         ))}
       </div>
+    </div>
+  );
+}
+
+function NoDownloadsEmptyState() {
+  return (
+    <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.015] px-8 py-14 text-center">
+      <span className="flex h-14 w-14 items-center justify-center rounded-2xl border border-brand-blue/25 bg-brand-blue/10 text-brand-blue">
+        <svg viewBox="0 0 24 24" width={26} height={26} fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 4v11" />
+          <path d="m7 11 5 5 5-5" />
+          <path d="M5 19h14" />
+        </svg>
+      </span>
+      <div className="flex flex-col gap-1.5">
+        <h3 className="font-display text-base font-semibold text-slate-100">Nothing here yet</h3>
+        <p className="max-w-xs text-sm text-slate-400">
+          Everything you save from YouTube, TikTok, Instagram, or Facebook will show up here.
+        </p>
+      </div>
+      <Link to="/dashboard" className="btn-gradient !px-4 !py-2 text-sm">
+        Download something
+      </Link>
+    </div>
+  );
+}
+
+function FilteredEmptyState({ onClearFilters }: { onClearFilters: () => void }) {
+  return (
+    <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.015] px-8 py-14 text-center">
+      <span className="flex h-14 w-14 items-center justify-center rounded-2xl border border-brand-purple/25 bg-brand-purple/10 text-brand-purple">
+        <svg viewBox="0 0 24 24" width={26} height={26} fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="6.5" />
+          <path d="m20 20-3.2-3.2" />
+        </svg>
+      </span>
+      <div className="flex flex-col gap-1.5">
+        <h3 className="font-display text-base font-semibold text-slate-100">No matches for these filters</h3>
+        <p className="max-w-xs text-sm text-slate-400">
+          Nothing in your download history matches the current search or filters.
+        </p>
+      </div>
+      <button type="button" onClick={onClearFilters} className="btn-glass !px-4 !py-2 text-sm">
+        Clear filters
+      </button>
     </div>
   );
 }
@@ -165,11 +221,11 @@ function HistoryRow({
         ? "text-red-400"
         : record.status === "cancelled"
           ? "text-slate-500"
-          : "text-indigo-400";
+          : "text-brand-aqua";
 
   return (
-    <div className="flex flex-wrap items-center gap-4 rounded-lg border border-surface-border bg-surface-raised p-3">
-      <div className="h-12 w-20 shrink-0 overflow-hidden rounded-md bg-black/40">
+    <div className="glass-panel flex flex-wrap items-center gap-4 p-3 transition-colors hover:border-white/20">
+      <div className="h-12 w-20 shrink-0 overflow-hidden rounded-lg bg-black/40">
         {record.thumbnail && <img src={record.thumbnail} alt="" className="h-full w-full object-cover" />}
       </div>
 
@@ -195,13 +251,13 @@ function HistoryRow({
           <>
             <button
               onClick={() => api.openPath(record.filepath!).catch(() => undefined)}
-              className="rounded-md border border-surface-border px-2 py-1 text-xs text-slate-300 hover:border-slate-500"
+              className="rounded-full border border-white/10 px-2.5 py-1 text-xs text-slate-300 hover:border-white/30"
             >
               Open file
             </button>
             <button
               onClick={() => api.openContainingFolder(record.filepath!).catch(() => undefined)}
-              className="rounded-md border border-surface-border px-2 py-1 text-xs text-slate-300 hover:border-slate-500"
+              className="rounded-full border border-white/10 px-2.5 py-1 text-xs text-slate-300 hover:border-white/30"
             >
               Open folder
             </button>
@@ -210,14 +266,14 @@ function HistoryRow({
         {(record.status === "failed" || record.status === "cancelled") && (
           <button
             onClick={() => onRetry(record.id)}
-            className="rounded-md border border-indigo-500/40 px-2 py-1 text-xs text-indigo-300 hover:border-indigo-400"
+            className="rounded-full border border-brand-aqua/40 px-2.5 py-1 text-xs text-brand-aqua hover:border-brand-aqua/70"
           >
             Retry
           </button>
         )}
         <button
           onClick={() => onDelete(record.id, false)}
-          className="rounded-md border border-surface-border px-2 py-1 text-xs text-slate-400 hover:border-red-500/40 hover:text-red-300"
+          className="rounded-full border border-white/10 px-2.5 py-1 text-xs text-slate-400 hover:border-red-500/40 hover:text-red-300"
         >
           Remove
         </button>

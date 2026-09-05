@@ -1,5 +1,10 @@
-"""Path-permission guard: opening/deleting files must stay inside the
-configured download folder, or be a path we actually recorded in history."""
+"""Path-permission guard, legacy/no-user_id (personal-mode) behavior:
+opening/deleting files must stay inside the configured download folder, or
+be a path we actually recorded in history. This is the fallback used only
+when there's no authenticated user context at all - every real HTTP route
+in this build always passes user_id and gets the much stricter,
+per-account-directory-only behavior instead (no history fallback at all -
+see tests/test_user_storage_service.py)."""
 from __future__ import annotations
 
 import uuid
@@ -73,3 +78,40 @@ class TestEnsurePathPermitted:
         unknown.write_text("data")
         with pytest.raises(InvalidPathError):
             filesystem_service.ensure_path_permitted(unknown)
+
+    def test_a_user_id_skips_the_legacy_fallback_entirely(self, download_dir, tmp_path):
+        """Passing a user_id (every real HTTP caller in this build) routes
+        through user_storage_service's strict per-account-directory check
+        instead of this legacy global-download-dir/history-fallback logic -
+        even a file legitimately recorded in that exact user's history is
+        rejected here, because it isn't inside their own
+        <DOWNLOAD_ROOT>/<user_id>/ directory. See test_user_storage_service.py
+        for the real, current behavior authenticated callers get."""
+        old_download_dir = tmp_path / "old-downloads-2"
+        old_download_dir.mkdir()
+        old_file = old_download_dir / "someone-elses-clip [zzz111].mp4"
+        old_file.write_text("data")
+
+        owner_id = str(uuid.uuid4())
+        history_repo.upsert(
+            {
+                "id": str(uuid.uuid4()),
+                "url": "https://www.youtube.com/watch?v=zzz111",
+                "platform": "youtube",
+                "title": "Someone Else's Clip",
+                "uploader": None,
+                "thumbnail": None,
+                "format_label": "1080p",
+                "resolution": "1080p",
+                "filepath": str(old_file),
+                "filesize": 4,
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "completed_at": "2026-01-01T00:01:00+00:00",
+                "status": "completed",
+                "error_message": None,
+                "user_id": owner_id,
+            }
+        )
+
+        with pytest.raises(InvalidPathError):
+            filesystem_service.ensure_path_permitted(old_file, user_id=owner_id)

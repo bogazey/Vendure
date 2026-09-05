@@ -10,10 +10,7 @@ describe("resolveTheme", () => {
     expect(resolveTheme("dark")).toBe("dark");
   });
 
-  it("falls back to dark for 'system' when no window/matchMedia is available", () => {
-    // This test runs in a Node (non-DOM) environment, so `window` doesn't
-    // exist - resolveTheme's systemPrefersDark() must not throw, and should
-    // fall back to a safe default (dark) rather than crash.
+  it("resolves 'system' to dark - the brand identity is fixed dark, not OS-tracking", () => {
     expect(resolveTheme("system")).toBe("dark");
   });
 });

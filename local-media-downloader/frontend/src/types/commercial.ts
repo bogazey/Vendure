@@ -58,6 +58,8 @@ export interface AccountOut {
 export interface CheckoutResponse {
   price_id: string;
   client_token: string;
+  /** "sandbox" | "production" - drives Paddle.Environment.set(), never hardcoded client-side. */
+  environment: string;
   plan: Plan;
   billing_period: BillingPeriod;
   custom_data: Record<string, unknown>;
@@ -66,6 +68,18 @@ export interface CheckoutResponse {
 export interface BillingPortalResponse {
   url: string | null;
 }
+
+// Per-user download preferences - deliberately NOT part of AppSettings
+// (types/api.ts): those come from a global row shared by every account, and
+// container_mode/cookie_source/cookie_file_path must never be. See
+// COMMERCIAL_ARCHITECTURE.md for why this was split out.
+export interface DownloadPreferencesOut {
+  container_mode: "compatibility" | "original";
+  cookie_source: "none" | "chrome" | "firefox" | "edge" | "safari" | "file";
+  cookie_file_path: string | null;
+}
+
+export type UpdateDownloadPreferencesRequest = Partial<DownloadPreferencesOut>;
 
 export interface AdminUserOut {
   id: string;

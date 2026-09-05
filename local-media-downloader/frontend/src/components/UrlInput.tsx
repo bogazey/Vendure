@@ -7,6 +7,7 @@ interface UrlInputProps {
 
 export default function UrlInput({ onAnalyze, loading }: UrlInputProps) {
   const [value, setValue] = useState("");
+  const [justPasted, setJustPasted] = useState(false);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -16,7 +17,11 @@ export default function UrlInput({ onAnalyze, loading }: UrlInputProps) {
   const handlePaste = async () => {
     try {
       const text = await navigator.clipboard.readText();
-      if (text) setValue(text.trim());
+      if (text) {
+        setValue(text.trim());
+        setJustPasted(true);
+        setTimeout(() => setJustPasted(false), 1200);
+      }
     } catch {
       // Clipboard access denied by the browser; user can paste manually.
     }
@@ -31,21 +36,21 @@ export default function UrlInput({ onAnalyze, loading }: UrlInputProps) {
             value={value}
             onChange={(e) => setValue(e.target.value)}
             placeholder="Paste YouTube, TikTok, Instagram or Facebook URL"
-            className="w-full rounded-xl border border-surface-border bg-surface-raised px-5 py-4 text-base text-slate-100 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="input-glass w-full px-5 py-4 text-base"
           />
         </div>
         <div className="flex gap-2">
           <button
             type="button"
             onClick={handlePaste}
-            className="rounded-xl border border-surface-border bg-surface-raised px-4 py-4 text-sm font-medium text-slate-300 hover:bg-surface-border sm:px-5"
+            className={`btn-glass px-4 py-4 transition-colors sm:px-5 ${justPasted ? "!border-brand-aqua/50 !text-brand-aqua" : ""}`}
           >
-            Paste
+            {justPasted ? "Pasted" : "Paste"}
           </button>
           <button
             type="submit"
             disabled={loading || !value.trim()}
-            className="rounded-xl bg-indigo-600 px-5 py-4 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 sm:px-6"
+            className="btn-gradient px-5 py-4 sm:px-6"
           >
             {loading ? "Analyzing…" : "Analyze"}
           </button>

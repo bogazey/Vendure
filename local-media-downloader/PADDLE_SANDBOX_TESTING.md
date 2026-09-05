@@ -1,17 +1,26 @@
 # Paddle Sandbox Testing
 
-**Read this first:** no Paddle MCP tool or Paddle Sandbox account was
-available in the environment this branch was built in. This was confirmed
-by searching for a Paddle connector (`ToolSearch`, `SearchMcpRegistry`) —
-none was found, despite the task description assuming one was connected. No
-Paddle Sandbox products, prices, checkout, or webhook delivery were
-actually exercised against a real Paddle account. Everything below is
-either (a) verified locally without Paddle (signature verification,
-idempotency, gating logic — all covered by
-`backend/tests/test_commercial_paddle.py`) or (b) a set of exact manual
-steps for you to run once you have Paddle Sandbox access, per the
-project's explicit instruction not to claim success for a test that wasn't
-actually run.
+**Read this first:** no Paddle MCP tool or Paddle Sandbox account has been
+available in either build session for this branch. This was checked twice —
+once via `ToolSearch`/`SearchMcpRegistry` when this branch was first built,
+and again in a follow-up session after being told a "Paddle Sandbox MCP
+server is now connected and working." The second check was just as
+explicit: `ListConnectors` (no keyword filter, and filtered to
+paddle/billing/payments) returned an empty list, and `SearchMcpRegistry`
+against paddle/billing/checkout/subscription-shaped keywords surfaced only
+unrelated tools (Padlet, Chargebee, Stripe, PayPal, Pine Labs, ChartMogul —
+never Paddle). **If you believe a Paddle connector is connected on your
+account, it is not visible to this session** — check under claude.ai
+connector settings that it's both installed AND enabled for this specific
+chat/session (an installed-but-not-enabled-here connector looks identical
+to "not installed" from inside a session). No Paddle Sandbox products,
+prices, checkout, or webhook delivery have been exercised against a real
+Paddle account in either session. Everything below is either (a) verified
+locally without Paddle (signature verification, idempotency, gating logic,
+and now the checkout-request code path itself — see below) or (b) a set of
+exact manual steps for you to run once real Paddle Sandbox access is
+available to whoever's driving, per the project's explicit instruction not
+to claim success for a test that wasn't actually run.
 
 ## What's already verified (automated, no Paddle account needed)
 
@@ -24,8 +33,18 @@ python -m pytest tests/test_commercial_paddle.py -v
 
 Covers: HMAC signature verification (valid, wrong secret, tampered body,
 missing/malformed header), idempotent replay of the same `event_id`,
-unknown event types being recorded but ignored, and a webhook referencing
-an unknown `user_id` not crashing.
+unknown event types being recorded but ignored, a webhook referencing
+an unknown `user_id` not crashing, `POST /api/billing/checkout` returning
+a clean `502 BILLING_ERROR` (not a crash) when no price/token is
+configured — the actual state of this environment right now — and
+returning the right `price_id`/`client_token`/`environment` fields when
+they are configured (`tests/test_commercial_api.py::TestCheckoutValidation`).
+
+Also verified live in a real browser against a running server (no real
+Paddle account involved): sign up, visit Pricing, click Upgrade → the
+missing-configuration case surfaces as a clean in-page error banner with
+no uncaught JS exception, rather than the checkout silently failing or
+crashing the page.
 
 ## What you need to verify manually, with a real Paddle Sandbox account
 
@@ -85,21 +104,31 @@ Copy the webhook's signing secret into `backend/.env`:
 PADDLE_WEBHOOK_SECRET=whsec_...
 ```
 
-### 5. Frontend checkout integration (not wired up yet)
+### 5. Frontend checkout integration
 
-The Pricing page (`frontend/src/pages/Pricing.tsx`) currently calls `POST
-/api/billing/checkout`, gets back `{price_id, client_token, ...}`, and
-shows an alert with those values rather than actually opening Paddle's
-checkout overlay — Paddle.js itself was never loaded or exercised, since
-doing so meaningfully requires a live Sandbox client token. To finish this:
+**Done** — `frontend/src/lib/paddle.ts` dynamically loads Paddle.js v2
+(`https://cdn.paddle.com/paddle/v2/paddle.js`) on first use, calls
+`Paddle.Environment.set()` using the `environment` field the checkout
+endpoint now returns (never hardcoded — `CheckoutResponse.environment`
+mirrors the server's `PADDLE_ENV`, which this build hard-restricts to
+`sandbox`), initializes with the public `client_token`, and opens
+`Paddle.Checkout.open({ items: [...], customData })`. `Pricing.tsx`'s
+"Upgrade" button calls this instead of the old placeholder alert, and
+shows a "confirming your upgrade" banner for a few seconds after Paddle's
+`checkout.completed` event fires (polling `refresh()` to catch the
+account update once the webhook lands — the checkout event itself is
+never treated as proof of payment, per COMMERCIAL_ARCHITECTURE.md §5).
 
-1. Add the Paddle.js script tag (`https://cdn.paddle.com/paddle/v2/paddle.js`).
-2. `Paddle.Initialize({ token: clientToken })` using the `client_token` the
-   checkout endpoint returns.
-3. `Paddle.Checkout.open({ items: [{ priceId: checkout.price_id }],
-   customData: checkout.custom_data })`.
-4. Replace the `window.alert(...)` placeholder in `Pricing.tsx`'s
-   `handleSelect` with the above.
+**Not exercised**: the actual `cdn.paddle.com` script load and checkout
+overlay, since (a) there's no real `PADDLE_CLIENT_TOKEN`/price IDs to
+initialize against, and (b) this sandbox has no general outbound network
+access to third-party sites (confirmed separately — `curl` to
+`youtube.com` also fails here), so even the script fetch itself couldn't
+be attempted meaningfully. What *is* verified is everything up to that
+point: the request to `/api/billing/checkout`, its response shape, and
+the graceful, non-crashing failure path when it's unconfigured (see
+above). Once real credentials are in `backend/.env`, this should work
+as-is — the acceptance checklist below is what to actually click through.
 
 ### 6. End-to-end acceptance checklist
 

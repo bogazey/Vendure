@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+
+
+
+<defs>
+  <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#22D3EE"/>
+    <stop offset="50%" stop-color="#3B82F6"/>
+    <stop offset="100%" stop-color="#8B5CF6"/>
+  </linearGradient>
+  <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+    <feGaussianBlur stdDeviation="18" result="blur"/>
+    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+</defs>
+
+<rect width="1600" height="1000" fill="#05070D"/>
+<ellipse cx="470" cy="480" rx="420" ry="220" fill="#3B82F6" opacity=".14"/>
+<ellipse cx="1220" cy="420" rx="420" ry="250" fill="#8B5CF6" opacity=".12"/>
+<ellipse cx="790" cy="640" rx="350" ry="190" fill="#22D3EE" opacity=".10"/>
+<path d="M-120,180 C220,20 420,420 760,210 C1050,45 1250,115 1710,-20"
+      fill="none" stroke="url(#brand)" stroke-width="18" opacity=".45" filter="url(#glow)"/>
+<path d="M-40,760 C240,540 500,840 790,650 C1100,450 1310,620 1660,420"
+      fill="none" stroke="url(#brand)" stroke-width="9" opacity=".25" filter="url(#glow)"/>
+<path d="M980,120 L1420,15" stroke="#22D3EE" stroke-width="3" opacity=".65"/>
+
+</svg>

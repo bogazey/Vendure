@@ -23,10 +23,10 @@ const ACTIVE_STAGES = new Set(["queued", "analyzing", "downloading", "merging", 
 export default function DownloadQueueItem({ job, onCancel }: DownloadQueueItemProps) {
   const active = ACTIVE_STAGES.has(job.stage);
   const barColor =
-    job.stage === "failed" ? "bg-red-500" : job.stage === "cancelled" ? "bg-slate-500" : "bg-indigo-500";
+    job.stage === "failed" ? "bg-red-500" : job.stage === "cancelled" ? "bg-slate-500" : "bg-brand-gradient";
 
   return (
-    <div className="flex gap-3 rounded-lg border border-surface-border bg-surface-raised p-3">
+    <div className="glass-panel flex gap-3 p-3">
       <div className="h-14 w-24 shrink-0 overflow-hidden rounded-md bg-black/40">
         {job.thumbnail ? (
           <img src={job.thumbnail} alt="" className="h-full w-full object-cover" />
@@ -46,7 +46,7 @@ export default function DownloadQueueItem({ job, onCancel }: DownloadQueueItemPr
             <button
               type="button"
               onClick={() => onCancel(job.id)}
-              className="shrink-0 rounded-md border border-surface-border px-2 py-0.5 text-xs text-slate-400 hover:border-red-500/50 hover:text-red-300"
+              className="shrink-0 rounded-md border border-white/10 px-2 py-0.5 text-xs text-slate-400 hover:border-red-500/50 hover:text-red-300"
             >
               Cancel
             </button>
@@ -60,7 +60,7 @@ export default function DownloadQueueItem({ job, onCancel }: DownloadQueueItemPr
           <span>{STAGE_LABELS[job.stage] ?? job.stage}</span>
         </div>
 
-        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface">
+        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
           <div
             className={`h-full rounded-full transition-all ${barColor}`}
             style={{ width: `${job.stage === "failed" || job.stage === "cancelled" ? 100 : job.progress_percent}%` }}

@@ -14,7 +14,7 @@ export default function AdvancedFormats({ formats, selectedFormatId, onSelect }:
   if (formats.length === 0) return null;
 
   return (
-    <div className="rounded-lg border border-surface-border">
+    <div className="rounded-2xl border border-white/10 bg-white/[0.02] backdrop-blur-xl">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -25,9 +25,9 @@ export default function AdvancedFormats({ formats, selectedFormatId, onSelect }:
       </button>
 
       {open && (
-        <div className="max-h-72 overflow-auto border-t border-surface-border">
+        <div className="max-h-72 overflow-auto border-t border-white/10">
           <table className="w-full text-left text-xs">
-            <thead className="sticky top-0 bg-surface-raised text-slate-500">
+            <thead className="sticky top-0 bg-[#0b0e1a] text-slate-500">
               <tr>
                 <th className="px-3 py-2 font-medium">Use</th>
                 <th className="px-3 py-2 font-medium">Type</th>
@@ -43,8 +43,8 @@ export default function AdvancedFormats({ formats, selectedFormatId, onSelect }:
               {formats.map((f) => (
                 <tr
                   key={f.format_id}
-                  className={`cursor-pointer border-t border-surface-border/60 hover:bg-surface-border/30 ${
-                    selectedFormatId === f.format_id ? "bg-indigo-500/10" : ""
+                  className={`cursor-pointer border-t border-white/[0.06] hover:bg-white/[0.03] ${
+                    selectedFormatId === f.format_id ? "bg-brand-purple/10" : ""
                   }`}
                   onClick={() => onSelect(selectedFormatId === f.format_id ? null : f)}
                 >
@@ -53,7 +53,7 @@ export default function AdvancedFormats({ formats, selectedFormatId, onSelect }:
                       type="radio"
                       checked={selectedFormatId === f.format_id}
                       onChange={() => onSelect(f)}
-                      className="accent-indigo-500"
+                      className="accent-brand-aqua"
                     />
                   </td>
                   <td className="px-3 py-2 text-slate-300">

@@ -11,7 +11,7 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.config.logging_config import get_logger
-from app.config.paths import DATA_DIR
+from app.config.paths import DATA_DIR, DEFAULT_DOWNLOAD_DIR
 
 logger = get_logger("commercial_settings")
 
@@ -23,7 +23,13 @@ _GENERATED_SECRET = secrets.token_hex(32)
 
 
 class CommercialSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # env_ignore_empty: a blank `KEY=` line in .env (as .env.example ships
+    # for SECRET_KEY/DATABASE_URL/DOWNLOAD_ROOT/COOKIE_DOMAIN, intending the
+    # Python-side default below to apply) would otherwise be read as an
+    # explicit empty string and override the default instead of falling
+    # through to it - notably making SECRET_KEY="" silently instead of a
+    # generated secret, with no warning.
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", env_ignore_empty=True)
 
     # --- Auth / sessions ---
     secret_key: str = Field(default=_GENERATED_SECRET, alias="SECRET_KEY")
@@ -48,6 +54,13 @@ class CommercialSettings(BaseSettings):
     paddle_pro_annual_price_id: str = Field(default="", alias="PADDLE_PRO_ANNUAL_PRICE_ID")
     paddle_creator_monthly_price_id: str = Field(default="", alias="PADDLE_CREATOR_MONTHLY_PRICE_ID")
     paddle_creator_annual_price_id: str = Field(default="", alias="PADDLE_CREATOR_ANNUAL_PRICE_ID")
+
+    # --- Storage ---
+    # Admin/server config, not user-editable: every authenticated user's
+    # downloads are confined to <DOWNLOAD_ROOT>/<user_id>/ - see
+    # app/services/user_storage_service.py. Defaults to the personal app's
+    # own default download folder so this works out of the box.
+    download_root: str = Field(default=str(DEFAULT_DOWNLOAD_DIR), alias="DOWNLOAD_ROOT")
 
     # --- Ads ---
     ads_enabled: bool = Field(default=True, alias="ADS_ENABLED")

@@ -3,9 +3,12 @@ import { useNavigate } from "react-router-dom";
 import ErrorBanner from "../components/ErrorBanner";
 import { useAuth } from "../context/AuthContext";
 import { track } from "../lib/analytics";
+import { openPaddleCheckout } from "../lib/paddle";
 import { ApiError, api } from "../services/api";
 import type { BillingPeriod, Plan } from "../types/commercial";
 import { PLAN_PRICES } from "../types/commercial";
+
+const ASSETS = "/assets/design";
 
 interface PlanRow {
   plan: Plan;
@@ -61,6 +64,7 @@ export default function Pricing() {
   const [period, setPeriod] = useState<BillingPeriod>("monthly");
   const [error, setError] = useState<string | null>(null);
   const [checkingOut, setCheckingOut] = useState<Plan | null>(null);
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     track("pricing_view");
@@ -81,15 +85,21 @@ export default function Pricing() {
     track("checkout_started", { plan });
     try {
       const checkout = await api.createCheckout(plan, period);
-      // Paddle.js would open its overlay here using checkout.client_token /
-      // checkout.price_id. No Paddle Sandbox tooling was available in this
-      // build environment to exercise that client-side flow end-to-end -
-      // see PADDLE_SANDBOX_TESTING.md for exact manual steps.
-      window.alert(
-        `Sandbox checkout ready: plan=${checkout.plan}, price_id=${checkout.price_id || "(not configured)"}.\n` +
-          "See PADDLE_SANDBOX_TESTING.md for how to complete this in Paddle Sandbox."
-      );
-      await refresh();
+      await openPaddleCheckout(checkout, (event) => {
+        if (event.name === "checkout.completed") {
+          // The account's plan itself only actually changes once Paddle's
+          // webhook lands (never trust the checkout UI alone - see
+          // COMMERCIAL_ARCHITECTURE.md §5), which is usually seconds away -
+          // a short poll covers that gap instead of leaving the page stale.
+          setConfirming(true);
+          refresh();
+          setTimeout(refresh, 3000);
+          setTimeout(() => {
+            refresh();
+            setConfirming(false);
+          }, 8000);
+        }
+      });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not start checkout.");
     } finally {
@@ -100,19 +110,39 @@ export default function Pricing() {
   const currentPlan = account?.subscription.plan;
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-10 px-6 py-14">
+    <div className="relative overflow-hidden">
+      {/* Section-transition glows from the supplied design asset pack,
+          per docs/ASSET_PLACEMENT.md ("section transitions / pricing / CTA
+          backgrounds") - a soft blue sweep from the lower-left and a
+          fainter violet one from the right, echoing the master reference. */}
+      <img
+        src={`${ASSETS}/backgrounds/section-wave-left.svg`}
+        alt=""
+        aria-hidden="true"
+        className="pointer-events-none absolute -bottom-24 -left-32 -z-10 h-[44rem] w-[44rem] opacity-70"
+      />
+      <img
+        src={`${ASSETS}/backgrounds/section-wave-right.svg`}
+        alt=""
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-32 top-0 -z-10 h-[44rem] w-[44rem] opacity-60"
+      />
+
+      <div className="relative z-10 mx-auto flex max-w-5xl flex-col gap-10 px-6 py-14">
       <div className="flex flex-col items-center gap-3 text-center">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-50">Simple, transparent pricing</h1>
+        <h1 className="font-display text-4xl font-bold tracking-tight text-slate-50 sm:text-5xl">
+          Simple, transparent pricing
+        </h1>
         <p className="max-w-xl text-sm text-slate-400">
           Start free. Upgrade when you need higher quality, more downloads, or creator tools.
         </p>
 
-        <div className="mt-2 flex items-center gap-1 rounded-lg border border-surface-border bg-surface-raised/50 p-1">
+        <div className="mt-2 flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] p-1 backdrop-blur-xl">
           <button
             type="button"
             onClick={() => setPeriod("monthly")}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              period === "monthly" ? "bg-surface-raised text-slate-50" : "text-slate-400 hover:text-slate-200"
+            className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+              period === "monthly" ? "bg-brand-gradient text-white shadow-glow" : "text-slate-400 hover:text-slate-200"
             }`}
           >
             Monthly
@@ -120,8 +150,8 @@ export default function Pricing() {
           <button
             type="button"
             onClick={() => setPeriod("annual")}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              period === "annual" ? "bg-surface-raised text-slate-50" : "text-slate-400 hover:text-slate-200"
+            className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+              period === "annual" ? "bg-brand-gradient text-white shadow-glow" : "text-slate-400 hover:text-slate-200"
             }`}
           >
             Annual <span className="text-emerald-400">save ~18%</span>
@@ -130,32 +160,71 @@ export default function Pricing() {
       </div>
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
+      {confirming && (
+        <p className="rounded-2xl border border-brand-aqua/30 bg-brand-aqua/10 px-4 py-2 text-center text-sm text-brand-aqua backdrop-blur-xl">
+          Payment received — confirming your upgrade…
+        </p>
+      )}
 
       <div className="grid gap-6 md:grid-cols-3">
         {PLAN_ROWS.map((row) => {
           const price = row.plan === "free" ? 0 : PLAN_PRICES[row.plan][period];
           const isCurrent = currentPlan === row.plan;
+          const isRecommended = row.plan === "pro";
           return (
             <div
               key={row.plan}
-              className={`flex flex-col gap-5 rounded-xl border p-6 ${
-                row.plan === "pro" ? "border-indigo-500/60 bg-surface-raised" : "border-surface-border bg-surface-raised/60"
+              className={`relative flex flex-col gap-5 rounded-2xl p-6 transition-transform duration-200 ${
+                isRecommended
+                  ? "border border-brand-purple/50 bg-white/[0.035] md:-translate-y-2"
+                  : "border border-white/[0.08] bg-white/[0.02] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]"
               }`}
             >
+              {isRecommended && (
+                // CSS background-image + background-size:100% 100% (not an
+                // <img>) - an <img>'s own SVG content still scales by its
+                // internal preserveAspectRatio regardless of the box CSS
+                // gives it, which was stretching this non-uniformly into a
+                // shape that no longer traced the card. A background-image
+                // has no such intrinsic-aspect step: 100% 100% reliably
+                // fills exactly the div's box, sized by -inset-4.
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute -inset-4 -z-10 opacity-80 blur-xl"
+                  style={{
+                    backgroundImage: `url(${ASSETS}/pricing/pro-glow.svg)`,
+                    backgroundSize: "100% 100%",
+                    backgroundRepeat: "no-repeat",
+                  }}
+                />
+              )}
+              {isRecommended && (
+                // The badge SVG's visible pill occupies only the vertical
+                // middle ~43% of its square viewBox - object-contain at a
+                // generous square size (rather than a short, wide box)
+                // keeps it legible instead of shrinking to the constrained
+                // dimension.
+                <img
+                  src={`${ASSETS}/pricing/most-popular-badge.svg`}
+                  alt="Most popular"
+                  className="absolute -top-11 right-2 h-[104px] w-[104px] object-contain"
+                />
+              )}
               <div>
-                <h2 className="text-lg font-semibold text-slate-50">{row.name}</h2>
-                <p className="text-sm text-slate-500">{row.tagline}</p>
+                <h2 className="font-display text-lg font-semibold text-slate-50">{row.name}</h2>
+                <p className="text-sm text-slate-400">{row.tagline}</p>
               </div>
               <div>
-                <span className="text-3xl font-bold text-slate-50">${price}</span>
+                <span className="font-display text-3xl font-bold text-slate-50">${price}</span>
                 {row.plan !== "free" && (
                   <span className="text-sm text-slate-500">/{period === "monthly" ? "mo" : "yr"}</span>
                 )}
               </div>
+              <div className="border-t border-white/[0.08]" />
               <ul className="flex flex-1 flex-col gap-2 text-sm text-slate-300">
                 {row.features.map((f) => (
                   <li key={f} className="flex items-start gap-2">
-                    <span className="mt-0.5 text-emerald-400">✓</span>
+                    <span className="mt-0.5 text-brand-aqua">✓</span>
                     <span>{f}</span>
                   </li>
                 ))}
@@ -164,11 +233,7 @@ export default function Pricing() {
                 type="button"
                 disabled={isCurrent || checkingOut === row.plan}
                 onClick={() => handleSelect(row.plan)}
-                className={`rounded-md px-4 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                  row.plan === "pro"
-                    ? "bg-indigo-500 text-white hover:bg-indigo-400"
-                    : "border border-surface-border text-slate-200 hover:border-slate-500"
-                }`}
+                className={isRecommended ? "btn-gradient w-full" : "btn-glass w-full"}
               >
                 {isCurrent
                   ? "Current plan"
@@ -187,6 +252,7 @@ export default function Pricing() {
         Billing runs on Paddle Sandbox in this build - no real payment is ever collected. Prices shown are the
         planned production prices.
       </p>
+      </div>
     </div>
   );
 }

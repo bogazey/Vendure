@@ -53,7 +53,7 @@ async def clear_history(request: ClearHistoryRequest, user: User = Depends(get_c
             if record.filepath:
                 try:
                     path = Path(record.filepath)
-                    ensure_path_permitted(path)
+                    ensure_path_permitted(path, user_id=user.id)
                     if path.is_file():
                         path.unlink()
                 except (OSError, InvalidPathError) as exc:

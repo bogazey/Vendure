@@ -22,7 +22,7 @@ export default function AdSlot({ placement }: { placement: AdPlacement }) {
   if (!account || !account.features.ads_enabled) return null;
 
   return (
-    <div className="flex items-center justify-center rounded-lg border border-dashed border-surface-border bg-surface-raised/40 px-4 py-6 text-xs text-slate-500">
+    <div className="flex items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-6 text-xs text-slate-500 backdrop-blur-xl">
       <span>{PLACEMENT_LABEL[placement]} · Ad space reserved for Free plan — upgrade to Pro to remove ads</span>
     </div>
   );

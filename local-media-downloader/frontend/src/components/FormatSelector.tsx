@@ -61,17 +61,17 @@ export default function FormatSelector({ media, onStartDownload, submitting }: F
   };
 
   return (
-    <div className="flex flex-col gap-4 rounded-xl border border-surface-border bg-surface-raised p-4">
+    <div className="glass-panel-raised flex flex-col gap-4 p-4">
       {media.is_playlist && (
         <PlaylistChooser media={media} mode={playlistMode} onChange={setPlaylistMode} />
       )}
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 rounded-xl bg-white/[0.03] p-1">
         <button
           type="button"
           onClick={() => setMediaType("video")}
           className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
-            mediaType === "video" ? "bg-indigo-600 text-white" : "bg-surface text-slate-400 hover:text-slate-200"
+            mediaType === "video" ? "bg-brand-gradient text-white shadow-glow" : "text-slate-400 hover:text-slate-200"
           }`}
         >
           Video
@@ -80,7 +80,7 @@ export default function FormatSelector({ media, onStartDownload, submitting }: F
           type="button"
           onClick={() => setMediaType("audio")}
           className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
-            mediaType === "audio" ? "bg-indigo-600 text-white" : "bg-surface text-slate-400 hover:text-slate-200"
+            mediaType === "audio" ? "bg-brand-gradient text-white shadow-glow" : "text-slate-400 hover:text-slate-200"
           }`}
         >
           Audio Only
@@ -98,8 +98,8 @@ export default function FormatSelector({ media, onStartDownload, submitting }: F
                 onClick={() => setVideoQuality(preset.key)}
                 className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
                   videoQuality === preset.key
-                    ? "border-indigo-500 bg-indigo-500/15 text-indigo-200"
-                    : "border-surface-border text-slate-300 hover:border-slate-500"
+                    ? "border-brand-aqua/50 bg-brand-aqua/10 text-brand-aqua"
+                    : "border-white/10 text-slate-300 hover:border-white/25"
                 } ${!preset.available ? "cursor-not-allowed opacity-30" : ""}`}
               >
                 <div>{preset.label}</div>
@@ -130,8 +130,8 @@ export default function FormatSelector({ media, onStartDownload, submitting }: F
                 onClick={() => setAudioFormat(preset.key as "best" | "mp3" | "m4a")}
                 className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
                   audioFormat === preset.key
-                    ? "border-indigo-500 bg-indigo-500/15 text-indigo-200"
-                    : "border-surface-border text-slate-300 hover:border-slate-500"
+                    ? "border-brand-aqua/50 bg-brand-aqua/10 text-brand-aqua"
+                    : "border-white/10 text-slate-300 hover:border-white/25"
                 } ${!preset.available ? "cursor-not-allowed opacity-30" : ""}`}
               >
                 {preset.label}
@@ -149,8 +149,8 @@ export default function FormatSelector({ media, onStartDownload, submitting }: F
                   onClick={() => setMp3Bitrate(rate)}
                   className={`rounded-md px-2.5 py-1 text-xs font-medium ${
                     mp3Bitrate === rate
-                      ? "bg-indigo-500 text-white"
-                      : "bg-surface text-slate-400 hover:text-slate-200"
+                      ? "bg-brand-gradient text-white shadow-glow"
+                      : "bg-white/[0.04] text-slate-400 hover:text-slate-200"
                   }`}
                 >
                   {rate} kbps
@@ -183,7 +183,7 @@ export default function FormatSelector({ media, onStartDownload, submitting }: F
         type="button"
         onClick={handleSubmit}
         disabled={!canSubmit}
-        className="rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+        className="btn-gradient w-full disabled:cursor-not-allowed disabled:opacity-50"
       >
         {submitting ? "Starting…" : "Start Download"}
       </button>

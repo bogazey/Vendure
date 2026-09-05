@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import ErrorBanner from "../../components/ErrorBanner";
+import LoadyLogo from "../../components/LoadyLogo";
 import { useAuth } from "../../context/AuthContext";
 import { ApiError } from "../../services/api";
 import { inputClass, authCardClass, primaryButtonClass } from "./formStyles";
@@ -15,7 +16,9 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const from = (location.state as { from?: { pathname: string; search: string } } | null)?.from;
+  const state = location.state as { from?: { pathname: string; search: string }; initialUrl?: string } | null;
+  const from = state?.from;
+  const initialUrl = state?.initialUrl;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -23,7 +26,8 @@ export default function Login() {
     setError(null);
     try {
       await login(email, password);
-      navigate(from ? `${from.pathname}${from.search}` : "/dashboard", { replace: true });
+      const destination = from ? `${from.pathname}${from.search}` : "/dashboard";
+      navigate(destination, { replace: true, state: initialUrl ? { initialUrl } : undefined });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not sign in.");
     } finally {
@@ -32,10 +36,13 @@ export default function Login() {
   };
 
   return (
-    <div className="mx-auto flex max-w-md flex-col gap-6 px-6 py-16">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold text-slate-50">Sign in</h1>
-        <p className="mt-1 text-sm text-slate-500">Welcome back.</p>
+    <div className="relative z-10 mx-auto flex max-w-md flex-col gap-6 px-6 py-16">
+      <div className="flex flex-col items-center gap-4 text-center">
+        <LoadyLogo size={36} withWordmark={false} />
+        <div>
+          <h1 className="font-display text-2xl font-bold text-slate-50">Sign in</h1>
+          <p className="mt-1 text-sm text-slate-400">Welcome back.</p>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className={authCardClass}>
@@ -54,7 +61,12 @@ export default function Login() {
         </label>
 
         <label className="flex flex-col gap-1.5 text-sm">
-          <span className="text-slate-400">Password</span>
+          <div className="flex items-center justify-between">
+            <span className="text-slate-400">Password</span>
+            <Link to="/forgot-password" className="text-xs text-brand-aqua transition-colors hover:text-brand-blue">
+              Forgot password?
+            </Link>
+          </div>
           <input
             type="password"
             required
@@ -69,14 +81,16 @@ export default function Login() {
           {submitting ? "Signing in…" : "Sign in"}
         </button>
 
-        <div className="flex items-center justify-between text-xs text-slate-500">
-          <Link to="/forgot-password" className="hover:text-slate-300">
-            Forgot password?
+        <p className="text-center text-xs text-slate-500">
+          Don't have an account?{" "}
+          <Link
+            to="/signup"
+            state={initialUrl ? { initialUrl } : undefined}
+            className="text-brand-aqua transition-colors hover:text-brand-blue"
+          >
+            Create one
           </Link>
-          <Link to="/signup" className="hover:text-slate-300">
-            Create an account
-          </Link>
-        </div>
+        </p>
       </form>
     </div>
   );
