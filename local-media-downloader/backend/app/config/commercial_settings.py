@@ -23,7 +23,13 @@ _GENERATED_SECRET = secrets.token_hex(32)
 
 
 class CommercialSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # env_ignore_empty: a blank `KEY=` line in .env (as .env.example ships
+    # for SECRET_KEY/DATABASE_URL/DOWNLOAD_ROOT/COOKIE_DOMAIN, intending the
+    # Python-side default below to apply) would otherwise be read as an
+    # explicit empty string and override the default instead of falling
+    # through to it - notably making SECRET_KEY="" silently instead of a
+    # generated secret, with no warning.
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", env_ignore_empty=True)
 
     # --- Auth / sessions ---
     secret_key: str = Field(default=_GENERATED_SECRET, alias="SECRET_KEY")
