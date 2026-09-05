@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import ErrorBanner from "../../components/ErrorBanner";
 import LoadyLogo from "../../components/LoadyLogo";
 import { useAuth } from "../../context/AuthContext";
@@ -8,6 +9,7 @@ import { brandLink } from "../../styles/ui";
 import { authCardClass } from "./formStyles";
 
 export default function VerifyEmail() {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token") || "";
   const { refresh } = useAuth();
@@ -26,22 +28,22 @@ export default function VerifyEmail() {
       })
       .catch((err) => {
         setStatus("error");
-        setError(err instanceof ApiError ? err.message : "This verification link is invalid or has expired.");
+        setError(err instanceof ApiError ? err.message : t("auth.verifyError"));
       });
-  }, [token, refresh]);
+  }, [token, refresh, t]);
 
   return (
     <div className="auth-page relative z-10 mx-auto flex max-w-md flex-col gap-6 px-6 py-14 sm:py-16">
       <div className="flex flex-col items-center gap-4 text-center">
         <LoadyLogo size={36} withWordmark={false} />
-        <h1 className="font-display text-2xl font-bold text-slate-50">Verify your email</h1>
+        <h1 className="font-display text-2xl font-bold text-slate-50">{t("auth.verifyTitle")}</h1>
       </div>
       <div className={authCardClass}>
-        {status === "verifying" && <p className="text-sm text-slate-400">Verifying…</p>}
-        {status === "done" && <p className="text-sm text-emerald-300">Your email is verified.</p>}
-        {status === "error" && <ErrorBanner message={error || "This verification link is invalid or has expired."} />}
+        {status === "verifying" && <p className="text-sm text-slate-400">{t("auth.verifyChecking")}</p>}
+        {status === "done" && <p className="text-sm text-emerald-300">{t("auth.verifySuccess")}</p>}
+        {status === "error" && <ErrorBanner message={error || t("auth.verifyError")} />}
         <Link to="/account" className={`text-center text-sm ${brandLink}`}>
-          Go to Account
+          {t("auth.goAccount")}
         </Link>
       </div>
     </div>

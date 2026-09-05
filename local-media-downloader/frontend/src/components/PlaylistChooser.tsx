@@ -1,4 +1,5 @@
 import type { AnalyzeResponse, PlaylistMode } from "../types/api";
+import { useTranslation } from "react-i18next";
 
 interface PlaylistChooserProps {
   media: AnalyzeResponse;
@@ -7,13 +8,14 @@ interface PlaylistChooserProps {
 }
 
 export default function PlaylistChooser({ media, mode, onChange }: PlaylistChooserProps) {
+  const { t } = useTranslation();
   return (
     <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] p-4 backdrop-blur-xl">
       <p className="text-sm font-medium text-amber-200">
-        {media.playlist_title || "This URL is part of a playlist"}
+        {media.playlist_title || t("playlist.detected")}
         {media.playlist_count != null && (
           <span className="ml-2 text-xs font-normal text-amber-300/70">
-            {media.playlist_count} videos detected
+            {t("playlist.videos", { count: media.playlist_count })}
           </span>
         )}
       </p>
@@ -27,7 +29,7 @@ export default function PlaylistChooser({ media, mode, onChange }: PlaylistChoos
           ))}
           {media.playlist_count != null && media.playlist_count > media.playlist_entries_preview.length && (
             <li className="text-amber-300/50">
-              …and {media.playlist_count - media.playlist_entries_preview.length} more
+              {t("playlist.more", { count: media.playlist_count - media.playlist_entries_preview.length })}
             </li>
           )}
         </ul>
@@ -41,7 +43,7 @@ export default function PlaylistChooser({ media, mode, onChange }: PlaylistChoos
             mode === "single" ? "bg-amber-500 text-black" : "bg-black/20 text-amber-200 hover:bg-black/30"
           }`}
         >
-          Current video only
+          {t("playlist.single")}
         </button>
         <button
           type="button"
@@ -50,7 +52,7 @@ export default function PlaylistChooser({ media, mode, onChange }: PlaylistChoos
             mode === "full" ? "bg-amber-500 text-black" : "bg-black/20 text-amber-200 hover:bg-black/30"
           }`}
         >
-          Entire playlist
+          {t("playlist.full")}
         </button>
       </div>
     </div>

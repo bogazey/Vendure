@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 interface ErrorBannerProps {
   message: string;
@@ -7,6 +8,7 @@ interface ErrorBannerProps {
 }
 
 export default function ErrorBanner({ message, technical, onDismiss }: ErrorBannerProps) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -18,7 +20,7 @@ export default function ErrorBanner({ message, technical, onDismiss }: ErrorBann
             type="button"
             onClick={onDismiss}
             className="shrink-0 text-red-300/70 hover:text-red-200"
-            aria-label="Dismiss error"
+            aria-label={t("common.dismissError")}
           >
             ✕
           </button>
@@ -31,7 +33,7 @@ export default function ErrorBanner({ message, technical, onDismiss }: ErrorBann
             onClick={() => setExpanded((v) => !v)}
             className="text-xs text-red-300/80 underline decoration-dotted underline-offset-2 hover:text-red-200"
           >
-            {expanded ? "Hide" : "Show"} technical details
+            {expanded ? t("common.hide") : t("common.show")} {t("common.technical")}
           </button>
           {expanded && (
             <pre className="mt-2 max-h-40 overflow-auto rounded-md bg-black/30 p-2 text-xs text-red-100/80">

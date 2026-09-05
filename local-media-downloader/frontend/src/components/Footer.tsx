@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useTranslation } from "react-i18next";
 import LoadyLogo from "./LoadyLogo";
 
 function FooterColumn({ heading, children }: { heading: string; children: React.ReactNode }) {
@@ -20,6 +21,7 @@ const footerLinkClass = "transition-colors hover:text-slate-200";
  * Identity #2 kit's README/guidelines, used here verbatim.
  */
 export default function Footer() {
+  const { t } = useTranslation();
   const { account } = useAuth();
 
   return (
@@ -27,62 +29,61 @@ export default function Footer() {
       <div className="mx-auto grid max-w-6xl gap-10 sm:grid-cols-2 lg:grid-cols-[1.6fr_1fr_1fr_1fr]">
         <div className="flex flex-col gap-2">
           <LoadyLogo size={27} />
-          <p className="mt-2 max-w-xs text-sm leading-6 text-slate-400">Freedom to keep what you love.</p>
+          <p className="mt-2 max-w-xs text-sm leading-6 text-slate-400">{t("footer.tagline")}</p>
         </div>
 
-        <FooterColumn heading="Product">
+        <FooterColumn heading={t("footer.product")}>
           <Link to="/" className={footerLinkClass}>
-            Home
+            {t("nav.home")}
           </Link>
           <Link to="/pricing" className={footerLinkClass}>
-            Pricing
+            {t("nav.pricing")}
           </Link>
         </FooterColumn>
 
-        <FooterColumn heading="Account">
+        <FooterColumn heading={t("footer.account")}>
           {account ? (
             <>
               <Link to="/account" className={footerLinkClass}>
-                Account
+                {t("nav.account")}
               </Link>
               <Link to="/settings" className={footerLinkClass}>
-                Settings
+                {t("nav.settings")}
               </Link>
               <Link to="/billing" className={footerLinkClass}>
-                Billing
+                {t("nav.billing")}
               </Link>
             </>
           ) : (
             <>
               <Link to="/login" className={footerLinkClass}>
-                Sign in
+                {t("nav.login")}
               </Link>
               <Link to="/signup" className={footerLinkClass}>
-                Create account
+                {t("footer.createAccount")}
               </Link>
             </>
           )}
         </FooterColumn>
 
-        <FooterColumn heading="Legal">
+        <FooterColumn heading={t("footer.legal")}>
           <Link to="/terms" className={footerLinkClass}>
-            Terms
+            {t("footer.terms")}
           </Link>
           <Link to="/privacy" className={footerLinkClass}>
-            Privacy
+            {t("footer.privacy")}
           </Link>
           <Link to="/copyright" className={footerLinkClass}>
-            Copyright
+            {t("footer.copyright")}
           </Link>
         </FooterColumn>
       </div>
 
       <div className="mx-auto mt-12 flex max-w-6xl flex-col gap-2 border-t border-white/[0.06] pt-7 text-xs leading-5 text-slate-500 sm:flex-row sm:items-end sm:justify-between">
         <p className="max-w-2xl">
-          Loady is a personal media utility for content you own or are otherwise authorized to access and download.
-          It is not intended to bypass copy protection, DRM, or paywalls.
+          {t("footer.notice")}
         </p>
-        <p>&copy; {new Date().getFullYear()} Loady. Not affiliated with YouTube, TikTok, Instagram, or Facebook.</p>
+        <p>{t("footer.copyrightLine", { year: new Date().getFullYear() })}</p>
       </div>
     </footer>
   );

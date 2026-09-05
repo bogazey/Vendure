@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 import { detectPlatformFromUrl, PLATFORM_ICONS, PLATFORM_LABELS } from "../utils/platform";
 
@@ -13,6 +14,7 @@ import { detectPlatformFromUrl, PLATFORM_ICONS, PLATFORM_LABELS } from "../utils
  * this just removes the friction of retyping the link after signing up.
  */
 export default function HeroUrlInput() {
+  const { t } = useTranslation();
   const { account } = useAuth();
   const navigate = useNavigate();
   const [value, setValue] = useState("");
@@ -40,11 +42,11 @@ export default function HeroUrlInput() {
     e.preventDefault();
     const trimmed = value.trim();
     if (!trimmed) {
-      setError("Paste a link to get started.");
+      setError(t("downloader.required"));
       return;
     }
     if (!/^https?:\/\/.+\..+/i.test(trimmed)) {
-      setError("That doesn't look like a valid URL.");
+      setError(t("downloader.invalid"));
       return;
     }
     setError(null);
@@ -80,7 +82,7 @@ export default function HeroUrlInput() {
           {platform && (
             <span className="hidden shrink-0 items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs font-medium text-slate-300 sm:flex">
               <span>{PLATFORM_ICONS[platform]}</span>
-              {platform === "unknown" ? "Link" : PLATFORM_LABELS[platform]}
+              {platform === "unknown" ? t("downloader.link") : PLATFORM_LABELS[platform]}
             </span>
           )}
           <input
@@ -92,7 +94,8 @@ export default function HeroUrlInput() {
             }}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
-            placeholder="Paste a YouTube, TikTok, Instagram or Facebook link…"
+            placeholder={t("downloader.placeholder")}
+            dir="ltr"
             className="w-full bg-transparent py-3.5 text-[15px] text-slate-100 placeholder:text-slate-500 focus:outline-none sm:text-base"
           />
         </div>
@@ -102,17 +105,17 @@ export default function HeroUrlInput() {
             onClick={handlePaste}
             className={`paste-button ${justPasted ? "!border-brand-aqua/50 !text-brand-aqua" : ""}`}
           >
-            {justPasted ? "Pasted" : "Paste"}
+            {justPasted ? t("downloader.pasted") : t("downloader.paste")}
           </button>
           <button type="submit" className="btn-gradient flex-1 !px-7 !py-3.5 text-sm sm:flex-none">
-            Continue
+            {t("downloader.continue")}
           </button>
         </div>
       </div>
       {error && <p className="mt-2 px-2 text-sm text-red-400">{error}</p>}
       {!error && platform === "unknown" && value.trim() && (
         <p className="mt-2 px-2 text-sm text-slate-500">
-          We support YouTube, TikTok, Instagram, and Facebook - Loady will double-check this link for you.
+          {t("downloader.unsupported")}
         </p>
       )}
     </form>

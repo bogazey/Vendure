@@ -1,19 +1,13 @@
 import { useEffect, useState } from "react";
 import ErrorBanner from "../components/ErrorBanner";
+import { useTranslation } from "react-i18next";
 import { ApiError, api } from "../services/api";
 import { appPageShell } from "../styles/ui";
 import type { AppSettings, CookieSource, HealthResponse, Theme } from "../types/api";
 import type { DownloadPreferencesOut } from "../types/commercial";
 import { applyTheme } from "../utils/theme";
 
-const COOKIE_SOURCES: { value: CookieSource; label: string }[] = [
-  { value: "none", label: "No cookies" },
-  { value: "chrome", label: "Chrome" },
-  { value: "firefox", label: "Firefox" },
-  { value: "edge", label: "Edge" },
-  { value: "safari", label: "Safari" },
-  { value: "file", label: "Cookie file" },
-];
+const COOKIE_SOURCES: CookieSource[] = ["none", "chrome", "firefox", "edge", "safari", "file"];
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -36,6 +30,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const inputClass = "input-glass py-2";
 
 export default function SettingsPage() {
+  const { t } = useTranslation();
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [preferences, setPreferences] = useState<DownloadPreferencesOut | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -43,13 +38,13 @@ export default function SettingsPage() {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    api.getSettings().then(setSettings).catch((err) => setError(err instanceof ApiError ? err.message : "Could not load settings."));
+    api.getSettings().then(setSettings).catch((err) => setError(err instanceof ApiError ? err.message : t("settingsPage.loadError")));
     api
       .getDownloadPreferences()
       .then(setPreferences)
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load download preferences."));
+      .catch((err) => setError(err instanceof ApiError ? err.message : t("settingsPage.preferencesError")));
     api.health().then(setHealth).catch(() => undefined);
-  }, []);
+  }, [t]);
 
   const persist = async (patch: Partial<AppSettings>) => {
     if (!settings) return;
@@ -59,10 +54,10 @@ export default function SettingsPage() {
       const saved = await api.updateSettings(patch);
       setSettings(saved);
       applyTheme(saved.theme);
-      setSaveMessage("Saved");
+      setSaveMessage(t("app.saved"));
       setTimeout(() => setSaveMessage(null), 1500);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not save settings.");
+      setError(err instanceof ApiError ? err.message : t("settingsPage.saveError"));
     }
   };
 
@@ -77,29 +72,29 @@ export default function SettingsPage() {
     try {
       const saved = await api.updateDownloadPreferences(patch);
       setPreferences(saved);
-      setSaveMessage("Saved");
+      setSaveMessage(t("app.saved"));
       setTimeout(() => setSaveMessage(null), 1500);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not save download preferences.");
+      setError(err instanceof ApiError ? err.message : t("settingsPage.savePreferencesError"));
     }
   };
 
   if (!settings || !preferences) {
-    return <div className="relative z-10 mx-auto max-w-3xl px-6 py-10 text-sm text-slate-500">Loading settings…</div>;
+    return <div className="relative z-10 mx-auto max-w-3xl px-6 py-10 text-sm text-slate-500">{t("settingsPage.loading")}</div>;
   }
 
   return (
     <div className={appPageShell}>
       <div className="flex items-center justify-between">
-        <h1 className="font-display text-xl font-bold text-slate-50">Settings</h1>
+        <h1 className="font-display text-xl font-bold text-slate-50">{t("app.settingsTitle")}</h1>
         {saveMessage && <span className="text-xs text-emerald-400">{saveMessage}</span>}
       </div>
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
       <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6">
-      <Section title="General">
-        <Field label="Download folder">
+      <Section title={t("app.general")}>
+        <Field label={t("settingsPage.downloadFolder")}>
           <div className="flex gap-2">
             <span
               className={`${inputClass} flex-1 truncate text-slate-400`}
@@ -108,15 +103,15 @@ export default function SettingsPage() {
               {settings.download_dir}
             </span>
             <button type="button" onClick={() => api.openPath(settings.download_dir).catch(() => undefined)} className="btn-glass px-3 py-2">
-              Open Downloads Folder
+              {t("settingsPage.openFolder")}
             </button>
           </div>
           <span className="text-xs text-slate-500">
-            Your downloads are stored in a private folder for your account and can't be changed to another location.
+            {t("settingsPage.folderHelp")}
           </span>
         </Field>
 
-        <Field label="Maximum simultaneous downloads">
+        <Field label={t("settingsPage.maximum")}>
           <input
             type="number"
             min={1}
@@ -127,7 +122,7 @@ export default function SettingsPage() {
           />
         </Field>
 
-        <Field label="Theme">
+        <Field label={t("settingsPage.theme")}>
           <select
             value={settings.theme}
             onChange={(e) => persist({ theme: e.target.value as Theme })}
@@ -136,15 +131,15 @@ export default function SettingsPage() {
             {/* "system" no longer tracks the OS - Loady's dark identity is
                 fixed, so it's relabeled here to say what it actually does.
                 The stored value stays "system" for API/backend compatibility. */}
-            <option value="system">Dark (default)</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
+            <option value="system">{t("settingsPage.darkDefault")}</option>
+            <option value="light">{t("settingsPage.light")}</option>
+            <option value="dark">{t("settingsPage.dark")}</option>
           </select>
         </Field>
       </Section>
 
-      <Section title="Video">
-        <Field label="Default video quality">
+      <Section title={t("app.video")}>
+        <Field label={t("settingsPage.defaultQuality")}>
           <select
             value={settings.default_video_quality}
             onChange={(e) => persist({ default_video_quality: e.target.value })}
@@ -152,13 +147,13 @@ export default function SettingsPage() {
           >
             {["best", "2160", "1440", "1080", "720", "480", "360"].map((q) => (
               <option key={q} value={q}>
-                {q === "best" ? "Best Available" : `${q}p`}
+                {q === "best" ? t("settingsPage.bestAvailable") : `${q}p`}
               </option>
             ))}
           </select>
         </Field>
 
-        <Field label="Video output">
+        <Field label={t("settingsPage.videoOutput")}>
           <select
             value={preferences.container_mode}
             onChange={(e) =>
@@ -166,13 +161,13 @@ export default function SettingsPage() {
             }
             className={inputClass}
           >
-            <option value="compatibility">Compatibility MP4 (default)</option>
-            <option value="original">Best Quality / Original Container</option>
+            <option value="compatibility">{t("settingsPage.compatibility")}</option>
+            <option value="original">{t("settingsPage.original")}</option>
           </select>
           <span className="text-xs text-slate-500">
             {preferences.container_mode === "compatibility"
-              ? "Always downloads a genuine, broadly-playable MP4 (H.264/AAC), converting with FFmpeg when the source is WebM/VP9/AV1/Opus."
-              : "Keeps the best source streams' native codec/container as-is (may be WebM or MKV) — never converts."}
+              ? t("settingsPage.compatibilityHelp")
+              : t("settingsPage.originalHelp")}
           </span>
         </Field>
 
@@ -183,7 +178,7 @@ export default function SettingsPage() {
             onChange={(e) => persist({ embed_metadata: e.target.checked })}
             className="h-4 w-4 rounded border-white/20 bg-transparent accent-brand-aqua"
           />
-          Embed metadata (title, uploader) into the file
+          {t("settingsPage.embedMetadata")}
         </label>
 
         <label className="flex items-center gap-2 text-sm text-slate-300">
@@ -193,12 +188,12 @@ export default function SettingsPage() {
             onChange={(e) => persist({ save_thumbnail: e.target.checked })}
             className="h-4 w-4 rounded border-white/20 bg-transparent accent-brand-aqua"
           />
-          Save thumbnail alongside downloaded files
+          {t("settingsPage.saveThumbnail")}
         </label>
       </Section>
 
-      <Section title="Audio">
-        <Field label="Preferred audio format">
+      <Section title={t("app.audio")}>
+        <Field label={t("settingsPage.audioFormat")}>
           <select
             value={settings.preferred_audio_format}
             onChange={(e) => persist({ preferred_audio_format: e.target.value })}
@@ -206,11 +201,11 @@ export default function SettingsPage() {
           >
             <option value="mp3">MP3</option>
             <option value="m4a">M4A</option>
-            <option value="best">Best (original)</option>
+            <option value="best">{t("settingsPage.bestOriginal")}</option>
           </select>
         </Field>
 
-        <Field label="MP3 bitrate">
+        <Field label={t("settingsPage.bitrate")}>
           <select
             value={settings.mp3_bitrate}
             onChange={(e) => persist({ mp3_bitrate: Number(e.target.value) })}
@@ -231,31 +226,30 @@ export default function SettingsPage() {
             onChange={(e) => persist({ embed_thumbnail_in_audio: e.target.checked })}
             className="h-4 w-4 rounded border-white/20 bg-transparent accent-brand-aqua"
           />
-          Embed thumbnail into downloaded audio files
+          {t("settingsPage.embedAudioThumbnail")}
         </label>
       </Section>
 
-      <Section title="Authentication">
+      <Section title={t("app.authentication")}>
         <p className="text-xs text-slate-500">
-          Cookies remain on this computer and are only used locally by the downloader. They are never uploaded
-          anywhere, and these choices are private to your account — no other user's downloads are affected by them.
+          {t("settingsPage.cookiesHelp")}
         </p>
-        <Field label="Cookie source">
+        <Field label={t("settingsPage.cookieSource")}>
           <select
             value={preferences.cookie_source}
             onChange={(e) => persistPreferences({ cookie_source: e.target.value as CookieSource })}
             className={inputClass}
           >
-            {COOKIE_SOURCES.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
+            {COOKIE_SOURCES.map((source) => (
+              <option key={source} value={source}>
+                {source === "none" ? t("settingsPage.noCookies") : source === "file" ? t("settingsPage.cookieFile") : source[0].toUpperCase() + source.slice(1)}
               </option>
             ))}
           </select>
         </Field>
 
         {preferences.cookie_source === "file" && (
-          <Field label="Cookie file path (Netscape format)">
+          <Field label={t("settingsPage.cookiePath")}>
             <input
               type="text"
               value={preferences.cookie_file_path || ""}
@@ -268,15 +262,15 @@ export default function SettingsPage() {
         )}
       </Section>
 
-      <Section title="Advanced">
+      <Section title={t("app.advanced")}>
         <div className="grid grid-cols-2 gap-3 text-sm text-slate-400">
-          <span>yt-dlp version</span>
+          <span>{t("settingsPage.ytdlp")}</span>
           <span className="text-slate-300">{health?.ytdlp_version || "—"}</span>
-          <span>FFmpeg path</span>
-          <span className="truncate text-slate-300">{health?.ffmpeg_path || "Not found"}</span>
+          <span>{t("settingsPage.ffmpeg")}</span>
+          <span className="truncate text-slate-300">{health?.ffmpeg_path || t("settingsPage.notFound")}</span>
         </div>
 
-        <Field label="Network timeout (seconds)">
+        <Field label={t("settingsPage.timeout")}>
           <input
             type="number"
             min={5}
@@ -287,7 +281,7 @@ export default function SettingsPage() {
           />
         </Field>
 
-        <Field label="Retries">
+        <Field label={t("settingsPage.retries")}>
           <input
             type="number"
             min={0}

@@ -1,0 +1,296 @@
+{
+  "language": {
+    "label": "Language",
+    "english": "EN",
+    "arabic": "العربية"
+  },
+  "nav": {
+    "home": "Loady home",
+    "primary": "Primary navigation",
+    "mobile": "Mobile navigation",
+    "features": "Features",
+    "how": "How it works",
+    "pricing": "Pricing",
+    "login": "Sign in",
+    "signup": "Get started",
+    "dashboard": "Download",
+    "downloads": "My downloads",
+    "account": "Account",
+    "settings": "Settings",
+    "billing": "Billing",
+    "signout": "Sign out",
+    "open": "Open navigation",
+    "close": "Close navigation"
+  },
+  "accountMenu": {
+    "downloadsRemaining": "{{count}} download(s) remaining today",
+    "creditsRemaining": "{{count}} credit(s) remaining",
+    "dashboard": "Dashboard"
+  },
+  "hero": {
+    "eyebrow": "Your media, on your terms",
+    "line1": "Freedom to keep",
+    "line2": "what you love.",
+    "body": "Save the videos, sounds, and moments that matter—for personal offline access, in the format you choose.",
+    "micro": "Fast. Simple. Yours."
+  },
+  "downloader": {
+    "placeholder": "Paste a YouTube, TikTok, Instagram or Facebook link…",
+    "paste": "Paste",
+    "pasted": "Pasted",
+    "continue": "Continue",
+    "analyzing": "Analyzing…",
+    "analyze": "Analyze",
+    "link": "Link",
+    "required": "Paste a link to get started.",
+    "invalid": "That doesn't look like a valid URL.",
+    "unsupported": "We support YouTube, TikTok, Instagram, and Facebook - Loady will double-check this link for you."
+  },
+  "landing": {
+    "featuresKicker": "Built around your library",
+    "featuresTitle": "Everything you need. Nothing you don’t.",
+    "featuresBody": "Powerful media tools, shaped into a focused and beautifully simple workflow.",
+    "features": {
+      "save": [
+        "Save",
+        "Keep the media that matters, ready whenever you are."
+      ],
+      "convert": [
+        "Convert",
+        "Choose clean, compatible video and audio formats."
+      ],
+      "organize": [
+        "Organize",
+        "Find every saved file in one calm, searchable library."
+      ],
+      "process": [
+        "Process",
+        "Clip ranges, tune quality, and handle playlists with precision."
+      ]
+    },
+    "stepsKicker": "From link to library",
+    "stepsTitle": "Three steps. That’s it.",
+    "steps": {
+      "paste": [
+        "Paste your link",
+        "Drop in a link from a supported platform."
+      ],
+      "format": [
+        "Pick your format",
+        "Choose the quality and output you want."
+      ],
+      "keep": [
+        "Keep it close",
+        "Download it for personal offline access."
+      ]
+    },
+    "ctaKicker": "Your library is waiting",
+    "ctaTitle": "Ready to try it?",
+    "ctaBody": "Start free. Keep the moments you care about.",
+    "ctaGuest": "Create your free account",
+    "ctaAccount": "Go to downloader"
+  },
+  "footer": {
+    "tagline": "Freedom to keep what you love.",
+    "product": "Product",
+    "account": "Account",
+    "legal": "Legal",
+    "terms": "Terms",
+    "privacy": "Privacy",
+    "copyright": "Copyright",
+    "notice": "Loady is a personal media utility for content you own or are otherwise authorized to access and download. It is not intended to bypass copy protection, DRM, or paywalls.",
+    "copyrightLine": "© {{year}} Loady. Not affiliated with YouTube, TikTok, Instagram, or Facebook.",
+    "createAccount": "Create account"
+  },
+  "pricing": {
+    "kicker": "Choose your pace",
+    "title": "Simple, transparent pricing",
+    "body": "Start free. Upgrade when you need higher quality, more downloads, or creator tools.",
+    "monthly": "Monthly",
+    "annual": "Annual",
+    "save": "save ~18%",
+    "popular": "Most popular",
+    "payment": "Payment received — confirming your upgrade…",
+    "current": "Current plan",
+    "starting": "Starting checkout…",
+    "startFree": "Start free",
+    "upgrade": "Upgrade",
+    "month": "mo",
+    "year": "yr",
+    "checkoutError": "Could not start checkout.",
+    "sandbox": "Billing runs on Paddle Sandbox in this build - no real payment is ever collected. Prices shown are the planned production prices.",
+    "plans": {
+      "free": {
+        "name": "Free",
+        "tagline": "Try it out",
+        "features": [
+          "5 downloads a day",
+          "Up to 720p video",
+          "Compatibility MP4 only",
+          "Basic MP3 audio",
+          "Standard queue priority"
+        ]
+      },
+      "pro": {
+        "name": "Pro",
+        "tagline": "For frequent use",
+        "features": [
+          "150 credits a month",
+          "Up to 4K video",
+          "Original container or Compatibility MP4",
+          "MP3, M4A, and advanced formats",
+          "Clip-range downloads",
+          "Browser cookie downloads",
+          "No ads · priority queue",
+          "Batch downloads"
+        ]
+      },
+      "creator": {
+        "name": "Creator",
+        "tagline": "For creators",
+        "features": [
+          "500 credits a month",
+          "Everything in Pro",
+          "Highest queue priority",
+          "Early access to creator tools"
+        ]
+      }
+    }
+  },
+  "auth": {
+    "email": "Email",
+    "password": "Password",
+    "loginTitle": "Sign in",
+    "welcome": "Welcome back.",
+    "forgot": "Forgot password?",
+    "signingIn": "Signing in…",
+    "loginError": "Could not sign in.",
+    "noAccount": "Don't have an account?",
+    "createOne": "Create one",
+    "signupTitle": "Create your account",
+    "signupBody": "Free plan · 5 downloads a day · no card required.",
+    "passwordHelp": "At least 8 characters, with a mix of letters and numbers/symbols.",
+    "creating": "Creating account…",
+    "create": "Create account",
+    "signupError": "Could not create your account.",
+    "hasAccount": "Already have an account?",
+    "continuing": "Continuing with",
+    "resetTitle": "Reset your password",
+    "resetBody": "We'll email you a link to choose a new one.",
+    "send": "Send reset link",
+    "sending": "Sending…",
+    "resetGenericError": "Something went wrong.",
+    "sent": "If an account exists for {{email}}, a reset link is on its way. In local development, check the backend log for the link.",
+    "backLogin": "Back to sign in",
+    "requestNew": "Request a new reset link",
+    "newPasswordTitle": "Choose a new password",
+    "newPassword": "New password",
+    "savePassword": "Save new password",
+    "saving": "Saving…",
+    "updated": "Password updated. Redirecting to sign in…",
+    "missingToken": "This reset link is missing its token.",
+    "invalidToken": "This reset link is invalid or has expired.",
+    "verifyTitle": "Verify your email",
+    "verifyChecking": "Verifying…",
+    "verifySuccess": "Your email is verified.",
+    "verifyError": "This verification link is invalid or has expired.",
+    "goAccount": "Go to Account"
+  },
+  "app": {
+    "loading": "Loading…",
+    "download": "Download media from a URL",
+    "downloadBody": "Supports YouTube, TikTok, Instagram, and Facebook. Only content you're lawfully allowed to access.",
+    "active": "Active & Recent Downloads",
+    "live": "Live",
+    "reconnecting": "Reconnecting…",
+    "ready": "Ready when you are",
+    "readyBody": "Downloads will appear here after a URL is analyzed.",
+    "queued": "Added to the download queue below.",
+    "analyzeError": "An unexpected error occurred while analyzing this URL.",
+    "downloadError": "An unexpected error occurred while starting the download.",
+    "history": "Download History",
+    "clearHistory": "Clear History",
+    "search": "Search title, uploader, or URL",
+    "allPlatforms": "All platforms",
+    "allStatuses": "All statuses",
+    "newest": "Newest first",
+    "oldest": "Oldest first",
+    "nothing": "Nothing here yet",
+    "nothingBody": "Everything you save from YouTube, TikTok, Instagram, or Facebook will show up here.",
+    "downloadSomething": "Download something",
+    "noMatches": "No matches for these filters",
+    "noMatchesBody": "Nothing in your download history matches the current search or filters.",
+    "clearFilters": "Clear filters",
+    "retry": "Retry",
+    "remove": "Remove",
+    "openFile": "Open file",
+    "openFolder": "Open folder",
+    "accountTitle": "Account",
+    "profile": "Profile",
+    "plan": "Plan",
+    "settingsTitle": "Settings",
+    "general": "General",
+    "video": "Video",
+    "audio": "Audio",
+    "authentication": "Authentication",
+    "advanced": "Advanced",
+    "saved": "Saved",
+    "billingTitle": "Billing",
+    "currentPlan": "Current plan",
+    "usagePeriod": "Usage this period",
+    "manageBilling": "Manage billing",
+    "opening": "Opening…",
+    "usage": "Usage",
+    "credits": "Credits",
+    "language": "Language",
+    "ad": "Sponsored · Ad space reserved for Free plan — upgrade to Pro to remove ads"
+  },
+  "status": {
+    "queued": "Queued",
+    "analyzing": "Analyzing",
+    "downloading": "Downloading",
+    "merging": "Merging",
+    "converting": "Converting",
+    "completed": "Completed",
+    "cancelled": "Cancelled",
+    "failed": "Failed",
+    "active": "Active",
+    "trialing": "Trialing",
+    "past_due": "Payment past due",
+    "paused": "Paused",
+    "canceled": "Canceled",
+    "none": "No active subscription"
+  },
+  "accountPage": {
+    "verification": "Email verification", "verified": "Verified", "sending": "Sending…", "resend": "Not verified · resend email", "memberSince": "Member since", "billingBody": "Plan, renewal date, and payment management.", "usageBody": "Credits and downloads remaining this period.", "refresh": "Refresh account data", "sent": "Verification email sent. In local development, check the backend log for the link.", "sendError": "Could not send verification email."
+  },
+  "billingPage": {
+    "cadence": "Billing cadence", "monthly": "Monthly", "annual": "Annual", "accessEnds": "Access ends", "renews": "Renews", "cancelNotice": "This subscription is set to cancel at the end of the current billing period.", "freeUsed": "Free downloads used today", "creditsUsed": "Credits used this billing period", "upgrade": "Upgrade plan", "change": "Change plan", "portalUnavailable": "Billing management isn't available yet for this account.", "portalError": "Could not open billing management.", "notice": "Billing is managed through Paddle's hosted checkout and customer portal. Loady never sees or stores your card details."
+  },
+  "settingsPage": {
+    "loading": "Loading settings…", "loadError": "Could not load settings.", "preferencesError": "Could not load download preferences.", "saveError": "Could not save settings.", "savePreferencesError": "Could not save download preferences.", "downloadFolder": "Download folder", "openFolder": "Open Downloads Folder", "folderHelp": "Your downloads are stored in a private folder for your account and can't be changed to another location.", "maximum": "Maximum simultaneous downloads", "theme": "Theme", "darkDefault": "Dark (default)", "light": "Light", "dark": "Dark", "defaultQuality": "Default video quality", "videoOutput": "Video output", "compatibility": "Compatibility MP4 (default)", "original": "Best Quality / Original Container", "compatibilityHelp": "Always downloads a genuine, broadly-playable MP4, converting with FFmpeg when needed.", "originalHelp": "Keeps the best source streams' native codec and container without conversion.", "embedMetadata": "Embed metadata (title, uploader) into the file", "saveThumbnail": "Save thumbnail alongside downloaded files", "audioFormat": "Preferred audio format", "bestOriginal": "Best (original)", "bitrate": "MP3 bitrate", "embedAudioThumbnail": "Embed thumbnail into downloaded audio files", "cookiesHelp": "Cookies remain on this computer and are used only locally by the downloader. These choices are private to your account.", "cookieSource": "Cookie source", "noCookies": "No cookies", "cookieFile": "Cookie file", "cookiePath": "Cookie file path (Netscape format)", "ytdlp": "yt-dlp version", "ffmpeg": "FFmpeg path", "notFound": "Not found", "timeout": "Network timeout (seconds)", "retries": "Retries", "bestAvailable": "Best Available"
+  },
+  "format": {
+    "video": "Video", "audioOnly": "Audio Only", "bitrate": "Bitrate", "start": "Start", "end": "End", "clip": "Download only part of this video (clip range)", "timeFormat": "Format: HH:MM:SS or MM:SS", "endAfterStart": "End time must be after start time.", "invalidTime": "Use HH:MM:SS or MM:SS format.", "advanced": "Advanced Formats ({{count}} streams)", "use": "Use", "type": "Type", "resolution": "Res", "codec": "Codec", "extension": "Ext", "size": "Size", "audio": "Audio", "withAudio": " + audio", "starting": "Starting…", "startDownload": "Start Download", "noPreview": "No preview", "playlist": "Playlist detected"
+  },
+  "historyPage": {
+    "loadError": "Could not load download history.", "removeError": "Could not remove this record.", "clearError": "Could not clear history.", "retryError": "Could not retry this download.", "clearPrompt": "Clear all history records? Files on disk are kept unless you choose to delete them too.", "recordsOnly": "Clear records only", "recordsFiles": "Clear + delete files"
+  },
+  "usagePage": {
+    "freeToday": "Free downloads today", "creditsPeriod": "Credits this period", "remainingDownloads": "{{count}} download(s) remaining · resets daily at midnight UTC", "remainingCredits": "{{count}} credit(s) remaining · renews {{date}}", "limits": "Plan limits", "resolution": "Max resolution", "downloads4k": "4K downloads", "batch": "Batch downloads", "advanced": "Advanced formats", "clip": "Clip range", "cookies": "Browser cookies", "priority": "Queue priority", "upgrade": "Upgrade for more"
+  },
+  "playlist": {
+    "detected": "This URL is part of a playlist", "videos": "{{count}} videos detected", "more": "…and {{count}} more", "single": "Current video only", "full": "Entire playlist"
+  },
+  "common": {
+    "cancel": "Cancel",
+    "show": "Show",
+    "hide": "Hide",
+    "technical": "technical details",
+    "dismissError": "Dismiss error",
+    "free": "Free",
+    "included": "Included",
+    "notIncluded": "Not included",
+    "bestAvailable": "Best available"
+  }
+}

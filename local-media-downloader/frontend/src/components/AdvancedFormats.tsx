@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { FormatOption } from "../types/api";
 import { formatBytes } from "../utils/format";
+import { useTranslation } from "react-i18next";
 
 interface AdvancedFormatsProps {
   formats: FormatOption[];
@@ -9,6 +10,7 @@ interface AdvancedFormatsProps {
 }
 
 export default function AdvancedFormats({ formats, selectedFormatId, onSelect }: AdvancedFormatsProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
   if (formats.length === 0) return null;
@@ -20,7 +22,7 @@ export default function AdvancedFormats({ formats, selectedFormatId, onSelect }:
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium text-slate-300"
       >
-        Advanced Formats ({formats.length} streams)
+        {t("format.advanced", { count: formats.length })}
         <span className="text-slate-500">{open ? "▲" : "▼"}</span>
       </button>
 
@@ -29,14 +31,14 @@ export default function AdvancedFormats({ formats, selectedFormatId, onSelect }:
           <table className="w-full text-left text-xs">
             <thead className="sticky top-0 bg-[#0b0e1a] text-slate-500">
               <tr>
-                <th className="px-3 py-2 font-medium">Use</th>
-                <th className="px-3 py-2 font-medium">Type</th>
-                <th className="px-3 py-2 font-medium">Res</th>
+                <th className="px-3 py-2 font-medium">{t("format.use")}</th>
+                <th className="px-3 py-2 font-medium">{t("format.type")}</th>
+                <th className="px-3 py-2 font-medium">{t("format.resolution")}</th>
                 <th className="px-3 py-2 font-medium">FPS</th>
-                <th className="px-3 py-2 font-medium">Codec</th>
-                <th className="px-3 py-2 font-medium">Ext</th>
-                <th className="px-3 py-2 font-medium">Bitrate</th>
-                <th className="px-3 py-2 font-medium">Size</th>
+                <th className="px-3 py-2 font-medium">{t("format.codec")}</th>
+                <th className="px-3 py-2 font-medium">{t("format.extension")}</th>
+                <th className="px-3 py-2 font-medium">{t("format.bitrate")}</th>
+                <th className="px-3 py-2 font-medium">{t("format.size")}</th>
               </tr>
             </thead>
             <tbody>
@@ -57,8 +59,8 @@ export default function AdvancedFormats({ formats, selectedFormatId, onSelect }:
                     />
                   </td>
                   <td className="px-3 py-2 text-slate-300">
-                    {f.has_video ? "Video" : "Audio"}
-                    {f.has_audio && f.has_video ? " + audio" : ""}
+                    {f.has_video ? t("format.video") : t("format.audio")}
+                    {f.has_audio && f.has_video ? t("format.withAudio") : ""}
                   </td>
                   <td className="px-3 py-2 text-slate-400">{f.resolution || "—"}</td>
                   <td className="px-3 py-2 text-slate-400">{f.fps ?? "—"}</td>

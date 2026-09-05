@@ -1,11 +1,12 @@
 import type { ReactElement } from "react";
 import { NavLink } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 import LoadyLogo from "./LoadyLogo";
 
 interface SidebarLink {
   to: string;
-  label: string;
+  labelKey: string;
   icon: ReactElement;
 }
 
@@ -18,11 +19,11 @@ function icon(d: string) {
 }
 
 const LINKS: SidebarLink[] = [
-  { to: "/dashboard", label: "Download", icon: icon("M12 4v11m0 0-4-4m4 4 4-4M5 19h14") },
-  { to: "/history", label: "My Downloads", icon: icon("M4 5h16M4 12h16M4 19h10") },
-  { to: "/account", label: "Account", icon: icon("M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0") },
-  { to: "/settings", label: "Settings", icon: icon("M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM4.5 12h1M18.5 12h1M12 4.5v1M12 18.5v1M6.5 6.5l.7.7M16.8 16.8l.7.7M6.5 17.5l.7-.7M16.8 7.2l.7-.7") },
-  { to: "/billing", label: "Billing", icon: icon("M3 7h18v10H3zM3 10h18") },
+  { to: "/dashboard", labelKey: "nav.dashboard", icon: icon("M12 4v11m0 0-4-4m4 4 4-4M5 19h14") },
+  { to: "/history", labelKey: "nav.downloads", icon: icon("M4 5h16M4 12h16M4 19h10") },
+  { to: "/account", labelKey: "nav.account", icon: icon("M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0") },
+  { to: "/settings", labelKey: "nav.settings", icon: icon("M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM4.5 12h1M18.5 12h1M12 4.5v1M12 18.5v1M6.5 6.5l.7.7M16.8 16.8l.7.7M6.5 17.5l.7-.7M16.8 7.2l.7-.7") },
+  { to: "/billing", labelKey: "nav.billing", icon: icon("M3 7h18v10H3zM3 10h18") },
 ];
 
 /**
@@ -33,6 +34,7 @@ const LINKS: SidebarLink[] = [
  * hamburger drawer, which already lists the same links.
  */
 export default function Sidebar() {
+  const { t } = useTranslation();
   const { account, logout } = useAuth();
 
   const linkClass = ({ isActive }: { isActive: boolean }) =>
@@ -52,7 +54,7 @@ export default function Sidebar() {
         {LINKS.map((link) => (
           <NavLink key={link.to} to={link.to} className={linkClass}>
             {link.icon}
-            {link.label}
+            {t(link.labelKey)}
           </NavLink>
         ))}
         {account?.user.role === "admin" && (
@@ -69,7 +71,7 @@ export default function Sidebar() {
         className="flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left text-[13px] font-medium text-red-400/90 transition-colors hover:border-red-500/10 hover:bg-red-500/10 hover:text-red-300"
       >
         {icon("M9 5H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h3M16 15l4-3-4-3M20 12H9")}
-        Sign out
+        {t("nav.signout")}
       </button>
     </aside>
   );

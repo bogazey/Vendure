@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 interface UrlInputProps {
   onAnalyze: (url: string) => void;
@@ -6,6 +7,7 @@ interface UrlInputProps {
 }
 
 export default function UrlInput({ onAnalyze, loading }: UrlInputProps) {
+  const { t } = useTranslation();
   const [value, setValue] = useState("");
   const [justPasted, setJustPasted] = useState(false);
 
@@ -35,7 +37,8 @@ export default function UrlInput({ onAnalyze, loading }: UrlInputProps) {
             type="text"
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            placeholder="Paste YouTube, TikTok, Instagram or Facebook URL"
+            placeholder={t("downloader.placeholder")}
+            dir="ltr"
             className="input-glass w-full px-5 py-4 text-base"
           />
         </div>
@@ -45,14 +48,14 @@ export default function UrlInput({ onAnalyze, loading }: UrlInputProps) {
             onClick={handlePaste}
             className={`btn-glass px-4 py-4 transition-colors sm:px-5 ${justPasted ? "!border-brand-aqua/50 !text-brand-aqua" : ""}`}
           >
-            {justPasted ? "Pasted" : "Paste"}
+            {justPasted ? t("downloader.pasted") : t("downloader.paste")}
           </button>
           <button
             type="submit"
             disabled={loading || !value.trim()}
             className="btn-gradient px-5 py-4 sm:px-6"
           >
-            {loading ? "Analyzing…" : "Analyze"}
+            {loading ? t("downloader.analyzing") : t("downloader.analyze")}
           </button>
         </div>
       </div>

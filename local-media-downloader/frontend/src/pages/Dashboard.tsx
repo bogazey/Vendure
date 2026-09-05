@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import AdSlot from "../components/AdSlot";
 import DownloadQueue from "../components/DownloadQueue";
 import ErrorBanner from "../components/ErrorBanner";
@@ -15,6 +16,7 @@ import type { AnalyzeResponse, CreateDownloadRequest, DownloadStage } from "../t
 const UPGRADE_ERROR_CODES = new Set(["PLAN_LIMIT_REACHED", "DAILY_LIMIT_REACHED", "FEATURE_NOT_INCLUDED", "UPGRADE_REQUIRED"]);
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const [media, setMedia] = useState<AnalyzeResponse | null>(null);
@@ -60,7 +62,7 @@ export default function Dashboard() {
       if (err instanceof ApiError) {
         setError({ message: err.message, technical: err.technical });
       } else {
-        setError({ message: "An unexpected error occurred while analyzing this URL." });
+        setError({ message: t("app.analyzeError") });
       }
     } finally {
       setAnalyzing(false);
@@ -73,7 +75,7 @@ export default function Dashboard() {
     try {
       await api.createDownload(request);
       track("download_started");
-      setQueuedMessage("Added to the download queue below.");
+      setQueuedMessage(t("app.queued"));
       setTimeout(() => setQueuedMessage(null), 4000);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -82,7 +84,7 @@ export default function Dashboard() {
           track("upgrade_prompt_shown", { code: err.code });
         }
       } else {
-        setError({ message: "An unexpected error occurred while starting the download." });
+        setError({ message: t("app.downloadError") });
       }
     } finally {
       setSubmitting(false);
@@ -100,9 +102,9 @@ export default function Dashboard() {
   return (
     <div className={appPageShell}>
       <div className="dashboard-intro flex flex-col gap-3 text-center">
-        <h1 className="font-display text-2xl font-bold tracking-tight text-slate-50">Download media from a URL</h1>
+        <h1 className="font-display text-2xl font-bold tracking-tight text-slate-50">{t("app.download")}</h1>
         <p className="text-sm text-slate-400">
-          Supports YouTube, TikTok, Instagram, and Facebook. Only content you're lawfully allowed to access.
+          {t("app.downloadBody")}
         </p>
       </div>
 
@@ -126,10 +128,10 @@ export default function Dashboard() {
 
       <div className="download-area flex flex-col gap-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Active &amp; Recent Downloads</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">{t("app.active")}</h2>
           <span className="flex items-center gap-1.5 text-xs text-slate-500">
             <span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-emerald-400" : "bg-amber-400"}`} />
-            {connected ? "Live" : "Reconnecting…"}
+            {connected ? t("app.live") : t("app.reconnecting")}
           </span>
         </div>
         <DownloadQueue jobs={jobs} onCancel={handleCancel} />

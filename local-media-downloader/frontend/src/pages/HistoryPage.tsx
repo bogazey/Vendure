@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import AdSlot from "../components/AdSlot";
 import ErrorBanner from "../components/ErrorBanner";
 import { ApiError, api } from "../services/api";
@@ -12,6 +13,7 @@ const PLATFORM_OPTIONS: Platform[] = ["youtube", "tiktok", "instagram", "faceboo
 const STATUS_OPTIONS = ["completed", "failed", "cancelled", "downloading", "queued"];
 
 export default function HistoryPage() {
+  const { t } = useTranslation();
   const [records, setRecords] = useState<HistoryRecordOut[]>([]);
   const [search, setSearch] = useState("");
   const [platform, setPlatform] = useState<string>("");
@@ -25,7 +27,7 @@ export default function HistoryPage() {
       const result = await api.listHistory({ search: search || undefined, platform: platform || undefined, status: status || undefined, order });
       setRecords(result);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load download history.");
+      setError(err instanceof ApiError ? err.message : t("historyPage.loadError"));
     }
   };
 
@@ -39,7 +41,7 @@ export default function HistoryPage() {
       await api.deleteHistoryRecord(id, deleteFile);
       setRecords((prev) => prev.filter((r) => r.id !== id));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not remove this record.");
+      setError(err instanceof ApiError ? err.message : t("historyPage.removeError"));
     }
   };
 
@@ -49,7 +51,7 @@ export default function HistoryPage() {
       setRecords([]);
       setConfirmClear(false);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not clear history.");
+      setError(err instanceof ApiError ? err.message : t("historyPage.clearError"));
     }
   };
 
@@ -57,7 +59,7 @@ export default function HistoryPage() {
     try {
       await api.retryDownload(id);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not retry this download.");
+      setError(err instanceof ApiError ? err.message : t("historyPage.retryError"));
     }
   };
 
@@ -72,13 +74,13 @@ export default function HistoryPage() {
   return (
     <div className={appPageShell}>
       <div className="flex items-center justify-between">
-        <h1 className="font-display text-xl font-bold text-slate-50">Download History</h1>
+        <h1 className="font-display text-xl font-bold text-slate-50">{t("app.history")}</h1>
         <button
           type="button"
           onClick={() => setConfirmClear(true)}
           className="rounded-full border border-white/10 px-3 py-1.5 text-sm text-slate-400 transition-colors hover:border-red-500/40 hover:text-red-300"
         >
-          Clear History
+          {t("app.clearHistory")}
         </button>
       </div>
 
@@ -88,16 +90,16 @@ export default function HistoryPage() {
 
       {confirmClear && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 backdrop-blur-xl">
-          <span>Clear all history records? Files on disk are kept unless you choose to delete them too.</span>
+          <span>{t("historyPage.clearPrompt")}</span>
           <div className="flex gap-2">
             <button onClick={() => handleClear(false)} className="rounded-full bg-amber-500 px-3 py-1 text-black">
-              Clear records only
+              {t("historyPage.recordsOnly")}
             </button>
             <button onClick={() => handleClear(true)} className="rounded-full bg-red-600 px-3 py-1 text-white">
-              Clear + delete files
+              {t("historyPage.recordsFiles")}
             </button>
             <button onClick={() => setConfirmClear(false)} className="rounded-full px-3 py-1 text-amber-200/70">
-              Cancel
+              {t("common.cancel")}
             </button>
           </div>
         </div>
@@ -108,7 +110,7 @@ export default function HistoryPage() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search title, uploader, or URL"
+          placeholder={t("app.search")}
           className="input-glass min-w-[220px] flex-1 py-2"
         />
         <select
@@ -116,7 +118,7 @@ export default function HistoryPage() {
           onChange={(e) => setPlatform(e.target.value)}
           className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-200 backdrop-blur-xl focus:border-brand-purple/60 focus:outline-none"
         >
-          <option value="">All platforms</option>
+          <option value="">{t("app.allPlatforms")}</option>
           {PLATFORM_OPTIONS.map((p) => (
             <option key={p} value={p}>
               {PLATFORM_LABELS[p]}
@@ -128,10 +130,10 @@ export default function HistoryPage() {
           onChange={(e) => setStatus(e.target.value)}
           className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-200 backdrop-blur-xl focus:border-brand-purple/60 focus:outline-none"
         >
-          <option value="">All statuses</option>
+          <option value="">{t("app.allStatuses")}</option>
           {STATUS_OPTIONS.map((s) => (
             <option key={s} value={s}>
-              {s}
+              {t(`status.${s}`)}
             </option>
           ))}
         </select>
@@ -140,8 +142,8 @@ export default function HistoryPage() {
           onChange={(e) => setOrder(e.target.value as "newest" | "oldest")}
           className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-200 backdrop-blur-xl focus:border-brand-purple/60 focus:outline-none"
         >
-          <option value="newest">Newest first</option>
-          <option value="oldest">Oldest first</option>
+          <option value="newest">{t("app.newest")}</option>
+          <option value="oldest">{t("app.oldest")}</option>
         </select>
       </div>
 
@@ -161,6 +163,7 @@ export default function HistoryPage() {
 }
 
 function NoDownloadsEmptyState() {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.015] px-8 py-14 text-center">
       <span className="flex h-14 w-14 items-center justify-center rounded-2xl border border-brand-blue/25 bg-brand-blue/10 text-brand-blue">
@@ -171,19 +174,20 @@ function NoDownloadsEmptyState() {
         </svg>
       </span>
       <div className="flex flex-col gap-1.5">
-        <h3 className="font-display text-base font-semibold text-slate-100">Nothing here yet</h3>
+        <h3 className="font-display text-base font-semibold text-slate-100">{t("app.nothing")}</h3>
         <p className="max-w-xs text-sm text-slate-400">
-          Everything you save from YouTube, TikTok, Instagram, or Facebook will show up here.
+          {t("app.nothingBody")}
         </p>
       </div>
       <Link to="/dashboard" className="btn-gradient !px-4 !py-2 text-sm">
-        Download something
+        {t("app.downloadSomething")}
       </Link>
     </div>
   );
 }
 
 function FilteredEmptyState({ onClearFilters }: { onClearFilters: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.015] px-8 py-14 text-center">
       <span className="flex h-14 w-14 items-center justify-center rounded-2xl border border-brand-purple/25 bg-brand-purple/10 text-brand-purple">
@@ -193,13 +197,13 @@ function FilteredEmptyState({ onClearFilters }: { onClearFilters: () => void }) 
         </svg>
       </span>
       <div className="flex flex-col gap-1.5">
-        <h3 className="font-display text-base font-semibold text-slate-100">No matches for these filters</h3>
+        <h3 className="font-display text-base font-semibold text-slate-100">{t("app.noMatches")}</h3>
         <p className="max-w-xs text-sm text-slate-400">
-          Nothing in your download history matches the current search or filters.
+          {t("app.noMatchesBody")}
         </p>
       </div>
       <button type="button" onClick={onClearFilters} className="btn-glass !px-4 !py-2 text-sm">
-        Clear filters
+        {t("app.clearFilters")}
       </button>
     </div>
   );
@@ -214,6 +218,7 @@ function HistoryRow({
   onDelete: (id: string, deleteFile: boolean) => void;
   onRetry: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const statusColor =
     record.status === "completed"
       ? "text-emerald-400"
@@ -239,7 +244,7 @@ function HistoryRow({
         </p>
       </div>
 
-      <span className={`text-xs font-medium ${statusColor}`}>{record.status}</span>
+      <span className={`text-xs font-medium ${statusColor}`}>{t(`status.${record.status}`, { defaultValue: record.status })}</span>
       {record.status === "failed" && record.error_message && (
         <span className="max-w-[220px] truncate text-xs text-red-400/80" title={record.error_message}>
           {record.error_message}
@@ -253,13 +258,13 @@ function HistoryRow({
               onClick={() => api.openPath(record.filepath!).catch(() => undefined)}
               className="rounded-full border border-white/10 px-2.5 py-1 text-xs text-slate-300 hover:border-white/30"
             >
-              Open file
+              {t("app.openFile")}
             </button>
             <button
               onClick={() => api.openContainingFolder(record.filepath!).catch(() => undefined)}
               className="rounded-full border border-white/10 px-2.5 py-1 text-xs text-slate-300 hover:border-white/30"
             >
-              Open folder
+              {t("app.openFolder")}
             </button>
           </>
         )}
@@ -268,14 +273,14 @@ function HistoryRow({
             onClick={() => onRetry(record.id)}
             className="rounded-full border border-brand-aqua/40 px-2.5 py-1 text-xs text-brand-aqua hover:border-brand-aqua/70"
           >
-            Retry
+            {t("app.retry")}
           </button>
         )}
         <button
           onClick={() => onDelete(record.id, false)}
           className="rounded-full border border-white/10 px-2.5 py-1 text-xs text-slate-400 hover:border-red-500/40 hover:text-red-300"
         >
-          Remove
+          {t("app.remove")}
         </button>
       </div>
     </div>

@@ -4,6 +4,7 @@ import AdvancedFormats from "./AdvancedFormats";
 import ClipRangeInput from "./ClipRangeInput";
 import PlaylistChooser from "./PlaylistChooser";
 import { parseTimecode } from "../utils/timecode";
+import { useTranslation } from "react-i18next";
 
 interface FormatSelectorProps {
   media: AnalyzeResponse;
@@ -14,6 +15,7 @@ interface FormatSelectorProps {
 const MP3_BITRATES = [128, 192, 256, 320];
 
 export default function FormatSelector({ media, onStartDownload, submitting }: FormatSelectorProps) {
+  const { t } = useTranslation();
   const [mediaType, setMediaType] = useState<MediaType>("video");
   const [videoQuality, setVideoQuality] = useState("best");
   const [audioFormat, setAudioFormat] = useState<"best" | "mp3" | "m4a">("best");
@@ -29,12 +31,12 @@ export default function FormatSelector({ media, onStartDownload, submitting }: F
     try {
       const startS = parseTimecode(clipStart);
       const endS = parseTimecode(clipEnd);
-      if (endS <= startS) return "End time must be after start time.";
+      if (endS <= startS) return t("format.endAfterStart");
       return null;
     } catch {
-      return "Use HH:MM:SS or MM:SS format.";
+      return t("format.invalidTime");
     }
-  }, [clipEnabled, clipStart, clipEnd]);
+  }, [clipEnabled, clipStart, clipEnd, t]);
 
   const canSubmit = !submitting && !clipError;
 
@@ -74,7 +76,7 @@ export default function FormatSelector({ media, onStartDownload, submitting }: F
             mediaType === "video" ? "bg-brand-gradient text-white shadow-glow" : "text-slate-400 hover:text-slate-200"
           }`}
         >
-          Video
+          {t("format.video")}
         </button>
         <button
           type="button"
@@ -83,7 +85,7 @@ export default function FormatSelector({ media, onStartDownload, submitting }: F
             mediaType === "audio" ? "bg-brand-gradient text-white shadow-glow" : "text-slate-400 hover:text-slate-200"
           }`}
         >
-          Audio Only
+          {t("format.audioOnly")}
         </button>
       </div>
 
@@ -141,7 +143,7 @@ export default function FormatSelector({ media, onStartDownload, submitting }: F
 
           {audioFormat === "mp3" && (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500">Bitrate</span>
+              <span className="text-xs text-slate-500">{t("format.bitrate")}</span>
               {MP3_BITRATES.map((rate) => (
                 <button
                   key={rate}
@@ -185,7 +187,7 @@ export default function FormatSelector({ media, onStartDownload, submitting }: F
         disabled={!canSubmit}
         className="btn-gradient w-full disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {submitting ? "Starting…" : "Start Download"}
+        {submitting ? t("format.starting") : t("format.startDownload")}
       </button>
     </div>
   );

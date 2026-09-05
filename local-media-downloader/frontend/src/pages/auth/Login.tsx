@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import ErrorBanner from "../../components/ErrorBanner";
 import LoadyLogo from "../../components/LoadyLogo";
 import { useAuth } from "../../context/AuthContext";
@@ -8,6 +9,7 @@ import { ApiError } from "../../services/api";
 import { inputClass, authCardClass, primaryButtonClass } from "./formStyles";
 
 export default function Login() {
+  const { t } = useTranslation();
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -29,7 +31,7 @@ export default function Login() {
       const destination = from ? `${from.pathname}${from.search}` : "/dashboard";
       navigate(destination, { replace: true, state: initialUrl ? { initialUrl } : undefined });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not sign in.");
+      setError(err instanceof ApiError ? err.message : t("auth.loginError"));
     } finally {
       setSubmitting(false);
     }
@@ -40,8 +42,8 @@ export default function Login() {
       <div className="flex flex-col items-center gap-4 text-center">
         <LoadyLogo size={36} withWordmark={false} />
         <div>
-          <h1 className="font-display text-2xl font-bold text-slate-50">Sign in</h1>
-          <p className="mt-1 text-sm text-slate-400">Welcome back.</p>
+          <h1 className="font-display text-2xl font-bold text-slate-50">{t("auth.loginTitle")}</h1>
+          <p className="mt-1 text-sm text-slate-400">{t("auth.welcome")}</p>
         </div>
       </div>
 
@@ -49,7 +51,7 @@ export default function Login() {
         {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
         <label className="flex flex-col gap-1.5 text-sm">
-          <span className="text-slate-400">Email</span>
+          <span className="text-slate-400">{t("auth.email")}</span>
           <input
             type="email"
             required
@@ -57,14 +59,15 @@ export default function Login() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className={inputClass}
+            dir="ltr"
           />
         </label>
 
         <label className="flex flex-col gap-1.5 text-sm">
           <div className="flex items-center justify-between">
-            <span className="text-slate-400">Password</span>
+            <span className="text-slate-400">{t("auth.password")}</span>
             <Link to="/forgot-password" className="text-xs text-brand-aqua transition-colors hover:text-brand-blue">
-              Forgot password?
+              {t("auth.forgot")}
             </Link>
           </div>
           <input
@@ -78,17 +81,17 @@ export default function Login() {
         </label>
 
         <button type="submit" disabled={submitting} className={primaryButtonClass}>
-          {submitting ? "Signing in…" : "Sign in"}
+          {submitting ? t("auth.signingIn") : t("auth.loginTitle")}
         </button>
 
         <p className="text-center text-xs text-slate-500">
-          Don't have an account?{" "}
+          {t("auth.noAccount")}{" "}
           <Link
             to="/signup"
             state={initialUrl ? { initialUrl } : undefined}
             className="text-brand-aqua transition-colors hover:text-brand-blue"
           >
-            Create one
+            {t("auth.createOne")}
           </Link>
         </p>
       </form>

@@ -1,21 +1,13 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import ErrorBanner from "../components/ErrorBanner";
 import { useAuth } from "../context/AuthContext";
 import { ApiError, api } from "../services/api";
 import { appPageShell } from "../styles/ui";
-import { PLAN_LABELS } from "../types/commercial";
-
-const STATUS_LABEL: Record<string, string> = {
-  none: "No active subscription",
-  trialing: "Trialing",
-  active: "Active",
-  past_due: "Payment past due",
-  paused: "Paused",
-  canceled: "Canceled",
-};
 
 export default function Billing() {
+  const { t } = useTranslation();
   const { account } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [openingPortal, setOpeningPortal] = useState(false);
@@ -33,11 +25,11 @@ export default function Billing() {
         window.open(url, "_blank", "noopener,noreferrer");
       } else {
         setError(
-          "Billing management isn't available yet - either this account has no billing history, or Paddle isn't configured on this server. See PADDLE_SANDBOX_TESTING.md."
+          t("billingPage.portalUnavailable")
         );
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not open billing management.");
+      setError(err instanceof ApiError ? err.message : t("billingPage.portalError"));
     } finally {
       setOpeningPortal(false);
     }
@@ -52,16 +44,16 @@ export default function Billing() {
 
   return (
     <div className={appPageShell}>
-      <h1 className="font-display text-xl font-bold text-slate-50">Billing</h1>
+      <h1 className="font-display text-xl font-bold text-slate-50">{t("app.billingTitle")}</h1>
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
       <section className="glass-panel flex flex-col gap-4 p-6">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Current plan</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("app.currentPlan")}</h2>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <span className="rounded-full bg-brand-gradient px-3 py-1 text-sm font-semibold text-white shadow-glow">
-              {PLAN_LABELS[subscription.plan]}
+              {t(`pricing.plans.${subscription.plan}.name`)}
             </span>
             <span
               className={`text-sm font-medium ${
@@ -74,32 +66,32 @@ export default function Billing() {
                       : "text-slate-400"
               }`}
             >
-              {STATUS_LABEL[subscription.status] ?? subscription.status}
+              {t(`status.${subscription.status}`, { defaultValue: subscription.status })}
             </span>
           </div>
           {subscription.current_period_end && (
             <span className="text-sm text-slate-400">
-              {subscription.cancel_at_period_end ? "Access ends " : "Renews "}
+              {subscription.cancel_at_period_end ? `${t("billingPage.accessEnds")} ` : `${t("billingPage.renews")} `}
               {new Date(subscription.current_period_end).toLocaleDateString()}
             </span>
           )}
         </div>
         {subscription.billing_period && (
           <div className="flex items-center justify-between border-t border-white/[0.06] pt-3 text-sm">
-            <span className="text-slate-400">Billing cadence</span>
-            <span className="capitalize text-slate-200">{subscription.billing_period}</span>
+            <span className="text-slate-400">{t("billingPage.cadence")}</span>
+            <span className="capitalize text-slate-200">{t(`billingPage.${subscription.billing_period}`)}</span>
           </div>
         )}
         {subscription.cancel_at_period_end && (
           <p className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
-            This subscription is set to cancel at the end of the current billing period.
+            {t("billingPage.cancelNotice")}
           </p>
         )}
       </section>
 
       <section className="glass-panel flex flex-col gap-3 p-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Usage this period</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("app.usagePeriod")}</h2>
           <span className="text-sm font-medium text-slate-100">
             {usageUsed} / {usageTotal || "—"}
           </span>
@@ -111,30 +103,28 @@ export default function Billing() {
           />
         </div>
         <p className="text-xs text-slate-500">
-          {usage.plan === "free" ? "Free downloads used today" : "Credits used this billing period"}
+          {usage.plan === "free" ? t("billingPage.freeUsed") : t("billingPage.creditsUsed")}
         </p>
       </section>
 
       <div className="flex flex-wrap gap-3">
         {isFree ? (
           <Link to="/pricing" className="btn-gradient">
-            Upgrade plan
+            {t("billingPage.upgrade")}
           </Link>
         ) : (
           <>
             <Link to="/pricing" className="btn-glass">
-              Change plan
+              {t("billingPage.change")}
             </Link>
             <button type="button" onClick={handleManageBilling} disabled={openingPortal} className="btn-gradient">
-              {openingPortal ? "Opening…" : "Manage billing"}
+              {openingPortal ? t("app.opening") : t("app.manageBilling")}
             </button>
           </>
         )}
       </div>
       <p className="text-xs text-slate-600">
-        Billing is managed entirely through Paddle's hosted checkout and customer portal - we never see or store your
-        card details, and a successful upgrade only takes effect once Paddle's webhook confirms it (this can take a
-        few seconds after checkout).
+        {t("billingPage.notice")}
       </p>
     </div>
   );

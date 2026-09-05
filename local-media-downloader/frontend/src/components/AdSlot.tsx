@@ -1,13 +1,7 @@
 import { useAuth } from "../context/AuthContext";
+import { useTranslation } from "react-i18next";
 
 type AdPlacement = "below-url-input" | "history-page" | "processing-state" | "post-download";
-
-const PLACEMENT_LABEL: Record<AdPlacement, string> = {
-  "below-url-input": "Sponsored",
-  "history-page": "Sponsored",
-  "processing-state": "Sponsored",
-  "post-download": "Sponsored",
-};
 
 /**
  * Architecture-only placeholder for a future real ad network integration -
@@ -18,12 +12,13 @@ const PLACEMENT_LABEL: Record<AdPlacement, string> = {
  * box reserving the layout space a real slot will occupy later.
  */
 export default function AdSlot({ placement }: { placement: AdPlacement }) {
+  const { t } = useTranslation();
   const { account } = useAuth();
   if (!account || !account.features.ads_enabled) return null;
 
   return (
     <div className="flex items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-6 text-xs text-slate-500 backdrop-blur-xl">
-      <span>{PLACEMENT_LABEL[placement]} · Ad space reserved for Free plan — upgrade to Pro to remove ads</span>
+      <span data-placement={placement}>{t("app.ad")}</span>
     </div>
   );
 }

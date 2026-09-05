@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import ErrorBanner from "../components/ErrorBanner";
 import { useAuth } from "../context/AuthContext";
 import { track } from "../lib/analytics";
@@ -10,55 +11,10 @@ import { PLAN_PRICES } from "../types/commercial";
 
 const ASSETS = "/assets/design";
 
-interface PlanRow {
-  plan: Plan;
-  name: string;
-  tagline: string;
-  features: string[];
-}
-
-const PLAN_ROWS: PlanRow[] = [
-  {
-    plan: "free",
-    name: "Free",
-    tagline: "Try it out",
-    features: [
-      "5 downloads a day",
-      "Up to 720p video",
-      "Compatibility MP4 only",
-      "Basic MP3 audio",
-      "Standard queue priority",
-    ],
-  },
-  {
-    plan: "pro",
-    name: "Pro",
-    tagline: "For frequent use",
-    features: [
-      "150 credits a month",
-      "Up to 4K video",
-      "Original container or Compatibility MP4",
-      "MP3, M4A, and advanced formats",
-      "Clip-range downloads",
-      "Browser cookie downloads",
-      "No ads · priority queue",
-      "Batch downloads",
-    ],
-  },
-  {
-    plan: "creator",
-    name: "Creator",
-    tagline: "For creators",
-    features: [
-      "500 credits a month",
-      "Everything in Pro",
-      "Highest queue priority",
-      "Early access to creator tools",
-    ],
-  },
-];
+const PLAN_ROWS: Plan[] = ["free", "pro", "creator"];
 
 export default function Pricing() {
+  const { t } = useTranslation();
   const { account, refresh } = useAuth();
   const navigate = useNavigate();
   const [period, setPeriod] = useState<BillingPeriod>("monthly");
@@ -101,7 +57,7 @@ export default function Pricing() {
         }
       });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not start checkout.");
+      setError(err instanceof ApiError ? err.message : t("pricing.checkoutError"));
     } finally {
       setCheckingOut(null);
     }
@@ -130,12 +86,12 @@ export default function Pricing() {
 
       <div className="relative z-10 mx-auto flex max-w-6xl flex-col gap-8 px-5 py-14 sm:px-8 sm:py-16 lg:py-20">
       <div className="flex flex-col items-center gap-3 text-center">
-        <span className="section-kicker">Choose your pace</span>
+        <span className="section-kicker">{t("pricing.kicker")}</span>
         <h1 className="font-display text-4xl font-bold tracking-[-0.045em] text-slate-50 sm:text-6xl">
-          Simple, transparent pricing
+          {t("pricing.title")}
         </h1>
         <p className="max-w-xl text-base leading-7 text-slate-400">
-          Start free. Upgrade when you need higher quality, more downloads, or creator tools.
+          {t("pricing.body")}
         </p>
 
         <div className="mt-4 flex items-center gap-1 rounded-2xl border border-white/10 bg-white/[0.035] p-1.5 shadow-[inset_0_1px_rgba(255,255,255,.06)] backdrop-blur-xl">
@@ -146,7 +102,7 @@ export default function Pricing() {
               period === "monthly" ? "bg-brand-gradient text-white shadow-glow" : "text-slate-400 hover:text-slate-200"
             }`}
           >
-            Monthly
+            {t("pricing.monthly")}
           </button>
           <button
             type="button"
@@ -155,7 +111,7 @@ export default function Pricing() {
               period === "annual" ? "bg-brand-gradient text-white shadow-glow" : "text-slate-400 hover:text-slate-200"
             }`}
           >
-            Annual <span className="text-emerald-400">save ~18%</span>
+            {t("pricing.annual")} <span className="text-emerald-400">{t("pricing.save")}</span>
           </button>
         </div>
       </div>
@@ -163,18 +119,19 @@ export default function Pricing() {
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
       {confirming && (
         <p className="rounded-2xl border border-brand-aqua/30 bg-brand-aqua/10 px-4 py-2 text-center text-sm text-brand-aqua backdrop-blur-xl">
-          Payment received — confirming your upgrade…
+          {t("pricing.payment")}
         </p>
       )}
 
       <div className="grid items-stretch gap-5 md:grid-cols-3 md:gap-4 lg:gap-6">
-        {PLAN_ROWS.map((row) => {
-          const price = row.plan === "free" ? 0 : PLAN_PRICES[row.plan][period];
-          const isCurrent = currentPlan === row.plan;
-          const isRecommended = row.plan === "pro";
+        {PLAN_ROWS.map((plan) => {
+          const price = plan === "free" ? 0 : PLAN_PRICES[plan][period];
+          const isCurrent = currentPlan === plan;
+          const isRecommended = plan === "pro";
+          const features = t(`pricing.plans.${plan}.features`, { returnObjects: true }) as string[];
           return (
             <div
-              key={row.plan}
+              key={plan}
               className={`pricing-card relative flex flex-col gap-4 overflow-hidden rounded-3xl p-5 transition-all duration-200 sm:p-6 ${
                 isRecommended
                   ? "border border-brand-purple/40 bg-[linear-gradient(145deg,rgba(60,70,145,.16),rgba(255,255,255,.025))] shadow-[inset_0_1px_rgba(255,255,255,.1),0_28px_80px_rgba(35,32,95,.25)] md:-translate-y-3"
@@ -207,23 +164,23 @@ export default function Pricing() {
                 // dimension.
                 <img
                   src={`${ASSETS}/pricing/most-popular-badge.svg`}
-                  alt="Most popular"
+                  alt={t("pricing.popular")}
                   className="absolute -top-10 right-2 h-[100px] w-[100px] object-contain"
                 />
               )}
               <div>
-                <h2 className="font-display text-xl font-semibold text-slate-50">{row.name}</h2>
-                <p className="text-sm text-slate-400">{row.tagline}</p>
+                <h2 className="font-display text-xl font-semibold text-slate-50">{t(`pricing.plans.${plan}.name`)}</h2>
+                <p className="text-sm text-slate-400">{t(`pricing.plans.${plan}.tagline`)}</p>
               </div>
               <div>
                 <span className="font-display text-4xl font-bold tracking-tight text-slate-50">${price}</span>
-                {row.plan !== "free" && (
-                  <span className="text-sm text-slate-500">/{period === "monthly" ? "mo" : "yr"}</span>
+                {plan !== "free" && (
+                  <span className="text-sm text-slate-500">/{period === "monthly" ? t("pricing.month") : t("pricing.year")}</span>
                 )}
               </div>
               <div className="border-t border-white/[0.08]" />
               <ul className="flex flex-1 flex-col gap-2.5 text-sm leading-5 text-slate-300">
-                {row.features.map((f) => (
+                {features.map((f) => (
                   <li key={f} className="flex items-start gap-2">
                     <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-brand-aqua/10 text-[10px] text-brand-aqua">✓</span>
                     <span>{f}</span>
@@ -232,17 +189,17 @@ export default function Pricing() {
               </ul>
               <button
                 type="button"
-                disabled={isCurrent || checkingOut === row.plan}
-                onClick={() => handleSelect(row.plan)}
+                disabled={isCurrent || checkingOut === plan}
+                onClick={() => handleSelect(plan)}
                 className={isRecommended ? "btn-gradient w-full" : "btn-glass w-full"}
               >
                 {isCurrent
-                  ? "Current plan"
-                  : checkingOut === row.plan
-                    ? "Starting checkout…"
-                    : row.plan === "free"
-                      ? "Start free"
-                      : "Upgrade"}
+                  ? t("pricing.current")
+                  : checkingOut === plan
+                    ? t("pricing.starting")
+                    : plan === "free"
+                      ? t("pricing.startFree")
+                      : t("pricing.upgrade")}
               </button>
             </div>
           );
@@ -250,8 +207,7 @@ export default function Pricing() {
       </div>
 
       <p className="text-center text-xs text-slate-600">
-        Billing runs on Paddle Sandbox in this build - no real payment is ever collected. Prices shown are the
-        planned production prices.
+        {t("pricing.sandbox")}
       </p>
       </div>
     </div>

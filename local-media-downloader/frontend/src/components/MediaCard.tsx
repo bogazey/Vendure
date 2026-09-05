@@ -1,19 +1,21 @@
 import type { AnalyzeResponse } from "../types/api";
 import { formatDuration } from "../utils/format";
 import { PLATFORM_COLORS, PLATFORM_ICONS, PLATFORM_LABELS } from "../utils/platform";
+import { useTranslation } from "react-i18next";
 
 interface MediaCardProps {
   media: AnalyzeResponse;
 }
 
 export default function MediaCard({ media }: MediaCardProps) {
+  const { t } = useTranslation();
   return (
     <div className="glass-panel-raised flex flex-col gap-4 p-4 sm:flex-row">
       <div className="aspect-video w-full shrink-0 overflow-hidden rounded-lg bg-black/40 sm:w-64">
         {media.thumbnail ? (
           <img src={media.thumbnail} alt={media.title} className="h-full w-full object-cover" />
         ) : (
-          <div className="flex h-full items-center justify-center text-slate-600">No preview</div>
+          <div className="flex h-full items-center justify-center text-slate-600">{t("format.noPreview")}</div>
         )}
       </div>
 
@@ -30,7 +32,7 @@ export default function MediaCard({ media }: MediaCardProps) {
           )}
           {media.is_playlist && (
             <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-300">
-              Playlist detected
+              {t("format.playlist")}
             </span>
           )}
         </div>

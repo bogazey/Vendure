@@ -1,26 +1,17 @@
 import type { DownloadJobOut } from "../types/api";
 import { formatBytes, formatEta, formatSpeed } from "../utils/format";
 import { PLATFORM_COLORS, PLATFORM_ICONS, PLATFORM_LABELS } from "../utils/platform";
+import { useTranslation } from "react-i18next";
 
 interface DownloadQueueItemProps {
   job: DownloadJobOut;
   onCancel: (id: string) => void;
 }
 
-const STAGE_LABELS: Record<string, string> = {
-  queued: "Queued",
-  analyzing: "Analyzing",
-  downloading: "Downloading",
-  merging: "Merging",
-  converting: "Converting",
-  completed: "Completed",
-  cancelled: "Cancelled",
-  failed: "Failed",
-};
-
 const ACTIVE_STAGES = new Set(["queued", "analyzing", "downloading", "merging", "converting"]);
 
 export default function DownloadQueueItem({ job, onCancel }: DownloadQueueItemProps) {
+  const { t } = useTranslation();
   const active = ACTIVE_STAGES.has(job.stage);
   const barColor =
     job.stage === "failed" ? "bg-red-500" : job.stage === "cancelled" ? "bg-slate-500" : "bg-brand-gradient";
@@ -48,7 +39,7 @@ export default function DownloadQueueItem({ job, onCancel }: DownloadQueueItemPr
               onClick={() => onCancel(job.id)}
               className="shrink-0 rounded-md border border-white/10 px-2 py-0.5 text-xs text-slate-400 hover:border-red-500/50 hover:text-red-300"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
           )}
         </div>
@@ -57,7 +48,7 @@ export default function DownloadQueueItem({ job, onCancel }: DownloadQueueItemPr
           <span className={`rounded px-1.5 py-0.5 ${PLATFORM_COLORS[job.platform]}`}>
             {PLATFORM_LABELS[job.platform]}
           </span>
-          <span>{STAGE_LABELS[job.stage] ?? job.stage}</span>
+          <span>{t(`status.${job.stage}`, { defaultValue: job.stage })}</span>
         </div>
 
         <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">

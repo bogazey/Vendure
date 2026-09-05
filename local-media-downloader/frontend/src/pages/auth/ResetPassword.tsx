@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import ErrorBanner from "../../components/ErrorBanner";
 import LoadyLogo from "../../components/LoadyLogo";
 import { ApiError, api } from "../../services/api";
@@ -8,6 +9,7 @@ import { brandLink } from "../../styles/ui";
 import { authCardClass, inputClass, primaryButtonClass } from "./formStyles";
 
 export default function ResetPassword() {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const token = searchParams.get("token") || "";
@@ -25,7 +27,7 @@ export default function ResetPassword() {
       setDone(true);
       setTimeout(() => navigate("/login", { replace: true }), 2000);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "This reset link is invalid or has expired.");
+      setError(err instanceof ApiError ? err.message : t("auth.invalidToken"));
     } finally {
       setSubmitting(false);
     }
@@ -34,9 +36,9 @@ export default function ResetPassword() {
   if (!token) {
     return (
       <div className="auth-page relative z-10 mx-auto flex max-w-md flex-col gap-6 px-6 py-14 sm:py-16">
-        <ErrorBanner message="This reset link is missing its token." />
+        <ErrorBanner message={t("auth.missingToken")} />
         <Link to="/forgot-password" className={`text-center text-sm ${brandLink}`}>
-          Request a new reset link
+          {t("auth.requestNew")}
         </Link>
       </div>
     );
@@ -46,18 +48,18 @@ export default function ResetPassword() {
     <div className="auth-page relative z-10 mx-auto flex max-w-md flex-col gap-6 px-6 py-14 sm:py-16">
       <div className="flex flex-col items-center gap-4 text-center">
         <LoadyLogo size={36} withWordmark={false} />
-        <h1 className="font-display text-2xl font-bold text-slate-50">Choose a new password</h1>
+        <h1 className="font-display text-2xl font-bold text-slate-50">{t("auth.newPasswordTitle")}</h1>
       </div>
 
       {done ? (
         <div className={authCardClass}>
-          <p className="text-sm text-emerald-300">Password updated. Redirecting to sign in…</p>
+          <p className="text-sm text-emerald-300">{t("auth.updated")}</p>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className={authCardClass}>
           {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
           <label className="flex flex-col gap-1.5 text-sm">
-            <span className="text-slate-400">New password</span>
+            <span className="text-slate-400">{t("auth.newPassword")}</span>
             <input
               type="password"
               required
@@ -69,7 +71,7 @@ export default function ResetPassword() {
             />
           </label>
           <button type="submit" disabled={submitting} className={primaryButtonClass}>
-            {submitting ? "Saving…" : "Save new password"}
+            {submitting ? t("auth.saving") : t("auth.savePassword")}
           </button>
         </form>
       )}
