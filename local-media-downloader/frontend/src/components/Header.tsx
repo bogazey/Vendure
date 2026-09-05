@@ -18,8 +18,14 @@ export default function Header({ appShell = false }: HeaderProps) {
   const handleSignOut = async () => { setAccountOpen(false); setMobileOpen(false); await logout(); navigate("/"); };
 
   return (
-    <header className="premium-header">
-      <div className={`premium-nav ${appShell ? "lg:justify-end" : ""}`}>
+    <header className={`premium-header ${appShell ? "lg:flex lg:justify-end lg:pr-8" : ""}`}>
+      <div
+        className={`premium-nav ${
+          appShell
+            ? "lg:mx-0 lg:w-fit lg:min-w-0 lg:justify-end lg:rounded-2xl lg:border-white/[0.07] lg:bg-[#090d17]/80 lg:px-2"
+            : ""
+        }`}
+      >
         <Link to="/" className={`shrink-0 ${appShell ? "lg:hidden" : ""}`} aria-label="Loady home">
           <LoadyLogo size={29} />
         </Link>
