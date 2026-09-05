@@ -27,7 +27,7 @@ export default function Header({ appShell = false }: HeaderProps) {
         }`}
       >
         <Link to="/" className={`shrink-0 ${appShell ? "lg:hidden" : ""}`} aria-label="Loady home">
-          <LoadyLogo size={29} />
+          <LoadyLogo size={34} />
         </Link>
 
         {!appShell && (

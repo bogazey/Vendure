@@ -45,7 +45,7 @@ export default function Sidebar() {
   return (
     <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-white/[0.07] bg-[#070a12]/70 px-4 py-6 backdrop-blur-xl lg:flex">
       <NavLink to="/" className="mb-8 px-2">
-        <LoadyLogo size={27} />
+        <LoadyLogo size={32} />
       </NavLink>
 
       <nav className="flex flex-1 flex-col gap-1">
