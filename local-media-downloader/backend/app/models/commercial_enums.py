@@ -65,3 +65,18 @@ class AdminActionType(str, Enum):
     GRANT_CREDITS = "grant_credits"
     DISABLE_ACCOUNT = "disable_account"
     REACTIVATE_ACCOUNT = "reactivate_account"
+    AD_PLACEMENT_ENABLED = "ad_placement_enabled"
+    AD_PLACEMENT_DISABLED = "ad_placement_disabled"
+    AD_PLACEMENT_UPDATED = "ad_placement_updated"
+
+
+class AdPlacementId(str, Enum):
+    """Stable identifiers for the fixed set of ad placements the frontend
+    can render (see components/AdSlot.tsx). Adding a new placement means
+    adding a value here plus a migration seeding its row - never a free-form
+    string, so the admin Ads page and AdSlot always agree on what exists."""
+
+    LANDING_DOWNLOADER = "LANDING_DOWNLOADER"
+    DOWNLOAD_RESULT = "DOWNLOAD_RESULT"
+    USER_DASHBOARD = "USER_DASHBOARD"
+    DOWNLOAD_HISTORY = "DOWNLOAD_HISTORY"

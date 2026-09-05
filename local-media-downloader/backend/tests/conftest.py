@@ -25,9 +25,17 @@ def _commercial_schema():
     uses Alembic migrations, but tests don't need migration history, just the
     current schema."""
     from app.database import commercial_models  # noqa: F401 - registers models on Base.metadata
-    from app.database.commercial_db import Base, get_engine
+    from app.database.commercial_db import Base, get_engine, get_session_factory
+    from app.services.ad_placement_service import ensure_default_placements
 
     Base.metadata.create_all(get_engine())
+
+    session = get_session_factory()()
+    try:
+        ensure_default_placements(session)
+        session.commit()
+    finally:
+        session.close()
     yield
 
 

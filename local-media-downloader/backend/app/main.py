@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 
 from app.api import (
     routes_account,
+    routes_ads,
     routes_admin,
     routes_analyze,
     routes_auth,
@@ -106,6 +107,7 @@ app.include_router(routes_auth.router)
 app.include_router(routes_account.router)
 app.include_router(routes_billing.router)
 app.include_router(routes_admin.router)
+app.include_router(routes_ads.router)
 app.include_router(routes_analyze.router)
 app.include_router(routes_downloads.router)
 app.include_router(routes_history.router)

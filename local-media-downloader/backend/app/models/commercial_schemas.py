@@ -211,3 +211,44 @@ class AdminOverviewOut(BaseModel):
     credits_consumed_current_period: int
     recent_billing_failures: list[AdminBillingEventOut]
     recent_admin_actions: list[AdminActionLogOut]
+
+
+class AdPlacementOut(BaseModel):
+    """Public, non-secret placement config - what AdSlot needs at runtime to
+    decide whether to render anything. Never carries API keys or private ad
+    network tokens; those must never be stored in this table at all."""
+
+    id: str
+    enabled: bool
+    provider: Optional[str] = None
+    public_slot_id: Optional[str] = None
+
+
+class AdminAdPlacementOut(AdPlacementOut):
+    description: str
+    updated_at: datetime
+
+
+class AdminUpdateAdPlacementRequest(BaseModel):
+    """Partial update - only fields the admin actually changed are sent."""
+
+    enabled: Optional[bool] = None
+    provider: Optional[str] = Field(default=None, max_length=80)
+    public_slot_id: Optional[str] = Field(default=None, max_length=120)
+
+    @field_validator("provider", "public_slot_id")
+    @classmethod
+    def _blank_to_none(cls, value: Optional[str]) -> Optional[str]:
+        return value.strip() or None if value is not None else None
+
+
+class AdminHealthOut(BaseModel):
+    """Operational health for the admin System page - deliberately excludes
+    ffmpeg_path/download_dir (see HealthResponse): the admin panel should
+    never display absolute server filesystem paths."""
+
+    status: str
+    database_ok: bool
+    ffmpeg_available: bool
+    ytdlp_version: Optional[str] = None
+    download_dir_writable: bool

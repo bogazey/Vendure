@@ -161,6 +161,26 @@ class AdminActionLog(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, index=True, nullable=False)
 
 
+class AdPlacement(Base):
+    """Central registry of ad placements the frontend can render (see
+    components/AdSlot.tsx) and the admin Ads page can configure. Deliberately
+    holds only non-secret, display-safe fields - no API keys, no private ad
+    network tokens - since this row is readable by any authenticated user
+    (AdSlot needs to know whether its placement is currently enabled)."""
+
+    __tablename__ = "ad_placements"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    description: Mapped[str] = mapped_column(String(240), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    provider: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    public_slot_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), default=_now, onupdate=_now, nullable=False
+    )
+
+
 class RefreshToken(Base):
     """Server-side record of issued refresh tokens, so a single session can
     be revoked (logout, password reset) without invalidating every session."""

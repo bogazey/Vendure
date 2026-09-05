@@ -13,8 +13,15 @@ from app.utils.paths import is_directory_writable
 router = APIRouter(tags=["health"])
 
 
-@router.get("/api/health", response_model=HealthResponse)
-async def health() -> HealthResponse:
+def compute_health() -> HealthResponse:
+    """Single source of truth for backend/ffmpeg/yt-dlp/database health.
+
+    Returns the full HealthResponse, including local filesystem paths
+    (ffmpeg_path, download_dir) needed by same-machine consumers like
+    Settings/FirstRunSetup. The admin System page must never display those
+    paths - see routes_admin.get_admin_health, which calls this and strips
+    them rather than reusing /api/health's payload as-is.
+    """
     settings = get_settings()
     ffmpeg_available, ffmpeg_path = ytdlp_service.check_ffmpeg()
     writable = is_directory_writable(Path(settings.download_dir))
@@ -35,3 +42,8 @@ async def health() -> HealthResponse:
         download_dir_writable=writable,
         database_ok=db_ok,
     )
+
+
+@router.get("/api/health", response_model=HealthResponse)
+async def health() -> HealthResponse:
+    return compute_health()

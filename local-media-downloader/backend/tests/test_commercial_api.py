@@ -324,6 +324,147 @@ class TestAdminBillingEvents:
         assert isinstance(resp.json(), list)
 
 
+class TestAdminHealth:
+    def test_regular_user_cannot_read_admin_health(self):
+        c, _ = _signup()
+        resp = c.get("/api/admin/health")
+        assert resp.status_code == 403
+
+    def test_admin_health_never_exposes_filesystem_paths(self):
+        """The admin System page must never receive absolute server paths -
+        see AdminHealthOut. /api/health (the same-machine Settings/
+        FirstRunSetup endpoint) is unaffected and keeps them."""
+        c, admin_email = _signup()
+        _promote(admin_email)
+        resp = c.get("/api/admin/health")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "ffmpeg_path" not in body
+        assert "download_dir" not in body
+        assert set(body.keys()) == {"status", "database_ok", "ffmpeg_available", "ytdlp_version", "download_dir_writable"}
+
+    def test_public_health_still_includes_paths_for_local_consumers(self):
+        resp = client.get("/api/health")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "ffmpeg_path" in body
+        assert "download_dir" in body
+
+
+class TestAdminAdPlacements:
+    def test_regular_user_cannot_list_ad_placements(self):
+        c, _ = _signup()
+        resp = c.get("/api/admin/ads/placements")
+        assert resp.status_code == 403
+
+    def test_regular_user_cannot_update_ad_placement(self):
+        c, _ = _signup()
+        resp = c.patch("/api/admin/ads/placements/LANDING_DOWNLOADER", json={"enabled": True})
+        assert resp.status_code == 403
+
+    def test_admin_can_list_seeded_placements(self):
+        c, admin_email = _signup()
+        _promote(admin_email)
+        resp = c.get("/api/admin/ads/placements")
+        assert resp.status_code == 200
+        body = resp.json()
+        ids = {p["id"] for p in body}
+        assert ids == {"LANDING_DOWNLOADER", "DOWNLOAD_RESULT", "USER_DASHBOARD", "DOWNLOAD_HISTORY"}
+        assert all(p["enabled"] is False for p in body)
+
+    def test_admin_can_enable_a_placement_and_it_is_audited(self):
+        c, admin_email = _signup()
+        _promote(admin_email)
+        resp = c.patch("/api/admin/ads/placements/LANDING_DOWNLOADER", json={"enabled": True})
+        assert resp.status_code == 200
+        assert resp.json()["enabled"] is True
+
+        audit = c.get("/api/admin/audit-log").json()
+        entry = next(a for a in audit if a["action"] == "ad_placement_enabled")
+        assert entry["details"]["placement"] == "LANDING_DOWNLOADER"
+
+    def test_admin_can_disable_a_placement_and_it_is_audited(self):
+        c, admin_email = _signup()
+        _promote(admin_email)
+        c.patch("/api/admin/ads/placements/LANDING_DOWNLOADER", json={"enabled": True})
+        resp = c.patch("/api/admin/ads/placements/LANDING_DOWNLOADER", json={"enabled": False})
+        assert resp.status_code == 200
+        assert resp.json()["enabled"] is False
+
+        audit = c.get("/api/admin/audit-log").json()
+        entry = next(a for a in audit if a["action"] == "ad_placement_disabled")
+        assert entry["details"]["placement"] == "LANDING_DOWNLOADER"
+
+    def test_admin_can_configure_provider_and_slot_and_it_is_audited(self):
+        c, admin_email = _signup()
+        _promote(admin_email)
+        resp = c.patch(
+            "/api/admin/ads/placements/DOWNLOAD_RESULT",
+            json={"provider": "google_adsense", "public_slot_id": "slot-123"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["provider"] == "google_adsense"
+        assert body["public_slot_id"] == "slot-123"
+
+        audit = c.get("/api/admin/audit-log").json()
+        entry = next(a for a in audit if a["action"] == "ad_placement_updated")
+        assert entry["details"]["placement"] == "DOWNLOAD_RESULT"
+        assert "provider" in entry["details"]["changed"]
+        assert "public_slot_id" in entry["details"]["changed"]
+
+    def test_updating_with_no_actual_change_is_not_audited(self):
+        c, admin_email = _signup()
+        _promote(admin_email)
+        before = len(c.get("/api/admin/audit-log").json())
+        resp = c.patch("/api/admin/ads/placements/USER_DASHBOARD", json={"enabled": False})
+        assert resp.status_code == 200
+        after = c.get("/api/admin/audit-log").json()
+        assert len(after) == before
+
+    def test_unknown_placement_id_is_rejected(self):
+        c, admin_email = _signup()
+        _promote(admin_email)
+        resp = c.patch("/api/admin/ads/placements/NOT_A_REAL_PLACEMENT", json={"enabled": True})
+        assert resp.status_code == 422
+
+    def test_never_stores_secret_looking_fields(self):
+        """AdminUpdateAdPlacementRequest only accepts enabled/provider/
+        public_slot_id - there is no field for an API key or token, so this
+        just documents that a client can't sneak one through."""
+        c, admin_email = _signup()
+        _promote(admin_email)
+        resp = c.patch(
+            "/api/admin/ads/placements/DOWNLOAD_HISTORY",
+            json={"enabled": True, "api_key": "sk-should-be-ignored"},
+        )
+        assert resp.status_code == 200
+        assert "api_key" not in resp.json()
+
+
+class TestPublicAdPlacements:
+    def test_requires_auth(self):
+        resp = TestClient(app).get("/api/ads/placements")
+        assert resp.status_code == 401
+
+    def test_authenticated_user_can_read_placements_without_admin(self):
+        c, _ = _signup()
+        resp = c.get("/api/ads/placements")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) == 4
+        # Public shape carries no description/timestamps - admin-only detail.
+        assert set(body[0].keys()) == {"id", "enabled", "provider", "public_slot_id"}
+
+    def test_reflects_admin_changes(self):
+        c, admin_email = _signup()
+        _promote(admin_email)
+        c.patch("/api/admin/ads/placements/DOWNLOAD_HISTORY", json={"enabled": True})
+        resp = c.get("/api/ads/placements")
+        entry = next(p for p in resp.json() if p["id"] == "DOWNLOAD_HISTORY")
+        assert entry["enabled"] is True
+
+
 class TestCheckoutValidation:
     def test_checkout_requires_auth(self):
         resp = TestClient(app).post("/api/billing/checkout", json={"plan": "pro", "billing_period": "monthly"})

@@ -12,17 +12,22 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, require_admin
+from app.api.routes_health import compute_health
 from app.database.commercial_models import AdminActionLog, BillingEvent, Subscription, UsagePeriod, User
-from app.models.commercial_enums import AdminActionType, Plan, UserStatus
+from app.models.commercial_enums import AdminActionType, AdPlacementId, Plan, UserStatus
 from app.models.commercial_schemas import (
     AdminActionLogOut,
+    AdminAdPlacementOut,
     AdminBillingEventOut,
     AdminGrantCreditsRequest,
+    AdminHealthOut,
     AdminOverviewOut,
     AdminSetAccountStatusRequest,
+    AdminUpdateAdPlacementRequest,
     AdminUserListOut,
     AdminUserOut,
 )
+from app.services import ad_placement_service
 from app.services.account_service import ACTIVE_SUBSCRIPTION_STATUSES, account_service
 from app.services.admin_audit_service import admin_audit_service
 from app.services.plan_policy import get_policy
@@ -163,6 +168,18 @@ async def get_overview(db: Session = Depends(get_db)) -> AdminOverviewOut:
     )
 
 
+@router.get("/health", response_model=AdminHealthOut, dependencies=[Depends(require_admin)])
+async def get_admin_health() -> AdminHealthOut:
+    health = compute_health()
+    return AdminHealthOut(
+        status=health.status,
+        database_ok=health.database_ok,
+        ffmpeg_available=health.ffmpeg_available,
+        ytdlp_version=health.ytdlp_version,
+        download_dir_writable=health.download_dir_writable,
+    )
+
+
 @router.get("/users", response_model=AdminUserListOut, dependencies=[Depends(require_admin)])
 async def list_users(
     db: Session = Depends(get_db),
@@ -248,3 +265,37 @@ async def list_audit_log(
 ) -> list[AdminActionLogOut]:
     entries = admin_audit_service.list_recent(db, limit=limit, target_user_id=target_user_id)
     return _to_admin_action_log_out_list(db, entries)
+
+
+def _to_admin_ad_placement_out(placement) -> AdminAdPlacementOut:
+    return AdminAdPlacementOut(
+        id=placement.id,
+        description=placement.description,
+        enabled=placement.enabled,
+        provider=placement.provider,
+        public_slot_id=placement.public_slot_id,
+        updated_at=placement.updated_at,
+    )
+
+
+@router.get("/ads/placements", response_model=list[AdminAdPlacementOut], dependencies=[Depends(require_admin)])
+async def list_ad_placements(db: Session = Depends(get_db)) -> list[AdminAdPlacementOut]:
+    return [_to_admin_ad_placement_out(p) for p in ad_placement_service.list_placements(db)]
+
+
+@router.patch("/ads/placements/{placement_id}", response_model=AdminAdPlacementOut, dependencies=[Depends(require_admin)])
+async def update_ad_placement(
+    placement_id: AdPlacementId,
+    payload: AdminUpdateAdPlacementRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> AdminAdPlacementOut:
+    placement = ad_placement_service.get_placement(db, placement_id.value)
+    if placement is None:
+        raise UnavailableMediaError("Ad placement not found.")
+    result = ad_placement_service.update_placement(db, placement, payload)
+    if result.changed_fields:
+        admin_audit_service.record(
+            db, admin, result.action, None, {"placement": placement.id, "changed": result.changed_fields}
+        )
+    return _to_admin_ad_placement_out(result.placement)
