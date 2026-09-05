@@ -1,0 +1,14 @@
+:root {
+ --loady-midnight:#0B0F1A;
+ --loady-blue:#3B82F6;
+ --loady-violet:#8B5CF6;
+ --loady-aqua:#22D3EE;
+ --loady-ice:#F4F7FF;
+ --loady-slate:#94A3B8;
+ --loady-white:#FFFFFF;
+ --loady-gradient:linear-gradient(135deg,#22D3EE 0%,#3B82F6 55%,#8B5CF6 100%);
+ --loady-font:"Sora",Inter,system-ui,sans-serif;
+ --loady-radius-sm:10px;
+ --loady-radius-md:16px;
+ --loady-radius-lg:24px;
+}
