@@ -12,6 +12,7 @@ httpx==0.27.2
 
 # Commercial layer
 sqlalchemy==2.0.35
+psycopg[binary]>=3.2,<4
 alembic==1.13.3
 argon2-cffi==23.1.0
 pyjwt==2.9.0
