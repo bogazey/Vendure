@@ -49,7 +49,6 @@ services:
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]
-    pids_limit: 256
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8000/api/health"]
       interval: 30s
