@@ -37,6 +37,10 @@ export default function Pricing() {
       navigate("/signup", { state: { intendedPlan: plan, intendedPeriod: period } });
       return;
     }
+    if (["active", "trialing", "past_due"].includes(account.subscription.status)) {
+      navigate("/billing");
+      return;
+    }
     setCheckingOut(plan);
     track("checkout_started", { plan });
     try {

@@ -498,10 +498,11 @@ class TestCheckoutValidation:
         resp = c.post("/api/billing/checkout", json={"plan": "free", "billing_period": "monthly"})
         assert resp.status_code == 422  # Free doesn't go through checkout
 
-    def test_checkout_reports_a_clean_error_when_unconfigured(self):
+    def test_checkout_reports_a_clean_error_when_unconfigured(self, monkeypatch):
         """No PADDLE_*_PRICE_ID/PADDLE_CLIENT_TOKEN in this test environment
         (there's no real Paddle Sandbox account here) - this must surface as
         a clear 502 billing error, not an unhandled 500."""
+        monkeypatch.setattr("app.services.paddle_service._price_id_for", lambda *args: "")
         c, _ = _signup()
         resp = c.post("/api/billing/checkout", json={"plan": "pro", "billing_period": "monthly"})
         assert resp.status_code == 502

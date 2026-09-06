@@ -5,7 +5,8 @@
  * to keep in sync with a real npm package here.
  */
 interface PaddleCheckoutOpenOptions {
-  items: { priceId: string; quantity: number }[];
+  items?: { priceId: string; quantity: number }[];
+  transactionId?: string;
   customData?: Record<string, unknown>;
   customer?: { email?: string };
 }

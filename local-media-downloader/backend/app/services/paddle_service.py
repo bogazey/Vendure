@@ -189,7 +189,7 @@ def _upsert_subscription_from_event(session: Session, data: dict) -> None:
     current_period = data.get("current_billing_period") or {}
     subscription.current_period_start = _parse_paddle_datetime(current_period.get("starts_at")) or subscription.current_period_start
     subscription.current_period_end = _parse_paddle_datetime(current_period.get("ends_at")) or subscription.current_period_end
-    subscription.cancel_at_period_end = bool(data.get("scheduled_change"))
+    subscription.cancel_at_period_end = (data.get("scheduled_change") or {}).get("action") == "cancel"
 
     _sync_usage_period_credits_for_plan_change(session, subscription, old_plan, subscription.plan)
 

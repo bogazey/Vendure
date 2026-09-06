@@ -1,39 +1,15 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import ErrorBanner from "../components/ErrorBanner";
+import BillingManagement from "../components/BillingManagement";
 import { useAuth } from "../context/AuthContext";
-import { ApiError, api } from "../services/api";
 import { appPageShell } from "../styles/ui";
 
 export default function Billing() {
   const { t } = useTranslation();
   const { account } = useAuth();
-  const [error, setError] = useState<string | null>(null);
-  const [openingPortal, setOpeningPortal] = useState(false);
-
   if (!account) return null;
   const { subscription, usage } = account;
   const isFree = subscription.plan === "free";
-
-  const handleManageBilling = async () => {
-    setOpeningPortal(true);
-    setError(null);
-    try {
-      const { url } = await api.createBillingPortalSession();
-      if (url) {
-        window.open(url, "_blank", "noopener,noreferrer");
-      } else {
-        setError(
-          t("billingPage.portalUnavailable")
-        );
-      }
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("billingPage.portalError"));
-    } finally {
-      setOpeningPortal(false);
-    }
-  };
 
   const usageUsed = usage.plan === "free" ? usage.daily_free_downloads_used ?? 0 : usage.credits_used ?? 0;
   const usageTotal =
@@ -46,7 +22,7 @@ export default function Billing() {
     <div className={appPageShell}>
       <h1 className="font-display text-xl font-bold text-slate-50">{t("app.billingTitle")}</h1>
 
-      {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
+
 
       <section className="glass-panel flex flex-col gap-4 p-6">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("app.currentPlan")}</h2>
@@ -113,16 +89,10 @@ export default function Billing() {
             {t("billingPage.upgrade")}
           </Link>
         ) : (
-          <>
-            <Link to="/pricing" className="btn-glass">
-              {t("billingPage.change")}
-            </Link>
-            <button type="button" onClick={handleManageBilling} disabled={openingPortal} className="btn-gradient">
-              {openingPortal ? t("app.opening") : t("app.manageBilling")}
-            </button>
-          </>
+          <a href="#billing-management" className="btn-gradient">{t("app.manageBilling")}</a>
         )}
       </div>
+      <BillingManagement />
       <p className="text-xs text-slate-600">
         {t("billingPage.notice")}
       </p>

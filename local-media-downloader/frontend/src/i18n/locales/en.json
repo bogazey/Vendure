@@ -295,7 +295,7 @@
     "change": "Change plan",
     "portalUnavailable": "Billing management isn't available yet for this account.",
     "portalError": "Could not open billing management.",
-    "notice": "Billing is managed through Paddle's hosted checkout and customer portal. Loady never sees or stores your card details."
+    "notice": "Manage your subscription here in Loady. Paddle securely processes payments; Loady never sees or stores your card details."
   },
   "settingsPage": {
     "loading": "Loading settings…",
@@ -739,6 +739,36 @@
           "a": "No — image downloads work with the same free guest allowance as video and audio."
         }
       ]
+    }
+  },
+  "billingManage": {
+    "loading": "Working…",
+    "error": "We could not complete this billing request. Refresh your account and try again. If it continues, contact support.",
+    "pending": "Request accepted. Waiting for billing confirmation. Your current access remains until the update arrives.",
+    "resume": "Resume subscription",
+    "cancel": "Cancel at period end",
+    "confirm": "Confirm change",
+    "back": "Go back",
+    "cancelConfirm": "Cancel renewal? You keep your current access until the end of your paid billing period.",
+    "resumeConfirm": "Resume automatic renewal with your current plan?",
+    "change-planConfirm": "Change to the selected plan now? Paddle will calculate prorated charges or credits immediately, including applicable taxes. Your saved payment method may be charged.",
+    "payment": "Update payment method",
+    "history": "View invoices / payment history",
+    "paymentDone": "Payment details submitted successfully. Refreshing billing information.",
+    "hosted": "Payment details are collected securely by Paddle in an overlay. Invoice PDFs open in a separate tab; close it to return to Loady.",
+    "overdue": "Updating your payment method may also collect your overdue payment. Paddle will show the amount before you pay.",
+    "empty": "No payments found for this subscription.",
+    "invoice": "Get invoice",
+    "openInvoice": "Open invoice PDF (new tab)",
+    "more": "Load more",
+    "status": {
+      "completed": "Paid",
+      "paid": "Processing",
+      "billed": "Invoiced",
+      "past_due": "Overdue",
+      "canceled": "Canceled",
+      "draft": "Draft",
+      "ready": "Awaiting payment"
     }
   }
 }

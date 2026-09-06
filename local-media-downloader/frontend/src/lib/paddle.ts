@@ -77,3 +77,13 @@ export async function openPaddleCheckout(
     customData: checkout.custom_data,
   });
 }
+
+/** Secure provider overlay for an existing subscription, without a new purchase. */
+export async function openPaymentUpdate(
+  checkout: import("../types/commercial").PaymentCheckout,
+  onEvent?: (event: PaddleEventData) => void
+): Promise<void> {
+  await ensurePaddleInitialized(checkout.client_token, checkout.environment);
+  currentEventHandler = onEvent ?? null;
+  window.Paddle!.Checkout.open({ transactionId: checkout.transaction_id });
+}

@@ -21,7 +21,8 @@ import type {
   AdminUserOut,
   AdPlacementOut,
   BillingPeriod,
-  BillingPortalResponse,
+  PaymentHistory,
+  PaymentCheckout,
   CheckoutResponse,
   DownloadPreferencesOut,
   Plan,
@@ -174,8 +175,13 @@ export const api = {
       body: JSON.stringify({ plan, billing_period: billingPeriod }),
     }),
 
-  createBillingPortalSession: () =>
-    request<BillingPortalResponse>("/api/billing/portal", { method: "POST" }),
+  manageSubscription: (action: "cancel" | "resume" | "change-plan", plan?: Plan, period?: BillingPeriod) =>
+    request<{ status: string }>(`/api/billing/subscription/${action}`, {
+      method: "POST", body: plan ? JSON.stringify({ plan, billing_period: period }) : undefined,
+    }),
+  updatePaymentMethod: () => request<PaymentCheckout>("/api/billing/payment-method", { method: "POST" }),
+  paymentHistory: (after?: string) => request<PaymentHistory>(`/api/billing/history${after ? `?after=${encodeURIComponent(after)}` : ""}`),
+  invoice: (id: string) => request<{ url: string }>(`/api/billing/history/${encodeURIComponent(id)}/invoice`),
 
   // --- Admin ---
   adminListUsers: (params: { search?: string; limit?: number; offset?: number } = {}) => {

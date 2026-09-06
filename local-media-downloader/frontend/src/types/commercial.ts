@@ -65,8 +65,14 @@ export interface CheckoutResponse {
   custom_data: Record<string, unknown>;
 }
 
-export interface BillingPortalResponse {
-  url: string | null;
+export interface PaymentCheckout {
+  transaction_id: string;
+  client_token: string;
+  environment: string;
+}
+export interface PaymentHistory {
+  items: { id: string; date: string; status: string; total: string; currency: string; invoice_available: boolean }[];
+  next: string | null;
 }
 
 // Per-user download preferences - deliberately NOT part of AppSettings
