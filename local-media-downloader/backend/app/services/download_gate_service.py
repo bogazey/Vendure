@@ -89,6 +89,10 @@ class DownloadGateService:
                 entitlement_service.check_feature(plan, "browser_cookies")
 
             cost = plan_policy.credit_cost_for_video(_height_for_cost(request.quality_key))
+        elif request.media_type == MediaType.IMAGE:
+            if prefs.cookie_source != CookieSource.NONE.value:
+                entitlement_service.check_feature(plan, "browser_cookies")
+            cost = plan_policy.credit_cost_for_image()
         else:
             if prefs.cookie_source != CookieSource.NONE.value:
                 entitlement_service.check_feature(plan, "browser_cookies")

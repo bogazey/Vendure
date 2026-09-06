@@ -65,6 +65,23 @@ class PlaylistEntryPreview(BaseModel):
     duration: Optional[float] = None
 
 
+class MediaEntryOut(BaseModel):
+    """One item of a multi-media post (e.g. an Instagram carousel). `index`
+    is 1-based and matches yt-dlp's own `playlist_items` convention, so it
+    can be passed straight back in CreateDownloadRequest.playlist_item_indices
+    to download just this one entry."""
+
+    index: int
+    media_type: MediaType
+    title: Optional[str] = None
+    thumbnail: Optional[str] = None
+    duration: Optional[float] = None
+    image_url: Optional[str] = None
+    image_width: Optional[int] = None
+    image_height: Optional[int] = None
+    image_ext: Optional[str] = None
+
+
 class AnalyzeResponse(BaseModel):
     url: str
     platform: Platform
@@ -75,10 +92,22 @@ class AnalyzeResponse(BaseModel):
     thumbnail: Optional[str] = None
     duration: Optional[float] = None
     description: Optional[str] = None
+    # Populated when media_type == IMAGE: the best available full-resolution
+    # image (distinct from `thumbnail`, which some platforms treat as a
+    # separate, smaller preview - see ytdlp_service._pick_best_image).
+    image_url: Optional[str] = None
+    image_width: Optional[int] = None
+    image_height: Optional[int] = None
+    image_ext: Optional[str] = None
     is_playlist: bool = False
     playlist_title: Optional[str] = None
     playlist_count: Optional[int] = None
     playlist_entries_preview: list[PlaylistEntryPreview] = Field(default_factory=list)
+    # A single post that itself contains multiple full media items (e.g. an
+    # Instagram carousel) - distinct from playlist_entries_preview, which is
+    # a lightweight preview of a much larger URL-level playlist (list=...)
+    # the user would analyze one entry of at a time.
+    media_items: list[MediaEntryOut] = Field(default_factory=list)
     video_presets: list[QualityPreset] = Field(default_factory=list)
     audio_presets: list[QualityPreset] = Field(default_factory=list)
     advanced_formats: list[FormatOption] = Field(default_factory=list)

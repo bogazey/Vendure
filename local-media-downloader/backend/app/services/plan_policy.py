@@ -88,6 +88,7 @@ def get_policy(plan: Plan) -> PlanPolicy:
 # a one-place edit. media_type/height come straight off CreateDownloadRequest.
 
 CREDIT_COST_AUDIO = 1
+CREDIT_COST_IMAGE = 1
 CREDIT_COST_VIDEO_UP_TO_1080P = 1
 CREDIT_COST_VIDEO_1440P = 2
 CREDIT_COST_VIDEO_4K = 3
@@ -104,3 +105,11 @@ def credit_cost_for_video(height: Optional[int]) -> int:
 
 def credit_cost_for_audio() -> int:
     return CREDIT_COST_AUDIO
+
+
+def credit_cost_for_image() -> int:
+    # Matches the cheapest existing per-item rate (audio, <=1080p video) -
+    # an image is a single small file with no transcoding, so there's no
+    # basis for charging more; this is a new rule (images never worked
+    # before), not a change to any existing video/audio price.
+    return CREDIT_COST_IMAGE

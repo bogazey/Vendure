@@ -11,6 +11,7 @@ import os
 import re
 import shutil
 from typing import Any, Callable, Optional
+from urllib.parse import urlparse
 
 import yt_dlp
 from yt_dlp.utils import DownloadCancelled, DownloadError
@@ -23,6 +24,7 @@ from app.models.schemas import (
     ClipRange,
     CreateDownloadRequest,
     FormatOption,
+    MediaEntryOut,
     PlaylistEntryPreview,
     QualityPreset,
 )
@@ -34,6 +36,7 @@ from app.utils.exceptions import (
     FfmpegMissingError,
     GeoRestrictedError,
     NetworkError,
+    NoDownloadableMediaError,
     PermissionDeniedError,
     PrivateOrLoginRequiredError,
     UnavailableMediaError,
@@ -104,11 +107,32 @@ def classify_error(exc: Exception, url: str = "") -> Exception:
             "Could not read the configured cookie file. Check the cookie file path in Settings.",
             technical=str(exc),
         )
-    if any(k in text for k in ("private video", "login required", "requires authentication", "rate-limit reached")):
+    if any(
+        k in text
+        for k in (
+            "private video",
+            "login required",
+            "requires authentication",
+            "rate-limit reached",
+            "rate-limit for accessing posts anonymously",
+            "only available for registered users",
+            "redirected to the login page",
+        )
+    ):
         return PrivateOrLoginRequiredError(
-            "This content is private or requires a logged-in session. "
+            "Instagram requires authentication to access this post."
+            if "instagram" in text or detect_platform(url) == Platform.INSTAGRAM
+            else "This content is private or requires a logged-in session. "
             "Add browser cookies in Settings if you have access.",
             technical=str(exc),
+        )
+    if "empty media response" in text:
+        return UnavailableMediaError(
+            "This post is unavailable or you may not have access to it.", technical=str(exc)
+        )
+    if any(k in text for k in ("no video in this post", "no formats")):
+        return NoDownloadableMediaError(
+            "This post does not contain downloadable media.", technical=str(exc)
         )
     if "age" in text and "restrict" in text:
         return AgeRestrictedError(
@@ -158,6 +182,15 @@ def _base_opts(settings: AppSettings) -> dict[str, Any]:
         "socket_timeout": settings.network_timeout_seconds,
         "retries": settings.retries,
         "logger": _YtdlpLogAdapter(),
+        # Some extractors (e.g. Instagram single-image posts) call
+        # raise_no_formats()/raise_login_required(metadata_available=True)
+        # whenever a post genuinely has no video formats. Without this, that
+        # raises before we ever see the info dict - even though the post's
+        # metadata (including its actual image URLs, under `thumbnails`) was
+        # already fetched. This only changes behavior for extractions that
+        # would otherwise hard-fail with "no formats"; a normal video/audio
+        # extraction is unaffected.
+        "ignore_no_formats_error": True,
     }
     ffmpeg_available, ffmpeg_path = check_ffmpeg()
     if ffmpeg_available and ffmpeg_path:
@@ -222,6 +255,81 @@ def _format_to_option(fmt: dict[str, Any]) -> FormatOption:
         has_audio=has_audio,
         note=fmt.get("format_note"),
     )
+
+
+# --- Image support (e.g. Instagram single-image posts and carousels) ------
+#
+# yt-dlp has no first-class "image" media type: an image-only extraction
+# result carries no `formats` at all, just `thumbnails` (the image itself,
+# at various resolutions - for Instagram this candidate list already IS the
+# actual photo, not a separate small preview). These helpers are the only
+# place that reads that shape.
+
+_IMAGE_EXTS = {"jpg", "jpeg", "png", "webp", "gif", "heic", "bmp", "tiff"}
+
+
+def _guess_image_ext(url: str) -> str:
+    suffix = os.path.splitext(urlparse(url).path)[1].lstrip(".").lower()
+    if suffix == "jpeg":
+        return "jpg"
+    if suffix in _IMAGE_EXTS:
+        return suffix
+    return "jpg"
+
+
+def _pick_best_image(info: dict[str, Any]) -> Optional[tuple[str, Optional[int], Optional[int], str]]:
+    """Picks the highest-resolution image candidate for an image-only
+    extraction result. Never assumes list ordering (some extractors sort
+    largest-first, some smallest-first) - always compares by area."""
+    candidates: list[dict[str, Any]] = list(info.get("thumbnails") or [])
+    thumb = info.get("thumbnail")
+    if thumb and not any(c.get("url") == thumb for c in candidates):
+        candidates = [*candidates, {"url": thumb}]
+    candidates = [c for c in candidates if c.get("url")]
+    if not candidates:
+        return None
+
+    best = max(candidates, key=lambda c: (c.get("width") or 0) * (c.get("height") or 0))
+    url = best["url"]
+    return url, best.get("width"), best.get("height"), _guess_image_ext(url)
+
+
+def _entry_media_type_and_formats(entry: dict[str, Any]) -> tuple[Optional[MediaType], list[FormatOption]]:
+    """Classifies one extraction result (top-level or one carousel entry):
+    VIDEO if it has any downloadable format, IMAGE if it has no formats but
+    does have an image, otherwise None (genuinely no downloadable media)."""
+    formats = [_format_to_option(f) for f in entry.get("formats") or [] if f.get("format_id")]
+    if formats:
+        return MediaType.VIDEO, formats
+    if _pick_best_image(entry) is not None:
+        return MediaType.IMAGE, []
+    return None, []
+
+
+def _build_media_entry(index: int, entry: dict[str, Any]) -> Optional[MediaEntryOut]:
+    media_type, _formats = _entry_media_type_and_formats(entry)
+    if media_type == MediaType.VIDEO:
+        return MediaEntryOut(
+            index=index,
+            media_type=MediaType.VIDEO,
+            title=entry.get("title"),
+            thumbnail=entry.get("thumbnail"),
+            duration=entry.get("duration"),
+        )
+    if media_type == MediaType.IMAGE:
+        image = _pick_best_image(entry)
+        image_url, image_width, image_height, image_ext = image if image else (None, None, None, None)
+        return MediaEntryOut(
+            index=index,
+            media_type=MediaType.IMAGE,
+            title=entry.get("title"),
+            thumbnail=entry.get("thumbnail") or image_url,
+            image_url=image_url,
+            image_width=image_width,
+            image_height=image_height,
+            image_ext=image_ext,
+        )
+    return None
 
 
 # --- MP4 (H.264 + AAC) compatibility detection -----------------------------
@@ -321,6 +429,74 @@ def _build_presets(
     return video_presets, audio_presets
 
 
+def pick_best_image(info: dict[str, Any]) -> Optional[tuple[str, Optional[int], Optional[int], str]]:
+    """Public wrapper around _pick_best_image for DownloadManager's image
+    download path (keeps the underscore-prefixed extraction internals
+    private to this module)."""
+    return _pick_best_image(info)
+
+
+def extract_entry_for_download(
+    url: str, settings: AppSettings, playlist_item_indices: Optional[list[int]] = None
+) -> dict[str, Any]:
+    """Re-extracts metadata (no download) for exactly one item of `url` -
+    the whole post, or, when playlist_item_indices is given, just that one
+    1-based carousel entry. Used by DownloadManager's image download path,
+    which needs a fresh info dict at download time (analyze()'s cached
+    response isn't threaded through to CreateDownloadRequest)."""
+    opts = _base_opts(settings)
+    opts["skip_download"] = True
+    if playlist_item_indices:
+        opts["noplaylist"] = False
+        opts["playlist_items"] = ",".join(str(i) for i in playlist_item_indices)
+    else:
+        opts["noplaylist"] = True
+
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except DownloadError as exc:
+        raise classify_error(exc, url) from exc
+
+    if info is None:
+        raise UnavailableMediaError("No media information could be extracted from this URL.")
+
+    if info.get("_type") == "playlist":
+        entries = [e for e in info.get("entries") or [] if e]
+        if not entries:
+            raise NoDownloadableMediaError("This post does not contain downloadable media.")
+        info = entries[0]
+    return info
+
+
+def _analyze_carousel(url: str, platform: Platform, info: dict[str, Any]) -> AnalyzeResponse:
+    """A single post that itself contains multiple full media items (e.g. an
+    Instagram carousel) - yt-dlp reports this as `_type: "playlist"` with
+    fully-resolved `entries` already in hand (unlike a URL-level playlist,
+    where entries are IDs to analyze one at a time - see the `list=` branch
+    below `analyze()`), so no second extraction pass is needed."""
+    entries = [e for e in info.get("entries") or [] if e]
+    media_items = [item for item in (_build_media_entry(i, e) for i, e in enumerate(entries, start=1)) if item]
+    if not media_items:
+        raise NoDownloadableMediaError("This post does not contain downloadable media.")
+
+    first = media_items[0]
+    return AnalyzeResponse(
+        url=url,
+        platform=platform,
+        media_type=first.media_type,
+        id=str(info.get("id") or entries[0].get("id") or ""),
+        title=info.get("title") or "Untitled",
+        uploader=info.get("uploader") or info.get("channel"),
+        thumbnail=first.thumbnail,
+        description=(info.get("description") or "")[:500] or None,
+        is_playlist=True,
+        playlist_title=info.get("title"),
+        playlist_count=len(media_items),
+        media_items=media_items,
+    )
+
+
 def analyze(url: str, settings: AppSettings) -> AnalyzeResponse:
     platform = detect_platform(url)
     if not is_supported_platform(platform):
@@ -340,7 +516,33 @@ def analyze(url: str, settings: AppSettings) -> AnalyzeResponse:
     if info is None:
         raise UnavailableMediaError("No media information could be extracted from this URL.")
 
-    formats = [_format_to_option(f) for f in info.get("formats", []) if f.get("format_id")]
+    if info.get("_type") == "playlist" and info.get("entries"):
+        return _analyze_carousel(url, platform, info)
+
+    media_type, formats = _entry_media_type_and_formats(info)
+    if media_type is None:
+        raise NoDownloadableMediaError("This post does not contain downloadable media.")
+
+    if media_type == MediaType.IMAGE:
+        image = _pick_best_image(info)
+        if image is None:
+            raise NoDownloadableMediaError("This post does not contain downloadable media.")
+        image_url, image_width, image_height, image_ext = image
+        return AnalyzeResponse(
+            url=url,
+            platform=platform,
+            media_type=MediaType.IMAGE,
+            id=str(info.get("id")),
+            title=info.get("title") or "Untitled",
+            uploader=info.get("uploader") or info.get("channel"),
+            thumbnail=info.get("thumbnail") or image_url,
+            description=(info.get("description") or "")[:500] or None,
+            image_url=image_url,
+            image_width=image_width,
+            image_height=image_height,
+            image_ext=image_ext,
+        )
+
     video_presets, audio_presets = _build_presets(formats, settings.container_mode)
 
     response = AnalyzeResponse(

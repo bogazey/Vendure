@@ -16,8 +16,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+import httpx
 import yt_dlp
-from yt_dlp.utils import DownloadCancelled
+from yt_dlp.utils import DownloadCancelled, sanitize_filename
 
 from app.config.logging_config import get_logger
 from app.database import history_repo
@@ -34,10 +35,29 @@ from app.utils.exceptions import (
     FfmpegProcessingError,
     InvalidPathError,
     JobNotFoundError,
+    NoDownloadableMediaError,
     UnavailableMediaError,
 )
 from app.utils.paths import resolve_safe_directory, validate_directory_writable
 from app.utils.url_detect import detect_platform
+
+# Checked against the first bytes actually received over the wire before an
+# "image" download is accepted - never trust a URL extension or a
+# Content-Type header alone (e.g. an expired/blocked CDN link can return an
+# HTML error page with a 200 status).
+_IMAGE_MAGIC_SIGNATURES: tuple[bytes, ...] = (
+    b"\xff\xd8\xff",  # JPEG
+    b"\x89PNG\r\n\x1a\n",  # PNG
+    b"GIF87a",
+    b"GIF89a",
+    b"BM",  # BMP
+)
+
+
+def _looks_like_image_bytes(data: bytes) -> bool:
+    if any(data.startswith(sig) for sig in _IMAGE_MAGIC_SIGNATURES):
+        return True
+    return data[:4] == b"RIFF" and data[8:12] == b"WEBP"
 
 # ffmpeg progress/version banners on stderr can be large; keeping ffmpeg quiet
 # avoids filling the pipe buffer while _run_ffmpeg polls rather than streams
@@ -261,6 +281,10 @@ class DownloadManager:
             logger.warning("Could not remove file for cancelled job %s: %s", job.id, exc)
 
     def _blocking_download(self, job: DownloadJob, settings: AppSettings) -> None:
+        if job.request.media_type == MediaType.IMAGE:
+            self._blocking_download_image(job, settings)
+            return
+
         ffmpeg_available, _ = ytdlp_service.check_ffmpeg()
         if not ffmpeg_available:
             raise FfmpegMissingError(
@@ -342,6 +366,99 @@ class DownloadManager:
 
             if job.request.media_type == MediaType.VIDEO and settings.container_mode == ContainerMode.COMPATIBILITY:
                 self._ensure_compatible_mp4(job, info)
+
+    def _blocking_download_image(self, job: DownloadJob, settings: AppSettings) -> None:
+        """Images never go through yt-dlp's own downloader (it only knows
+        how to fetch `formats`, and an image-only extraction has none - see
+        ytdlp_service._pick_best_image) or FFmpeg - this fetches the actual
+        image bytes directly and validates them before accepting the file."""
+        download_dir = resolve_safe_directory(settings.download_dir)
+        if job.user_id:
+            download_dir = ensure_within_user_dir(download_dir, job.user_id)
+        ok, reason = validate_directory_writable(download_dir)
+        if not ok:
+            raise PermissionError(reason or "Download folder is not writable.")
+
+        info = ytdlp_service.extract_entry_for_download(
+            job.request.url, settings, job.request.playlist_item_indices
+        )
+        image = ytdlp_service.pick_best_image(info)
+        if image is None:
+            raise NoDownloadableMediaError("This post does not contain downloadable media.")
+        image_url, _width, _height, ext = image
+
+        job.title = info.get("title") or job.title
+        job.uploader = info.get("uploader") or info.get("channel") or job.uploader
+        job.thumbnail = info.get("thumbnail") or image_url or job.thumbnail
+
+        stem = sanitize_filename(f"{(job.title or 'image')[:150]} [{info.get('id') or job.id}]")
+        target = self._dedupe_path(download_dir / f"{stem}.{ext}")
+
+        job.stage = DownloadStage.DOWNLOADING
+        self._bump_revision()
+
+        headers = {
+            "User-Agent": "Mozilla/5.0 (compatible; Loady/1.0)",
+            **(info.get("http_headers") or {}),
+        }
+        self._download_image_file(job, image_url, headers, target, settings)
+        job.filepath = str(target)
+
+    @staticmethod
+    def _dedupe_path(path: Path) -> Path:
+        if not path.exists():
+            return path
+        stem, suffix = path.stem, path.suffix
+        for n in range(1, 1000):
+            candidate = path.with_name(f"{stem} ({n}){suffix}")
+            if not candidate.exists():
+                return candidate
+        return path
+
+    def _download_image_file(
+        self, job: DownloadJob, url: str, headers: dict[str, str], target: Path, settings: AppSettings
+    ) -> None:
+        tmp_target = target.with_name(f"{target.name}.part")
+        try:
+            with httpx.Client(follow_redirects=True, timeout=settings.network_timeout_seconds) as client:
+                with client.stream("GET", url, headers=headers) as response:
+                    response.raise_for_status()
+                    total = int(response.headers.get("content-length") or 0) or None
+                    job.total_bytes = total
+                    downloaded = 0
+                    first_chunk = True
+                    with open(tmp_target, "wb") as f:
+                        for chunk in response.iter_bytes(chunk_size=65536):
+                            if job.cancel_event.is_set():
+                                raise DownloadCancelled("Cancelled by user")
+                            if first_chunk:
+                                if not _looks_like_image_bytes(chunk):
+                                    raise NoDownloadableMediaError(
+                                        "This post does not contain downloadable media."
+                                    )
+                                first_chunk = False
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            job.downloaded_bytes = downloaded
+                            if total:
+                                job.progress_percent = min(99.0, downloaded / total * 100)
+                            self._bump_revision()
+                    if first_chunk:
+                        # Response body was empty - nothing to validate as an
+                        # image, so treat it the same as an invalid response.
+                        raise NoDownloadableMediaError("This post does not contain downloadable media.")
+        except httpx.HTTPError as exc:
+            tmp_target.unlink(missing_ok=True)
+            raise UnavailableMediaError(
+                "This post is unavailable or you may not have access to it.", technical=str(exc)
+            ) from exc
+        except Exception:
+            tmp_target.unlink(missing_ok=True)
+            raise
+
+        tmp_target.replace(target)
+        job.progress_percent = 100.0
+        self._bump_revision()
 
     def _ensure_compatible_mp4(self, job: DownloadJob, info: dict) -> None:
         """Compatibility mode's guarantee: a video download always ends in a
@@ -504,6 +621,12 @@ class DownloadManager:
 
         if job.request.media_type == MediaType.AUDIO:
             format_label = (job.request.audio_format or "audio").upper()
+        elif job.request.media_type == MediaType.IMAGE:
+            format_label = "Image"
+            if job.filepath:
+                container = Path(job.filepath).suffix.lstrip(".").upper()
+                if container:
+                    format_label = f"Image · {container}"
         else:
             # Record the actual final container, not just the requested
             # quality - Compatibility mode may have transcoded/remuxed to a

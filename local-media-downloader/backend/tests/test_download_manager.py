@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 
+import httpx
 import pytest
 
 from app.database import history_repo
@@ -233,3 +234,156 @@ class TestPerUserDownloadDirectory:
         outtmpl = FakeYoutubeDL.last_opts["outtmpl"]
         assert str(tmp_path) in outtmpl  # the fixture's global fake_settings.download_dir
         assert str(download_root) not in outtmpl
+
+
+class _FakeStreamResponse:
+    def __init__(self, chunks: list[bytes], headers: dict | None = None, raise_exc: Exception | None = None):
+        self._chunks = chunks
+        self.headers = headers or {}
+        self._raise_exc = raise_exc
+
+    def raise_for_status(self) -> None:
+        if self._raise_exc is not None:
+            raise self._raise_exc
+
+    def iter_bytes(self, chunk_size: int = 65536):
+        yield from self._chunks
+
+
+class _FakeStreamCtx:
+    def __init__(self, response: _FakeStreamResponse):
+        self._response = response
+
+    def __enter__(self):
+        return self._response
+
+    def __exit__(self, *exc_info):
+        return False
+
+
+class FakeHttpxClient:
+    chunks: list[bytes] = [b"\xff\xd8\xff" + b"0" * 200]
+    headers: dict = {}
+    raise_exc: Exception | None = None
+    last_headers: dict | None = None
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        return False
+
+    def stream(self, method, url, headers=None):
+        FakeHttpxClient.last_headers = headers
+        return _FakeStreamCtx(_FakeStreamResponse(FakeHttpxClient.chunks, FakeHttpxClient.headers, FakeHttpxClient.raise_exc))
+
+
+@pytest.mark.asyncio
+class TestImageDownloads:
+    """Image downloads must bypass yt-dlp's video pipeline and FFmpeg
+    entirely, validate the actual bytes received (never trust a URL
+    extension or Content-Type alone), and still respect cancellation and
+    per-user directory isolation."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_image_pipeline(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(dm_module, "httpx", type("M", (), {"Client": FakeHttpxClient, "HTTPError": httpx.HTTPError}))
+        # No ffmpeg available at all - proves the image path never needs it.
+        monkeypatch.setattr(ytdlp_service, "check_ffmpeg", lambda: (False, None))
+        monkeypatch.setattr(
+            ytdlp_service,
+            "extract_entry_for_download",
+            lambda url, settings, playlist_item_indices=None: {
+                "id": "img1",
+                "title": "A nice photo",
+                "uploader": "someone",
+                "thumbnail": "https://cdn.example.com/photo.jpg",
+                "http_headers": {"Referer": "https://www.instagram.com/"},
+            },
+        )
+        monkeypatch.setattr(
+            ytdlp_service,
+            "pick_best_image",
+            lambda info: ("https://cdn.example.com/photo.jpg", 1080, 1080, "jpg"),
+        )
+        FakeHttpxClient.chunks = [b"\xff\xd8\xff" + b"0" * 200]
+        FakeHttpxClient.raise_exc = None
+        FakeHttpxClient.last_headers = None
+        yield
+
+    async def test_image_download_completes_without_ffmpeg(self, _isolated_manager):
+        request = CreateDownloadRequest(url="https://www.instagram.com/p/ABC123/", media_type=MediaType.IMAGE)
+        job = _isolated_manager.create_job(request)
+        await asyncio.wait_for(_wait_for_terminal(_isolated_manager, job.id), timeout=5)
+
+        finished = _isolated_manager.get_job(job.id)
+        assert finished.stage == DownloadStage.COMPLETED
+        assert finished.filepath and finished.filepath.endswith(".jpg")
+        assert finished.title == "A nice photo"
+
+        history = history_repo.get(job.id)
+        assert history is not None
+        assert history.format_label is not None and "Image" in history.format_label
+
+    async def test_image_download_propagates_extractor_headers(self, _isolated_manager):
+        request = CreateDownloadRequest(url="https://www.instagram.com/p/ABC123/", media_type=MediaType.IMAGE)
+        job = _isolated_manager.create_job(request)
+        await asyncio.wait_for(_wait_for_terminal(_isolated_manager, job.id), timeout=5)
+        assert FakeHttpxClient.last_headers.get("Referer") == "https://www.instagram.com/"
+
+    async def test_html_response_is_rejected_not_saved_as_an_image(self, _isolated_manager):
+        # A blocked/expired CDN link can return an HTML error page with a
+        # 200 status - the magic-byte check must catch this even though the
+        # URL itself ends in .jpg and nothing raised an HTTP error.
+        FakeHttpxClient.chunks = [b"<html><body>blocked</body></html>"]
+        request = CreateDownloadRequest(url="https://www.instagram.com/p/ABC123/", media_type=MediaType.IMAGE)
+        job = _isolated_manager.create_job(request)
+        await asyncio.wait_for(_wait_for_terminal(_isolated_manager, job.id), timeout=5)
+
+        finished = _isolated_manager.get_job(job.id)
+        assert finished.stage == DownloadStage.FAILED
+        assert finished.filepath is None
+
+    async def test_http_error_marks_job_failed_with_friendly_message(self, _isolated_manager):
+        FakeHttpxClient.raise_exc = httpx.HTTPStatusError(
+            "403", request=httpx.Request("GET", "https://cdn.example.com/photo.jpg"), response=httpx.Response(403)
+        )
+        request = CreateDownloadRequest(url="https://www.instagram.com/p/ABC123/", media_type=MediaType.IMAGE)
+        job = _isolated_manager.create_job(request)
+        await asyncio.wait_for(_wait_for_terminal(_isolated_manager, job.id), timeout=5)
+
+        finished = _isolated_manager.get_job(job.id)
+        assert finished.stage == DownloadStage.FAILED
+        assert "unavailable" in finished.error_message.lower()
+
+    async def test_cancel_during_image_download_is_honored_and_cleans_up(self, _isolated_manager, tmp_path):
+        FakeHttpxClient.chunks = [b"\xff\xd8\xff" + b"0" * 100, b"1" * 100, b"2" * 100]
+        request = CreateDownloadRequest(url="https://www.instagram.com/p/ABC123/", media_type=MediaType.IMAGE)
+        job = _isolated_manager.create_job(request)
+        job.cancel_event.set()
+        await asyncio.wait_for(_wait_for_terminal(_isolated_manager, job.id), timeout=5)
+
+        finished = _isolated_manager.get_job(job.id)
+        assert finished.stage == DownloadStage.CANCELLED
+        # No stray .part file left behind under the configured download dir.
+        assert not any(tmp_path.rglob("*.part"))
+
+    async def test_image_job_writes_into_its_owners_directory(self, _isolated_manager, monkeypatch, tmp_path):
+        from app.services import user_storage_service
+
+        root = tmp_path / "per-user-root"
+        root.mkdir()
+        settings = type("S", (), {"download_root": str(root)})()
+        monkeypatch.setattr(user_storage_service, "get_commercial_settings", lambda: settings)
+
+        user_id = _make_real_user()
+        request = CreateDownloadRequest(url="https://www.instagram.com/p/ABC123/", media_type=MediaType.IMAGE)
+        job = _isolated_manager.create_job(request, user_id=user_id, reservation_id=None)
+        await asyncio.wait_for(_wait_for_terminal(_isolated_manager, job.id), timeout=5)
+
+        finished = _isolated_manager.get_job(job.id)
+        assert finished.stage == DownloadStage.COMPLETED
+        assert str(root / user_id) in finished.filepath

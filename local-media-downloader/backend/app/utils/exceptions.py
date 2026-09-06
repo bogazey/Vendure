@@ -33,6 +33,14 @@ class UnavailableMediaError(AppError):
     status_code = 404
 
 
+class NoDownloadableMediaError(AppError):
+    """The post/page was reached and is accessible, but genuinely contains
+    no media Loady can download (as opposed to UnavailableMediaError, which
+    means the content itself is gone/private)."""
+
+    status_code = 404
+
+
 class GeoRestrictedError(AppError):
     status_code = 451
 

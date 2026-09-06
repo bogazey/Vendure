@@ -151,3 +151,32 @@ class TestAudioGating:
         download_gate_service.authorize_and_reserve(db_session, user, Plan.FREE, None, request, "job-1")
         usage = usage_service.get_usage_out(db_session, user, Plan.FREE, None)
         assert usage.daily_free_downloads_used == 1
+
+
+class TestImageGating:
+    """Images are a new media type (see MediaType.IMAGE) - this locks in
+    the least-surprising rule: same one-credit rate as audio/<=1080p video,
+    no video-only checks (resolution/4k/format/clip/original-container)."""
+
+    def test_image_allowed_on_free_plan(self, db_session):
+        user = _user(db_session)
+        request = CreateDownloadRequest(url="https://www.instagram.com/p/ABC123/", media_type="image")
+        reservation_id = download_gate_service.authorize_and_reserve(db_session, user, Plan.FREE, None, request, "job-1")
+        assert reservation_id
+        usage = usage_service.get_usage_out(db_session, user, Plan.FREE, None)
+        assert usage.daily_free_downloads_used == 1
+
+    def test_image_charges_exactly_one_credit_on_a_paid_plan(self, db_session):
+        user = _user(db_session)
+        request = CreateDownloadRequest(url="https://www.instagram.com/p/ABC123/", media_type="image")
+        download_gate_service.authorize_and_reserve(db_session, user, Plan.PRO, None, request, "job-1")
+        usage = usage_service.get_usage_out(db_session, user, Plan.PRO, None)
+        assert usage.credits_used == 1
+
+    def test_image_download_is_never_gated_by_video_only_entitlements(self, db_session):
+        # Free's max_resolution_height/can_use_4k restrictions must not
+        # leak onto images - there is no "resolution" concept for a photo.
+        user = _user(db_session)
+        request = CreateDownloadRequest(url="https://www.instagram.com/p/ABC123/", media_type="image")
+        reservation_id = download_gate_service.authorize_and_reserve(db_session, user, Plan.FREE, None, request, "job-1")
+        assert reservation_id
