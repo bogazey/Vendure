@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from app.config.logging_config import get_logger
+from app.config.commercial_settings import get_commercial_settings
 
 logger = get_logger("email")
 
@@ -28,10 +29,20 @@ class LogEmailBackend:
         logger.info("EMAIL to=%s subject=%r\n%s", to, subject, body)
 
 
+class DisabledEmailBackend:
+    """Production-safe placeholder that never records token-bearing content."""
+
+    def send(self, to: str, subject: str, body: str) -> None:
+        logger.warning("Email delivery is not configured; suppressed message to %s", to)
+
+
 _backend: EmailBackend = LogEmailBackend()
 
 
 def get_email_backend() -> EmailBackend:
+    settings = get_commercial_settings()
+    if settings.app_env.lower() == "production" or settings.email_backend.lower() == "disabled":
+        return DisabledEmailBackend()
     return _backend
 
 

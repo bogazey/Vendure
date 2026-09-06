@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter
 
 from app.database.db import database_healthy
+from app.config.commercial_settings import get_commercial_settings
 from app.models.schemas import HealthResponse
 from app.services import ytdlp_service
 from app.services.settings_service import get_settings
@@ -33,12 +34,13 @@ def compute_health() -> HealthResponse:
 
     db_ok = database_healthy()
 
+    production = get_commercial_settings().app_env.lower() == "production"
     return HealthResponse(
         status="ok" if (ffmpeg_available and db_ok) else "degraded",
         ytdlp_version=version,
         ffmpeg_available=ffmpeg_available,
-        ffmpeg_path=ffmpeg_path,
-        download_dir=settings.download_dir,
+        ffmpeg_path=None if production else ffmpeg_path,
+        download_dir="" if production else settings.download_dir,
         download_dir_writable=writable,
         database_ok=db_ok,
     )

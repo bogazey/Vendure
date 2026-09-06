@@ -14,3 +14,4 @@ downloads/*
 !downloads/.gitkeep
 
 .env
+.env.production

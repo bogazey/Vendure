@@ -33,6 +33,8 @@ class CommercialSettings(BaseSettings):
 
     # --- Auth / sessions ---
     secret_key: str = Field(default=_GENERATED_SECRET, alias="SECRET_KEY")
+    app_env: str = Field(default="development", alias="APP_ENV")
+    email_backend: str = Field(default="log", alias="EMAIL_BACKEND")
     jwt_algorithm: str = "HS256"
     access_token_ttl_minutes: int = Field(default=15, alias="ACCESS_TOKEN_TTL_MINUTES")
     refresh_token_ttl_days: int = Field(default=30, alias="REFRESH_TOKEN_TTL_DAYS")
