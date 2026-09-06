@@ -2,13 +2,14 @@
 
 For local development this just logs the email (including the actual
 verify/reset link) to the app log instead of requiring a real email
-provider. Swap `LogEmailBackend` for a real provider (SES, Postmark,
-Resend, ...) by implementing the same `EmailBackend` protocol - nothing
-else in the app needs to change.
+provider. Production can explicitly select Resend; otherwise delivery is
+disabled. Provider failures never fall back to logging message contents.
 """
 from __future__ import annotations
 
 from typing import Protocol
+
+import httpx
 
 from app.config.logging_config import get_logger
 from app.config.commercial_settings import get_commercial_settings
@@ -26,6 +27,9 @@ class LogEmailBackend:
     is visible to anyone who can read data/logs/app.log."""
 
     def send(self, to: str, subject: str, body: str) -> None:
+        if get_commercial_settings().app_env.strip().lower() != "development":
+            DisabledEmailBackend().send(to, subject, body)
+            return
         logger.info("EMAIL to=%s subject=%r\n%s", to, subject, body)
 
 
@@ -36,14 +40,44 @@ class DisabledEmailBackend:
         logger.warning("Email delivery is not configured; suppressed message to %s", to)
 
 
-_backend: EmailBackend = LogEmailBackend()
+class ResendEmailBackend:
+    """Best-effort delivery without exposing secrets or changing auth responses.
+
+    Do not retry automatically: a timed-out request may already be accepted.
+    Never log provider response bodies or exceptions, which may echo tokens.
+    """
+
+    def __init__(self, api_key: str, sender: str) -> None:
+        self._api_key = api_key.strip()
+        self._sender = sender.strip()
+
+    def send(self, to: str, subject: str, body: str) -> None:
+        if not self._api_key or not self._sender:
+            logger.error("Resend delivery is not configured; set RESEND_API_KEY and EMAIL_FROM")
+            return
+        try:
+            with httpx.Client(timeout=httpx.Timeout(10.0, connect=5.0), follow_redirects=False) as client:
+                response = client.post(
+                    "https://api.resend.com/emails",
+                    headers={"Authorization": f"Bearer {self._api_key}"},
+                    json={"from": self._sender, "to": [to], "subject": subject, "text": body},
+                )
+            if not response.is_success:
+                logger.error("Resend delivery failed (HTTP %s)", response.status_code)
+        except httpx.HTTPError:
+            logger.error("Resend delivery failed (transport error)")
 
 
 def get_email_backend() -> EmailBackend:
     settings = get_commercial_settings()
-    if settings.app_env.lower() == "production" or settings.email_backend.lower() == "disabled":
+    backend = settings.email_backend.strip().lower()
+    if backend == "disabled":
         return DisabledEmailBackend()
-    return _backend
+    if backend == "resend":
+        return ResendEmailBackend(settings.resend_api_key.get_secret_value(), settings.email_from)
+    if backend == "log" and settings.app_env.strip().lower() == "development":
+        return LogEmailBackend()
+    return DisabledEmailBackend()
 
 
 def send_verification_email(to: str, verify_url: str) -> None:

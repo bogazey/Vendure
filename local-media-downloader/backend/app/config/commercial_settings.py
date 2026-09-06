@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import secrets
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.config.logging_config import get_logger
@@ -35,6 +35,8 @@ class CommercialSettings(BaseSettings):
     secret_key: str = Field(default=_GENERATED_SECRET, alias="SECRET_KEY")
     app_env: str = Field(default="development", alias="APP_ENV")
     email_backend: str = Field(default="log", alias="EMAIL_BACKEND")
+    resend_api_key: SecretStr = Field(default=SecretStr(""), alias="RESEND_API_KEY")
+    email_from: str = Field(default="", alias="EMAIL_FROM")
     jwt_algorithm: str = "HS256"
     access_token_ttl_minutes: int = Field(default=15, alias="ACCESS_TOKEN_TTL_MINUTES")
     refresh_token_ttl_days: int = Field(default=30, alias="REFRESH_TOKEN_TTL_DAYS")
