@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+from typing import Optional
 
 from fastapi import APIRouter, Depends, Request
 from sse_starlette.sse import EventSourceResponse
 
-from app.api.deps import get_current_user
+from app.api.deps import get_guest_id, get_optional_user
 from app.database.commercial_models import User
 from app.services.download_manager import manager
 
@@ -22,10 +23,16 @@ POLL_INTERVAL_SECONDS = 0.3
 
 
 @router.get("/progress/stream")
-async def progress_stream(request: Request, user: User = Depends(get_current_user)) -> EventSourceResponse:
+async def progress_stream(
+    request: Request,
+    user: Optional[User] = Depends(get_optional_user),
+    guest_id: Optional[str] = Depends(get_guest_id),
+) -> EventSourceResponse:
     # Same ownership scoping as GET /api/downloads - without it this stream
-    # would broadcast every user's job titles/URLs/progress to anyone
-    # connected, regardless of who started them.
+    # would broadcast every user's (or every guest's) job titles/URLs/
+    # progress to anyone connected, regardless of who started them. A
+    # caller with neither identity (no account, no guest cookie yet) simply
+    # has no jobs to see.
     async def event_generator():
         last_revision = -1
         while True:
@@ -34,7 +41,12 @@ async def progress_stream(request: Request, user: User = Depends(get_current_use
             current_revision = manager.revision
             if current_revision != last_revision:
                 last_revision = current_revision
-                jobs = [job.model_dump() for job in manager.list_jobs(user_id=user.id)]
+                if user is not None:
+                    jobs = [job.model_dump() for job in manager.list_jobs(user_id=user.id)]
+                elif guest_id is not None:
+                    jobs = [job.model_dump() for job in manager.list_jobs(guest_id=guest_id)]
+                else:
+                    jobs = []
                 yield {"event": "jobs", "data": json.dumps(jobs)}
             await asyncio.sleep(POLL_INTERVAL_SECONDS)
 

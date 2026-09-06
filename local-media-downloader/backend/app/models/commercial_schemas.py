@@ -96,6 +96,15 @@ class AccountOut(BaseModel):
     features: PlanFeaturesOut
 
 
+# ---------- Guest downloads ----------
+# Deliberately NOT modeled as a fake AccountOut - a guest has no user,
+# subscription, or credit-based usage at all, just a small download count.
+
+class GuestQuotaOut(BaseModel):
+    remaining: int
+    limit: int
+
+
 # ---------- Per-user download preferences ----------
 # container_mode / cookie_source / cookie_file_path are per-user (never the
 # personal app's global AppSettings) so one account's choice here can never

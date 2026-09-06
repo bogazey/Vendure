@@ -30,8 +30,9 @@ from app.api import (
 )
 from app.config.logging_config import get_logger, setup_logging
 from app.database import history_repo
+from app.database.commercial_db import session_scope
 from app.database.db import get_connection
-from app.services import ytdlp_service
+from app.services import guest_service, guest_storage_service, ytdlp_service
 from app.utils.exceptions import AppError
 
 setup_logging()
@@ -58,6 +59,28 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         ffmpeg_available,
         ffmpeg_path,
     )
+
+    # One-shot expiry sweep for anonymous guest downloads (see
+    # guest_service.py) - same pattern as mark_interrupted_as_failed above,
+    # not a recurring scheduler. A long-running deployment would want this
+    # re-invoked periodically (e.g. a systemd timer / cron hitting a small
+    # admin-only endpoint), which is a deployment concern outside this
+    # app's existing startup-only cleanup architecture.
+    session = session_scope()
+    try:
+        expired_guest_ids = guest_service.cleanup_expired(session)
+        session.commit()
+    except Exception:
+        session.rollback()
+        expired_guest_ids = []
+        logger.exception("Guest quota expiry sweep failed")
+    finally:
+        session.close()
+    for guest_id in expired_guest_ids:
+        guest_storage_service.remove_guest_dir(guest_id)
+    if expired_guest_ids:
+        logger.info("Expired %d guest download session(s) older than the retention window", len(expired_guest_ids))
+
     yield
 
 

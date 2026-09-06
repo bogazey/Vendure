@@ -43,3 +43,8 @@ class RateLimiter:
 login_limiter = RateLimiter()
 signup_limiter = RateLimiter()
 password_reset_limiter = RateLimiter()
+# Coarse secondary guard on guest downloads, keyed by client IP - the real
+# enforcement is guest_service's server-side per-guest-id quota; this just
+# blunts one IP cycling guest cookies to request far more than the
+# allowance in a short window. See routes_downloads.create_download.
+guest_download_limiter = RateLimiter()

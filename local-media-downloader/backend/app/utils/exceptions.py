@@ -152,6 +152,11 @@ class InsufficientCreditsError(AppError):
     code = "INSUFFICIENT_CREDITS"
 
 
+class GuestQuotaExceededError(AppError):
+    status_code = 402
+    code = "GUEST_QUOTA_EXCEEDED"
+
+
 # --- Billing --------------------------------------------------------------
 
 class BillingError(AppError):

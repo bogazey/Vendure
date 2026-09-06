@@ -62,6 +62,14 @@ class CommercialSettings(BaseSettings):
     # own default download folder so this works out of the box.
     download_root: str = Field(default=str(DEFAULT_DOWNLOAD_DIR), alias="DOWNLOAD_ROOT")
 
+    # --- Guest downloads ---
+    # Anonymous "try before you sign up" allowance - see guest_service.py /
+    # guest_storage_service.py. Guest files/quota rows older than this are
+    # swept on startup (same one-shot pattern as
+    # history_repo.mark_interrupted_as_failed, not a recurring scheduler).
+    guest_download_limit: int = Field(default=2, alias="GUEST_DOWNLOAD_LIMIT")
+    guest_data_ttl_hours: int = Field(default=48, alias="GUEST_DATA_TTL_HOURS")
+
     # --- Ads ---
     ads_enabled: bool = Field(default=True, alias="ADS_ENABLED")
 

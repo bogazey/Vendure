@@ -181,6 +181,27 @@ class AdPlacement(Base):
     )
 
 
+class GuestQuota(Base):
+    """Server-side counter for the anonymous "2 free downloads, no account
+    required" allowance - see guest_service.py. Keyed by an opaque,
+    server-minted token (never a client-chosen value), never linked to a
+    User row. `downloads_reserved` is incremented atomically at download
+    creation and converted to `downloads_completed` on success (or simply
+    decremented again on failure/cancellation) - the same reserve/commit/
+    refund shape as usage_service, just counting downloads instead of
+    credits, and deliberately never touching real credit/UsagePeriod rows."""
+
+    __tablename__ = "guest_quotas"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    downloads_reserved: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    downloads_completed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    last_used_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), default=_now, onupdate=_now, nullable=False
+    )
+
+
 class RefreshToken(Base):
     """Server-side record of issued refresh tokens, so a single session can
     be revoked (logout, password reset) without invalidating every session."""

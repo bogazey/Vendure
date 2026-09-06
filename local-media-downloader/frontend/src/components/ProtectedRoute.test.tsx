@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
-import ProtectedRoute, { AdminRoute } from "./ProtectedRoute";
+import ProtectedRoute, { AdminRoute, GuestAllowedRoute } from "./ProtectedRoute";
 import { useAuth } from "../context/AuthContext";
 import type { AccountOut } from "../types/commercial";
 
@@ -49,6 +49,30 @@ describe("ProtectedRoute", () => {
     renderAt("/protected", <ProtectedRoute><div>secret content</div></ProtectedRoute>);
     expect(screen.getByText(/loading/i)).toBeInTheDocument();
     expect(screen.queryByText("login page")).not.toBeInTheDocument();
+  });
+});
+
+describe("GuestAllowedRoute", () => {
+  it("renders children for a signed-out visitor - no redirect to /login", () => {
+    // This is the core of the guest-download-flow fix: /dashboard must
+    // never bounce an anonymous visitor to signup/login just for visiting.
+    vi.mocked(useAuth).mockReturnValue({ account: null, loading: false, refresh: vi.fn(), login: vi.fn(), signup: vi.fn(), logout: vi.fn() });
+    renderAt("/protected", <GuestAllowedRoute><div>downloader content</div></GuestAllowedRoute>);
+    expect(screen.getByText("downloader content")).toBeInTheDocument();
+    expect(screen.queryByText("login page")).not.toBeInTheDocument();
+  });
+
+  it("renders children for a signed-in user too", () => {
+    vi.mocked(useAuth).mockReturnValue({ account: baseAccount(), loading: false, refresh: vi.fn(), login: vi.fn(), signup: vi.fn(), logout: vi.fn() });
+    renderAt("/protected", <GuestAllowedRoute><div>downloader content</div></GuestAllowedRoute>);
+    expect(screen.getByText("downloader content")).toBeInTheDocument();
+  });
+
+  it("shows a loading state instead of content while auth is still resolving", () => {
+    vi.mocked(useAuth).mockReturnValue({ account: null, loading: true, refresh: vi.fn(), login: vi.fn(), signup: vi.fn(), logout: vi.fn() });
+    renderAt("/protected", <GuestAllowedRoute><div>downloader content</div></GuestAllowedRoute>);
+    expect(screen.getByText(/loading/i)).toBeInTheDocument();
+    expect(screen.queryByText("downloader content")).not.toBeInTheDocument();
   });
 });
 

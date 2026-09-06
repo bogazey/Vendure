@@ -23,9 +23,10 @@ from yt_dlp.utils import DownloadCancelled, sanitize_filename
 from app.config.logging_config import get_logger
 from app.database import history_repo
 from app.database.commercial_db import session_scope
-from app.models.enums import ContainerMode, DownloadStage, MediaType, Platform
+from app.models.enums import ContainerMode, CookieSource, DownloadStage, MediaType, Platform
 from app.models.schemas import AppSettings, CreateDownloadRequest, DownloadJobOut
-from app.services import ytdlp_service
+from app.services import guest_service, ytdlp_service
+from app.services.guest_storage_service import ensure_within_guest_dir, guest_download_dir
 from app.services.settings_service import get_settings
 from app.services.usage_service import usage_service
 from app.services.user_preferences_service import user_preferences_service
@@ -77,6 +78,7 @@ class DownloadJob:
     request: CreateDownloadRequest
     platform: Platform
     user_id: Optional[str] = None
+    guest_id: Optional[str] = None
     reservation_id: Optional[str] = None
     title: Optional[str] = None
     uploader: Optional[str] = None
@@ -133,21 +135,26 @@ class DownloadManager:
         with self._lock:
             return self._revision
 
-    def list_jobs(self, user_id: Optional[str] = None) -> list[DownloadJobOut]:
+    def list_jobs(self, user_id: Optional[str] = None, guest_id: Optional[str] = None) -> list[DownloadJobOut]:
         with self._lock:
             jobs = list(self._jobs.values())
         if user_id is not None:
             jobs = [j for j in jobs if j.user_id == user_id]
+        if guest_id is not None:
+            jobs = [j for j in jobs if j.guest_id == guest_id]
         jobs.sort(key=lambda j: j.created_at, reverse=True)
         return [j.to_out() for j in jobs]
 
-    def get_job(self, job_id: str, user_id: Optional[str] = None) -> DownloadJob:
+    def get_job(self, job_id: str, user_id: Optional[str] = None, guest_id: Optional[str] = None) -> DownloadJob:
         with self._lock:
             job = self._jobs.get(job_id)
         # Scoped lookups treat "exists but belongs to someone else" the same
-        # as "doesn't exist" - never leak another user's job via a 403 vs 404
-        # distinction.
-        if job is None or (user_id is not None and job.user_id != user_id):
+        # as "doesn't exist" - never leak another user's (or another
+        # guest's) job via a 403 vs 404 distinction. Passing neither
+        # user_id nor guest_id is an internal, trusted, unscoped lookup
+        # (e.g. _run_job) - route handlers must never call it that way for
+        # a fully-anonymous, cookie-less caller (see routes_downloads.py).
+        if job is None or (user_id is not None and job.user_id != user_id) or (guest_id is not None and job.guest_id != guest_id):
             raise JobNotFoundError("Download job not found.")
         return job
 
@@ -163,6 +170,7 @@ class DownloadManager:
         request: CreateDownloadRequest,
         job_id: Optional[str] = None,
         user_id: Optional[str] = None,
+        guest_id: Optional[str] = None,
         reservation_id: Optional[str] = None,
     ) -> DownloadJob:
         platform = detect_platform(request.url)
@@ -171,6 +179,7 @@ class DownloadManager:
             request=request,
             platform=platform,
             user_id=user_id,
+            guest_id=guest_id,
             reservation_id=reservation_id,
         )
         with self._lock:
@@ -179,8 +188,8 @@ class DownloadManager:
         asyncio.create_task(self._run_job(job.id))
         return job
 
-    def cancel_job(self, job_id: str, user_id: Optional[str] = None) -> None:
-        job = self.get_job(job_id, user_id=user_id)
+    def cancel_job(self, job_id: str, user_id: Optional[str] = None, guest_id: Optional[str] = None) -> None:
+        job = self.get_job(job_id, user_id=user_id, guest_id=guest_id)
         job.cancel_event.set()
         logger.info("Cancellation requested for job %s", job_id)
 
@@ -211,6 +220,19 @@ class DownloadManager:
           different accounts' files together and let any authenticated user
           redirect downloads to an arbitrary server path."""
         settings = get_settings()
+        if job.guest_id:
+            # Guests have no preferences row and no plan-derived feature
+            # access beyond Free's ceiling (see guest_service) - always
+            # Compatibility container mode, never cookies, and always their
+            # own isolated <DOWNLOAD_ROOT>/_guests/<guest_id>/ directory.
+            guest_dir = guest_download_dir(job.guest_id)
+            return settings.model_copy(
+                update={
+                    "download_dir": str(guest_dir),
+                    "container_mode": ContainerMode.COMPATIBILITY,
+                    "cookie_source": CookieSource.NONE,
+                }
+            )
         if not job.user_id:
             return settings
         session = session_scope()
@@ -272,6 +294,8 @@ class DownloadManager:
                 # (or a job replayed with a stale/tampered filepath) should
                 # never be trusted to unlink outside the account it belongs to.
                 path = ensure_within_user_dir(path, job.user_id)
+            elif job.guest_id:
+                path = ensure_within_guest_dir(path, job.guest_id)
             if path.is_file():
                 path.unlink()
                 logger.info("Removed file for cancelled job %s", job.id)
@@ -299,6 +323,8 @@ class DownloadManager:
             # step in this whole flow - never trust a value this many
             # layers removed from its source without re-checking it here too.
             download_dir = ensure_within_user_dir(download_dir, job.user_id)
+        elif job.guest_id:
+            download_dir = ensure_within_guest_dir(download_dir, job.guest_id)
         ok, reason = validate_directory_writable(download_dir)
         if not ok:
             raise PermissionError(reason or "Download folder is not writable.")
@@ -375,6 +401,8 @@ class DownloadManager:
         download_dir = resolve_safe_directory(settings.download_dir)
         if job.user_id:
             download_dir = ensure_within_user_dir(download_dir, job.user_id)
+        elif job.guest_id:
+            download_dir = ensure_within_guest_dir(download_dir, job.guest_id)
         ok, reason = validate_directory_writable(download_dir)
         if not ok:
             raise PermissionError(reason or "Download folder is not writable.")
@@ -559,26 +587,39 @@ class DownloadManager:
             )
 
     def _finalize_usage(self, job: DownloadJob, committed: bool) -> None:
-        """Settle this job's credit reservation: commit it on a genuine
+        """Settle this job's credit reservation (authenticated users) or
+        guest download-quota reservation (guests): commit it on a genuine
         success, or give it back on failure/cancellation. Runs against the
         commercial DB directly (session_scope) since a background job has no
         FastAPI request-scoped session to reuse."""
-        if not job.reservation_id:
-            return
-        session = session_scope()
-        try:
-            if committed:
-                usage_service.commit(session, job.reservation_id)
-            else:
-                usage_service.refund(session, job.reservation_id)
-            session.commit()
-        except Exception:
-            session.rollback()
-            logger.exception(
-                "Failed to finalize usage for job %s (reservation %s)", job.id, job.reservation_id
-            )
-        finally:
-            session.close()
+        if job.reservation_id:
+            session = session_scope()
+            try:
+                if committed:
+                    usage_service.commit(session, job.reservation_id)
+                else:
+                    usage_service.refund(session, job.reservation_id)
+                session.commit()
+            except Exception:
+                session.rollback()
+                logger.exception(
+                    "Failed to finalize usage for job %s (reservation %s)", job.id, job.reservation_id
+                )
+            finally:
+                session.close()
+        elif job.guest_id:
+            session = session_scope()
+            try:
+                if committed:
+                    guest_service.commit_download(session, job.guest_id)
+                else:
+                    guest_service.refund_download(session, job.guest_id)
+                session.commit()
+            except Exception:
+                session.rollback()
+                logger.exception("Failed to finalize guest quota for job %s (guest %s)", job.id, job.guest_id)
+            finally:
+                session.close()
 
     def _finish_as_completed(self, job: DownloadJob) -> None:
         job.stage = DownloadStage.COMPLETED
@@ -609,6 +650,13 @@ class DownloadManager:
         logger.error("Job %s failed: %s", job.id, job.error_message)
 
     def _save_history(self, job: DownloadJob) -> None:
+        if job.guest_id:
+            # Guests have no My Downloads page to view it on (still behind
+            # ProtectedRoute) and no account to eventually own the record -
+            # persisting it would just be an anonymous-browsing data trail
+            # with no product purpose. The in-memory DownloadJob is enough
+            # for the SSE/progress UI during their session.
+            return
         filesize = None
         if job.filepath:
             try:

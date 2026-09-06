@@ -138,6 +138,13 @@ export interface DownloadJobOut {
   completed_at: string | null;
 }
 
+/** Anonymous guest download allowance - see guest_service.py. Never a
+ * fake AccountOut; guests have no user/subscription/credits at all. */
+export interface GuestQuotaOut {
+  remaining: number;
+  limit: number;
+}
+
 export interface HistoryRecordOut {
   id: string;
   url: string;

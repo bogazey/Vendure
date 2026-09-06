@@ -246,6 +246,14 @@
     "language": "Language",
     "ad": "Sponsored · Ad space reserved for Free plan — upgrade to Pro to remove ads"
   },
+  "guest": {
+    "available": "2 free downloads — no account required",
+    "oneRemaining": "1 free download remaining",
+    "quotaTitle": "You've used your free downloads",
+    "quotaBody": "Create a free account to keep downloading — it only takes a few seconds and no card is required.",
+    "createAccount": "Create free account",
+    "quotaError": "You've used both free downloads on this device. Create a free account to keep going."
+  },
   "status": {
     "queued": "Queued",
     "analyzing": "Analyzing",

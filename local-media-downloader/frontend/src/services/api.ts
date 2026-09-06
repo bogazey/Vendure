@@ -3,6 +3,7 @@ import type {
   AppSettings,
   CreateDownloadRequest,
   DownloadJobOut,
+  GuestQuotaOut,
   HealthResponse,
   HistoryRecordOut,
   UpdateSettingsRequest,
@@ -93,6 +94,8 @@ export const api = {
   cancelDownload: (id: string) => request<DownloadJobOut>(`/api/downloads/${id}/cancel`, { method: "POST" }),
 
   retryDownload: (id: string) => request<DownloadJobOut>(`/api/downloads/${id}/retry`, { method: "POST" }),
+
+  getGuestQuota: () => request<GuestQuotaOut>("/api/downloads/guest-quota"),
 
   listHistory: (params: { search?: string; platform?: string; status?: string; order?: string }) => {
     const query = new URLSearchParams();

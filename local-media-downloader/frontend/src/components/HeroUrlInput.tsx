@@ -2,20 +2,18 @@ import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { useAuth } from "../context/AuthContext";
 import { detectPlatformFromUrl, PLATFORM_ICONS, PLATFORM_LABELS } from "../utils/platform";
 
 /**
  * The hero's focal point: a real, functional URL input - not decorative.
- * Submitting hands the URL forward to signup (or straight to the
- * Downloader if already signed in) via router state, where it's picked up
- * and analyzed automatically (see Signup.tsx / Dashboard.tsx). Actually
- * downloading still requires an account, per the app's existing policy -
- * this just removes the friction of retyping the link after signing up.
+ * Submitting hands the URL straight to the Downloader (Dashboard.tsx) via
+ * router state, where it's picked up and analyzed automatically - no
+ * account required. A signed-out visitor gets a small guest download
+ * allowance there (see guest_service.py); Dashboard itself prompts to sign
+ * up once that's used up, rather than gating the page behind signup.
  */
 export default function HeroUrlInput() {
   const { t } = useTranslation();
-  const { account } = useAuth();
   const navigate = useNavigate();
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +48,7 @@ export default function HeroUrlInput() {
       return;
     }
     setError(null);
-    navigate(account ? "/dashboard" : "/signup", { state: { initialUrl: trimmed } });
+    navigate("/dashboard", { state: { initialUrl: trimmed } });
   };
 
   return (

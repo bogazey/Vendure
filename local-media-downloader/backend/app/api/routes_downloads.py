@@ -1,30 +1,49 @@
 """Download job endpoints.
 
-Every route here requires a signed-in user. create_download is gated through
-download_gate_service (entitlement checks + atomic credit reservation) before
-a job is ever created - no plan/credit logic lives in this file. Jobs are
-scoped to their owning user everywhere (list/get/cancel/retry): a mismatched
-job_id is treated as 404, never a 403, so existence isn't leaked cross-user.
+Authenticated users work exactly as before: create_download is gated
+through download_gate_service (entitlement checks + atomic credit
+reservation) before a job is ever created. An anonymous caller gets the
+same downloader with a separate, much smaller allowance instead of a 401 -
+gated through guest_service (Free-equivalent feature checks + an atomic
+"2 downloads, no credits" reservation, tied to an opaque server-issued
+cookie, never a client-supplied id - see api/deps.get_guest_id and
+GUEST_COOKIE_NAME below).
+
+Jobs are scoped to their owner everywhere (list/get/cancel/retry): a
+mismatched job_id is treated as 404, never a 403, so existence isn't
+leaked cross-user - and a guest can never see another guest's (or any
+authenticated user's) jobs, since ownership requires an exact id match on
+whichever dimension (user_id xor guest_id) the request resolves to. retry
+stays authenticated-only: guest jobs are never persisted to history (see
+download_manager._save_history), so there is nothing for a guest to retry.
 """
 from __future__ import annotations
 
 import json
 import uuid
+from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Cookie, Depends, Request, Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import GUEST_COOKIE_NAME, get_current_user, get_db, get_guest_id, get_optional_user
+from app.config.commercial_settings import get_commercial_settings
 from app.database import history_repo
 from app.database.commercial_models import User
+from app.models.commercial_schemas import GuestQuotaOut
 from app.models.schemas import CreateDownloadRequest, DownloadJobOut
+from app.services import guest_service
 from app.services.account_service import account_service
 from app.services.download_gate_service import download_gate_service
 from app.services.download_manager import manager
-from app.utils.exceptions import JobNotFoundError, UnsupportedUrlError
+from app.services.rate_limit_service import guest_download_limiter
+from app.utils.exceptions import JobNotFoundError, RateLimitedError, UnsupportedUrlError
 from app.utils.url_detect import detect_platform, is_supported_platform, is_valid_url
 
 router = APIRouter(prefix="/api/downloads", tags=["downloads"])
+
+_GUEST_IP_LIMIT = 20
+_GUEST_IP_WINDOW_SECONDS = 3600.0
 
 
 def _validate_url(request: CreateDownloadRequest) -> None:
@@ -34,6 +53,24 @@ def _validate_url(request: CreateDownloadRequest) -> None:
         raise UnsupportedUrlError(
             "This URL isn't supported. Only YouTube, TikTok, Instagram, and Facebook links are supported."
         )
+
+
+def _client_key(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+def _set_guest_cookie(response: Response, guest_id: str) -> None:
+    settings = get_commercial_settings()
+    response.set_cookie(
+        GUEST_COOKIE_NAME,
+        guest_id,
+        max_age=settings.guest_data_ttl_hours * 3600,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="lax",
+        domain=settings.cookie_domain,
+        path="/",
+    )
 
 
 def _gate_and_create(
@@ -55,30 +92,93 @@ def _gate_and_create(
     return job.to_out()
 
 
+def _gate_and_create_guest(
+    request: CreateDownloadRequest, guest_id: str, db: Session
+) -> DownloadJobOut:
+    _validate_url(request)
+    guest_service.authorize_and_reserve(db, guest_id, request)
+    db.commit()
+
+    job = manager.create_job(request, guest_id=guest_id)
+    return job.to_out()
+
+
 @router.post("", response_model=DownloadJobOut, status_code=201)
 async def create_download(
     request: CreateDownloadRequest,
-    user: User = Depends(get_current_user),
+    http_request: Request,
+    response: Response,
+    user: Optional[User] = Depends(get_optional_user),
+    guest_token: Optional[str] = Cookie(default=None, alias=GUEST_COOKIE_NAME),
     db: Session = Depends(get_db),
 ) -> DownloadJobOut:
-    return _gate_and_create(request, user, db)
+    if user is not None:
+        return _gate_and_create(request, user, db)
+
+    # Server-side quota (guest_service) is the real enforcement; this is a
+    # coarse secondary guard against one IP cycling guest cookies to farm
+    # more free downloads than intended - not identity, not fingerprinting.
+    if not guest_download_limiter.allow(_client_key(http_request), _GUEST_IP_LIMIT, _GUEST_IP_WINDOW_SECONDS):
+        raise RateLimitedError("Too many download attempts from this network. Please try again later.")
+
+    guest_id, is_new = guest_service.resolve_or_create(db, guest_token)
+    if is_new:
+        db.commit()
+        _set_guest_cookie(response, guest_id)
+    return _gate_and_create_guest(request, guest_id, db)
+
+
+@router.get("/guest-quota", response_model=GuestQuotaOut)
+async def get_guest_quota(
+    response: Response,
+    guest_token: Optional[str] = Cookie(default=None, alias=GUEST_COOKIE_NAME),
+    db: Session = Depends(get_db),
+) -> GuestQuotaOut:
+    """Mints a guest cookie on first call if none exists yet, so the "N free
+    downloads" banner can render correctly before any download is
+    attempted. Never called for signed-in users (see AuthContext usage)."""
+    guest_id, is_new = guest_service.resolve_or_create(db, guest_token)
+    if is_new:
+        db.commit()
+        _set_guest_cookie(response, guest_id)
+    used, limit = guest_service.get_quota_status(db, guest_id)
+    return GuestQuotaOut(remaining=max(0, limit - used), limit=limit)
 
 
 @router.get("", response_model=list[DownloadJobOut])
-async def list_downloads(user: User = Depends(get_current_user)) -> list[DownloadJobOut]:
-    return manager.list_jobs(user_id=user.id)
+async def list_downloads(
+    user: Optional[User] = Depends(get_optional_user),
+    guest_id: Optional[str] = Depends(get_guest_id),
+) -> list[DownloadJobOut]:
+    if user is not None:
+        return manager.list_jobs(user_id=user.id)
+    if guest_id is not None:
+        return manager.list_jobs(guest_id=guest_id)
+    return []
 
 
 @router.get("/{job_id}", response_model=DownloadJobOut)
-async def get_download(job_id: str, user: User = Depends(get_current_user)) -> DownloadJobOut:
-    job = manager.get_job(job_id, user_id=user.id)
+async def get_download(
+    job_id: str,
+    user: Optional[User] = Depends(get_optional_user),
+    guest_id: Optional[str] = Depends(get_guest_id),
+) -> DownloadJobOut:
+    if user is None and guest_id is None:
+        raise JobNotFoundError("Download job not found.")
+    job = manager.get_job(job_id, user_id=user.id if user else None, guest_id=guest_id)
     return job.to_out()
 
 
 @router.post("/{job_id}/cancel", response_model=DownloadJobOut)
-async def cancel_download(job_id: str, user: User = Depends(get_current_user)) -> DownloadJobOut:
-    manager.cancel_job(job_id, user_id=user.id)
-    job = manager.get_job(job_id, user_id=user.id)
+async def cancel_download(
+    job_id: str,
+    user: Optional[User] = Depends(get_optional_user),
+    guest_id: Optional[str] = Depends(get_guest_id),
+) -> DownloadJobOut:
+    if user is None and guest_id is None:
+        raise JobNotFoundError("Download job not found.")
+    manager.cancel_job(job_id, user_id=user.id if user else None, guest_id=guest_id)
+    job = manager.get_job(job_id, user_id=user.id if user else None, guest_id=guest_id)
     return job.to_out()
 
 

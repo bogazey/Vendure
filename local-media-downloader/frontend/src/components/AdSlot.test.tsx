@@ -26,8 +26,8 @@ function placement(overrides: Partial<AdPlacementOut> = {}): AdPlacementOut {
   return { id: "LANDING_DOWNLOADER", enabled: true, provider: null, public_slot_id: null, ...overrides };
 }
 
-function mockAuth(account: AccountOut | null) {
-  vi.mocked(useAuth).mockReturnValue({ account, loading: false, refresh: vi.fn(), login: vi.fn(), signup: vi.fn(), logout: vi.fn() });
+function mockAuth(account: AccountOut | null, loading = false) {
+  vi.mocked(useAuth).mockReturnValue({ account, loading, refresh: vi.fn(), login: vi.fn(), signup: vi.fn(), logout: vi.fn() });
 }
 
 describe("AdSlot", () => {
@@ -49,10 +49,20 @@ describe("AdSlot", () => {
     expect(api.listAdPlacements).not.toHaveBeenCalled();
   });
 
-  it("renders nothing when signed out", () => {
+  it("renders a placeholder for a signed-out guest, same as a Free account", async () => {
+    // Guests get the same ad eligibility as Free (see guest_service.py) -
+    // they are not exempt from ads just for not having signed up.
+    vi.mocked(api.listAdPlacements).mockResolvedValue([placement({ enabled: true })]);
     mockAuth(null);
+    render(<AdSlot placement="LANDING_DOWNLOADER" />);
+    expect(await screen.findByText(/Ad space reserved/i)).toBeInTheDocument();
+  });
+
+  it("renders nothing while the account is still loading (avoids flashing an ad for a soon-to-be-known Pro account)", () => {
+    mockAuth(null, true);
     const { container } = render(<AdSlot placement="LANDING_DOWNLOADER" />);
     expect(container).toBeEmptyDOMElement();
+    expect(api.listAdPlacements).not.toHaveBeenCalled();
   });
 
   it("renders nothing when the placement is disabled", async () => {

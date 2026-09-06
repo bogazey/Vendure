@@ -6,7 +6,7 @@ import FirstRunSetup from "./components/FirstRunSetup";
 import Footer from "./components/Footer";
 import HashScroll from "./components/HashScroll";
 import Header from "./components/Header";
-import ProtectedRoute, { AdminRoute } from "./components/ProtectedRoute";
+import ProtectedRoute, { AdminRoute, GuestAllowedRoute } from "./components/ProtectedRoute";
 import Sidebar from "./components/Sidebar";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Account from "./pages/Account";
@@ -109,7 +109,7 @@ function AppShell() {
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/copyright" element={<Copyright />} />
 
-              <Route path="/dashboard" element={<ProtectedRoute>{gated(<Dashboard />)}</ProtectedRoute>} />
+              <Route path="/dashboard" element={<GuestAllowedRoute>{gated(<Dashboard />)}</GuestAllowedRoute>} />
               <Route path="/history" element={<ProtectedRoute>{gated(<HistoryPage />)}</ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute>{gated(<SettingsPage />)}</ProtectedRoute>} />
               <Route path="/account" element={<ProtectedRoute><Account /></ProtectedRoute>} />

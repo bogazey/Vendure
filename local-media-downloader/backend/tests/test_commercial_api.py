@@ -52,10 +52,14 @@ def _signup(email: str | None = None) -> tuple[TestClient, str]:
 
 
 class TestAuthRequirement:
-    def test_downloads_requires_auth(self):
+    def test_downloads_allows_anonymous_guest(self):
+        """GET /api/downloads is intentionally guest-accessible (see
+        guest_service.py) so anonymous visitors can use the download flow
+        without signing up. A caller with no account and no guest cookie
+        yet simply has no jobs to see."""
         resp = TestClient(app).get("/api/downloads")
-        assert resp.status_code == 401
-        assert resp.json()["code"] == "AUTH_REQUIRED"
+        assert resp.status_code == 200
+        assert resp.json() == []
 
     def test_history_requires_auth(self):
         resp = TestClient(app).get("/api/history")
@@ -65,9 +69,28 @@ class TestAuthRequirement:
         resp = TestClient(app).get("/api/account")
         assert resp.status_code == 401
 
-    def test_progress_stream_requires_auth(self):
-        resp = TestClient(app).get("/api/progress/stream")
-        assert resp.status_code == 401
+    @pytest.mark.asyncio
+    async def test_progress_stream_allows_anonymous_guest(self):
+        """Same guest-friendly scoping as GET /api/downloads - see
+        routes_progress.py. The endpoint is a genuinely infinite SSE stream
+        that only ends on a real client TCP disconnect - httpx's
+        ASGITransport (used by both TestClient and httpx.AsyncClient here)
+        fully buffers a response before returning it, so any real HTTP
+        round-trip against it deadlocks in this test harness regardless of
+        sync/async or streaming APIs used. Call the route function directly
+        instead, with a fake Request that reports disconnected immediately -
+        this exercises the real guest-aware branch (no AuthError raised for
+        an anonymous, cookie-less caller) without that transport deadlock."""
+        from app.api.routes_progress import progress_stream
+
+        class _FakeRequest:
+            async def is_disconnected(self) -> bool:
+                return True
+
+        resp = await progress_stream(request=_FakeRequest(), user=None, guest_id=None)
+        assert resp.status_code == 200
+        with pytest.raises(StopAsyncIteration):
+            await resp.body_iterator.__anext__()
 
     def test_settings_requires_auth(self):
         """Previously wide open - anyone unauthenticated could rewrite the
