@@ -12,6 +12,7 @@ def _settings(root: Path):
         authenticated_media_ttl_hours=24,
         partial_media_ttl_hours=6,
         media_cleanup_interval_minutes=60,
+        media_max_bytes=40 * 1024**3,
     )
 
 
@@ -74,3 +75,17 @@ def test_symlink_boundary_is_never_followed(tmp_path, monkeypatch):
     monkeypatch.setattr(media_cleanup_service, "get_commercial_settings", lambda: _settings(root))
     media_cleanup_service.cleanup_media_files()
     assert victim.exists()
+
+
+def test_storage_ceiling_removes_oldest_inactive_file(tmp_path, monkeypatch):
+    old = tmp_path / "user" / "old.mp4"
+    new = tmp_path / "user" / "new.mp4"
+    old.parent.mkdir()
+    old.write_bytes(b"1234")
+    new.write_bytes(b"5678")
+    _age(old, 2)
+    settings = _settings(tmp_path)
+    settings.media_max_bytes = 4
+    monkeypatch.setattr(media_cleanup_service, "get_commercial_settings", lambda: settings)
+    assert media_cleanup_service.cleanup_media_files() == 1
+    assert not old.exists() and new.exists()

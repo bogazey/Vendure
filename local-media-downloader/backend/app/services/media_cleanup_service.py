@@ -49,6 +49,32 @@ def cleanup_media_files(*, now: float | None = None, active_paths: set[Path] | N
         except OSError:
             logger.exception("Could not clean media artifact under DOWNLOAD_ROOT")
 
+    # Disk-pressure ceiling: remove the oldest disposable, inactive media
+    # first if TTL cleanup alone has not kept the beta volume bounded.
+    candidates: list[tuple[float, int, Path]] = []
+    total_bytes = 0
+    for path in root.rglob("*"):
+        try:
+            if path.is_symlink() or not path.is_file():
+                continue
+            resolved = path.resolve()
+            if not is_within(resolved, root) or resolved in active:
+                continue
+            stat = path.stat()
+            total_bytes += stat.st_size
+            candidates.append((stat.st_mtime, stat.st_size, path))
+        except OSError:
+            continue
+    for _mtime, size, path in sorted(candidates):
+        if total_bytes <= settings.media_max_bytes:
+            break
+        try:
+            path.unlink()
+            total_bytes -= size
+            removed += 1
+        except OSError:
+            logger.exception("Could not enforce media storage ceiling")
+
     for directory in sorted((p for p in root.rglob("*") if p.is_dir() and not p.is_symlink()), reverse=True):
         try:
             directory.rmdir()

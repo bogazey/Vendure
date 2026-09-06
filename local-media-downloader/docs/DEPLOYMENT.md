@@ -77,7 +77,7 @@ Browsers download by opaque job ID from `GET /api/downloads/{job_id}/file`. The 
 
 The single backend process runs cleanup hourly. Authenticated media expires after 24 hours, guest media follows `GUEST_DATA_TTL_HOURS` (48 hours by default), and stale `.part`, `.ytdl`, `.tmp`, `.temp` and FFmpeg-style intermediates expire after 6 hours. Active paths and anything outside the resolved download root are excluded. Cleanup errors are logged without terminating the API.
 
-The media volume is disposable and must be monitored for disk usage. Never include it in backups.
+The disposable media volume is capped in application cleanup at 40 GiB by `MEDIA_MAX_BYTES`; under disk pressure, the oldest inactive media is removed first even if its normal TTL has not elapsed. Monitor disk usage and never include this volume in backups.
 
 ## Backups
 
