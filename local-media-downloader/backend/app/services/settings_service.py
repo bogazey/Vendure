@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
 
 from app.config.paths import DEFAULT_DOWNLOAD_DIR
 from app.config.logging_config import get_logger
@@ -22,7 +23,8 @@ def get_settings() -> AppSettings:
             return AppSettings(**stored)
         except Exception:
             logger.warning("Stored settings failed validation; falling back to defaults")
-    return AppSettings(download_dir=str(DEFAULT_DOWNLOAD_DIR))
+    default_concurrency = int(os.environ.get("LMD_MAX_CONCURRENT_DOWNLOADS", "2"))
+    return AppSettings(download_dir=str(DEFAULT_DOWNLOAD_DIR), max_concurrent_downloads=default_concurrency)
 
 
 def update_settings(patch: UpdateSettingsRequest) -> AppSettings:
