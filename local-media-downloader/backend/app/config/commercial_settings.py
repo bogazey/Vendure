@@ -69,6 +69,9 @@ class CommercialSettings(BaseSettings):
     # history_repo.mark_interrupted_as_failed, not a recurring scheduler).
     guest_download_limit: int = Field(default=2, alias="GUEST_DOWNLOAD_LIMIT")
     guest_data_ttl_hours: int = Field(default=48, alias="GUEST_DATA_TTL_HOURS")
+    authenticated_media_ttl_hours: int = Field(default=24, alias="AUTHENTICATED_MEDIA_TTL_HOURS")
+    partial_media_ttl_hours: int = Field(default=6, alias="PARTIAL_MEDIA_TTL_HOURS")
+    media_cleanup_interval_minutes: int = Field(default=60, alias="MEDIA_CLEANUP_INTERVAL_MINUTES")
 
     # --- Ads ---
     ads_enabled: bool = Field(default=True, alias="ADS_ENABLED")

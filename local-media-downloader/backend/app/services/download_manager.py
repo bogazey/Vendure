@@ -135,6 +135,15 @@ class DownloadManager:
         with self._lock:
             return self._revision
 
+    def active_filepaths(self) -> set[Path]:
+        """Snapshot paths belonging to non-terminal jobs for cleanup exclusion."""
+        with self._lock:
+            return {
+                Path(job.filepath).resolve()
+                for job in self._jobs.values()
+                if job.filepath and job.stage.value in {"queued", "analyzing", "downloading", "merging", "converting"}
+            }
+
     def list_jobs(self, user_id: Optional[str] = None, guest_id: Optional[str] = None) -> list[DownloadJobOut]:
         with self._lock:
             jobs = list(self._jobs.values())
