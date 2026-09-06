@@ -6,10 +6,12 @@ import ErrorBanner from "../../components/ErrorBanner";
 import LoadyLogo from "../../components/LoadyLogo";
 import { useAuth } from "../../context/AuthContext";
 import { ApiError } from "../../services/api";
+import { useNoindex } from "../../seo/useNoindex";
 import { authCardClass, inputClass, primaryButtonClass } from "./formStyles";
 
 export default function Signup() {
   const { t } = useTranslation();
+  useNoindex();
   const { signup } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();

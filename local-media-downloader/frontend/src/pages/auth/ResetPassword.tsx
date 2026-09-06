@@ -5,11 +5,13 @@ import { useTranslation } from "react-i18next";
 import ErrorBanner from "../../components/ErrorBanner";
 import LoadyLogo from "../../components/LoadyLogo";
 import { ApiError, api } from "../../services/api";
+import { useNoindex } from "../../seo/useNoindex";
 import { brandLink } from "../../styles/ui";
 import { authCardClass, inputClass, primaryButtonClass } from "./formStyles";
 
 export default function ResetPassword() {
   const { t } = useTranslation();
+  useNoindex();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const token = searchParams.get("token") || "";

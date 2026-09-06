@@ -90,3 +90,26 @@ describe("AdminRoute", () => {
     expect(screen.getByText("admin content")).toBeInTheDocument();
   });
 });
+
+describe("noindex on private routes", () => {
+  // robots.txt Disallow entries alone would stop a crawler from ever
+  // fetching these pages to see a noindex directive - the actual signal
+  // is this live meta tag, applied centrally by the three route guards.
+  it("marks a ProtectedRoute page noindex", () => {
+    vi.mocked(useAuth).mockReturnValue({ account: baseAccount(), loading: false, refresh: vi.fn(), login: vi.fn(), signup: vi.fn(), logout: vi.fn() });
+    renderAt("/protected", <ProtectedRoute><div>secret content</div></ProtectedRoute>);
+    expect(document.head.querySelector('meta[name="robots"]')?.getAttribute("content")).toBe("noindex, nofollow");
+  });
+
+  it("marks a GuestAllowedRoute page (e.g. /dashboard) noindex even for a signed-out guest", () => {
+    vi.mocked(useAuth).mockReturnValue({ account: null, loading: false, refresh: vi.fn(), login: vi.fn(), signup: vi.fn(), logout: vi.fn() });
+    renderAt("/protected", <GuestAllowedRoute><div>downloader content</div></GuestAllowedRoute>);
+    expect(document.head.querySelector('meta[name="robots"]')?.getAttribute("content")).toBe("noindex, nofollow");
+  });
+
+  it("marks an AdminRoute page noindex", () => {
+    vi.mocked(useAuth).mockReturnValue({ account: baseAccount("admin"), loading: false, refresh: vi.fn(), login: vi.fn(), signup: vi.fn(), logout: vi.fn() });
+    renderAt("/protected", <AdminRoute><div>admin content</div></AdminRoute>);
+    expect(document.head.querySelector('meta[name="robots"]')?.getAttribute("content")).toBe("noindex, nofollow");
+  });
+});
