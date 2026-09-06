@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { AnalyzeResponse, CreateDownloadRequest, FormatOption, MediaType, PlaylistMode } from "../types/api";
 import AdvancedFormats from "./AdvancedFormats";
+import CarouselPicker from "./CarouselPicker";
 import ClipRangeInput from "./ClipRangeInput";
 import PlaylistChooser from "./PlaylistChooser";
 import { parseTimecode } from "../utils/timecode";
@@ -61,6 +62,35 @@ export default function FormatSelector({ media, onStartDownload, submitting }: F
     };
     onStartDownload(request);
   };
+
+  const handleImageDownload = () => {
+    if (submitting) return;
+    onStartDownload({
+      url: media.url,
+      media_type: "image",
+      quality_key: "best",
+      playlist_mode: "single",
+    });
+  };
+
+  if (media.media_items.length > 0) {
+    return <CarouselPicker media={media} onStartDownload={onStartDownload} submitting={submitting} />;
+  }
+
+  if (media.media_type === "image") {
+    return (
+      <div className="glass-panel-raised flex flex-col gap-3 p-4">
+        <button
+          type="button"
+          onClick={handleImageDownload}
+          disabled={submitting}
+          className="btn-gradient w-full disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {submitting ? t("format.starting") : t("format.downloadImage")}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="glass-panel-raised flex flex-col gap-4 p-4">

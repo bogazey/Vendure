@@ -1,5 +1,5 @@
 export type Platform = "youtube" | "tiktok" | "instagram" | "facebook" | "unknown";
-export type MediaType = "video" | "audio";
+export type MediaType = "video" | "audio" | "image";
 export type DownloadStage =
   | "queued"
   | "analyzing"
@@ -54,6 +54,22 @@ export interface PlaylistEntryPreview {
   duration: number | null;
 }
 
+/** One item of a multi-media post (e.g. an Instagram carousel). `index` is
+ * 1-based and matches yt-dlp's own playlist_items convention - pass it back
+ * in CreateDownloadRequest.playlist_item_indices to download just this one
+ * entry. */
+export interface MediaEntry {
+  index: number;
+  media_type: MediaType;
+  title: string | null;
+  thumbnail: string | null;
+  duration: number | null;
+  image_url: string | null;
+  image_width: number | null;
+  image_height: number | null;
+  image_ext: string | null;
+}
+
 export interface AnalyzeResponse {
   url: string;
   platform: Platform;
@@ -64,10 +80,20 @@ export interface AnalyzeResponse {
   thumbnail: string | null;
   duration: number | null;
   description: string | null;
+  // Populated when media_type === "image": the best available
+  // full-resolution image, distinct from `thumbnail`.
+  image_url: string | null;
+  image_width: number | null;
+  image_height: number | null;
+  image_ext: string | null;
   is_playlist: boolean;
   playlist_title: string | null;
   playlist_count: number | null;
   playlist_entries_preview: PlaylistEntryPreview[];
+  // A single post that itself contains multiple full media items (e.g. an
+  // Instagram carousel) - distinct from playlist_entries_preview, which is
+  // a lightweight preview of a much larger URL-level playlist.
+  media_items: MediaEntry[];
   video_presets: QualityPreset[];
   audio_presets: QualityPreset[];
   advanced_formats: FormatOption[];

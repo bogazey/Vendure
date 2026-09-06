@@ -349,7 +349,11 @@
     "starting": "Starting…",
     "startDownload": "Start Download",
     "noPreview": "No preview",
-    "playlist": "Playlist detected"
+    "playlist": "Playlist detected",
+    "image": "Image",
+    "dimensions": "{{width}} × {{height}}",
+    "downloadImage": "Download Image",
+    "carousel": "Carousel detected"
   },
   "historyPage": {
     "loadError": "Could not load download history.",
@@ -541,5 +545,16 @@
         }
       }
     }
+  },
+  "carousel": {
+    "itemCount": "{{count}} items in this post",
+    "itemsSelected": "{{count}} selected",
+    "selectAll": "Select all",
+    "deselectAll": "Deselect all",
+    "downloadSelected": "Download selected",
+    "downloadAll": "Download all",
+    "image": "Image",
+    "video": "Video",
+    "selectItem": "Select item {{index}}"
   }
 }

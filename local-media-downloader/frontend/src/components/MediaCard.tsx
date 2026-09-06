@@ -27,12 +27,22 @@ export default function MediaCard({ media }: MediaCardProps) {
             <span>{PLATFORM_ICONS[media.platform]}</span>
             {PLATFORM_LABELS[media.platform]}
           </span>
+          {media.media_type === "image" && (
+            <span className="rounded-full border border-brand-aqua/30 bg-brand-aqua/10 px-2 py-0.5 text-xs font-medium text-brand-aqua">
+              {t("format.image")}
+            </span>
+          )}
           {media.duration != null && (
             <span className="text-xs text-slate-500">{formatDuration(media.duration)}</span>
           )}
+          {media.image_width != null && media.image_height != null && (
+            <span className="text-xs text-slate-500" dir="ltr">
+              {t("format.dimensions", { width: media.image_width, height: media.image_height })}
+            </span>
+          )}
           {media.is_playlist && (
             <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-300">
-              {t("format.playlist")}
+              {media.media_items.length > 0 ? t("format.carousel") : t("format.playlist")}
             </span>
           )}
         </div>

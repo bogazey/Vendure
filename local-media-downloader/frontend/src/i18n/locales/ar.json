@@ -349,7 +349,11 @@
     "starting": "جارٍ البدء…",
     "startDownload": "بدء التنزيل",
     "noPreview": "لا توجد معاينة",
-    "playlist": "تم اكتشاف قائمة تشغيل"
+    "playlist": "تم اكتشاف قائمة تشغيل",
+    "image": "صورة",
+    "dimensions": "{{width}} × {{height}}",
+    "downloadImage": "تنزيل الصورة",
+    "carousel": "تم اكتشاف ألبوم صور"
   },
   "historyPage": {
     "loadError": "تعذر تحميل سجل التنزيلات.",
@@ -541,5 +545,16 @@
         }
       }
     }
+  },
+  "carousel": {
+    "itemCount": "{{count}} عنصر في هذا المنشور",
+    "itemsSelected": "تم تحديد {{count}}",
+    "selectAll": "تحديد الكل",
+    "deselectAll": "إلغاء تحديد الكل",
+    "downloadSelected": "تنزيل المحدد",
+    "downloadAll": "تنزيل الكل",
+    "image": "صورة",
+    "video": "فيديو",
+    "selectItem": "تحديد العنصر {{index}}"
   }
 }
