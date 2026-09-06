@@ -564,5 +564,181 @@
     "image": "Image",
     "video": "Video",
     "selectItem": "Select item {{index}}"
+  },
+  "seo": {
+    "common": {
+      "home": "Home",
+      "videoTool": "Video Downloader",
+      "audioTool": "Audio Downloader",
+      "imageTool": "Image Downloader",
+      "relatedTools": "Related tools",
+      "guestNote": "Your first 2 downloads are free — no account required.",
+      "signupCta": "Create a free account",
+      "tryNowCta": "Try it now",
+      "responsibleUseTitle": "Use responsibly",
+      "faqTitle": "Frequently asked questions",
+      "usageTitle": "How it works",
+      "notFoundTitle": "Page not found",
+      "notFoundBody": "The page you're looking for doesn't exist, or it may have moved.",
+      "notFoundCta": "Back to Loady"
+    },
+    "meta": {
+      "home": {
+        "title": "Loady — Download Video, Audio & Images",
+        "description": "Save video, audio, and images from YouTube, TikTok, Instagram, and Facebook for personal offline access. Try it free — no account required for your first downloads."
+      },
+      "video": {
+        "title": "Video Downloader — Save Video for Offline Viewing | Loady",
+        "description": "Download video from YouTube, TikTok, Instagram, and Facebook. Pick a quality, get a genuinely compatible MP4, and keep it for offline viewing."
+      },
+      "audio": {
+        "title": "Audio Downloader — Extract MP3 or M4A Audio | Loady",
+        "description": "Extract the audio track from a video link and save it as MP3 or M4A, with adjustable bitrate. Works with YouTube, TikTok, Instagram, and Facebook."
+      },
+      "image": {
+        "title": "Image Downloader — Save Photos & Carousel Posts | Loady",
+        "description": "Download a single image, or every photo and video in an Instagram carousel post, at full resolution, for personal offline access."
+      }
+    },
+    "home": {
+      "h1": "Download video, audio, and images — without limits",
+      "intro": "Loady is a straightforward way to save media you're authorized to access, in the format you actually need. Paste a link from YouTube, TikTok, Instagram, or Facebook, and Loady analyzes it, shows you what's available, and lets you choose exactly what to keep.",
+      "toolsKicker": "Three tools, one link box",
+      "toolsTitle": "Choose what you're saving",
+      "tools": {
+        "video": {
+          "title": "Video",
+          "body": "Save a video in a genuinely playable MP4, at the resolution you choose."
+        },
+        "audio": {
+          "title": "Audio",
+          "body": "Pull just the audio track out as MP3 or M4A, at the bitrate you want."
+        },
+        "image": {
+          "title": "Images",
+          "body": "Save a single photo, or every item in a multi-photo carousel post."
+        }
+      }
+    },
+    "video": {
+      "h1": "Video Downloader",
+      "intro": "Loady's video downloader takes a link from YouTube, TikTok, Instagram, or Facebook, and turns it into a file you can keep — for content you own or are otherwise authorized to save.",
+      "aboutTitle": "A file that actually plays",
+      "aboutBody": "By default, Loady converts what it downloads into a Compatibility MP4: standard H.264 video with AAC audio, so it opens on phones, laptops, and TVs without a fuss. If you'd rather keep the source's original codec and container — which can mean a WebM or MKV file — Loady's Original mode skips the conversion step entirely.",
+      "qualityTitle": "Choosing a resolution",
+      "qualityBody": "Loady lists the resolutions actually available for a given link, from standard definition up through the source's best quality. Signed-out visitors and Free accounts can save up to 720p; higher resolutions, including 4K where the source provides it, are available on paid plans.",
+      "steps": [
+        {
+          "title": "Paste a link",
+          "body": "Drop in a YouTube, TikTok, Instagram, or Facebook video URL."
+        },
+        {
+          "title": "Pick a quality",
+          "body": "Loady shows the resolutions available for that specific video."
+        },
+        {
+          "title": "Download",
+          "body": "Your file is prepared and ready to save in a few moments."
+        }
+      ],
+      "faq": [
+        {
+          "q": "Which platforms are supported?",
+          "a": "YouTube, TikTok, Instagram, and Facebook video links."
+        },
+        {
+          "q": "Do I need an account?",
+          "a": "No — you can analyze a link and complete your first two downloads without signing up. A free account removes that limit."
+        },
+        {
+          "q": "What file format do I get?",
+          "a": "An MP4 by default (Compatibility mode). You can switch to Original mode to keep the source's native container instead."
+        },
+        {
+          "q": "Can I download at 4K?",
+          "a": "4K is available where the source provides it, on Pro and Creator plans. Free accounts and guests are limited to 720p."
+        }
+      ]
+    },
+    "audio": {
+      "h1": "Audio Downloader",
+      "intro": "Sometimes you just want the sound, not the picture. Loady's audio downloader extracts the audio track from a YouTube, TikTok, Instagram, or Facebook link and saves it as a standalone audio file.",
+      "aboutTitle": "MP3 or M4A, your choice",
+      "aboutBody": "Loady can save the audio as an MP3 at a bitrate you choose — 128, 192, 256, or 320 kbps — or as an M4A file using the source's original audio codec, when you'd rather avoid a second layer of compression.",
+      "qualityTitle": "About bitrate",
+      "qualityBody": "A higher MP3 bitrate preserves more detail at the cost of a larger file. 192 kbps is a solid, widely-compatible default; 320 kbps is closer to the source recording for critical listening.",
+      "steps": [
+        {
+          "title": "Paste a link",
+          "body": "Drop in the link of a video you want the audio from."
+        },
+        {
+          "title": "Choose audio",
+          "body": "Switch to the Audio tab and pick MP3 or M4A, plus a bitrate."
+        },
+        {
+          "title": "Download",
+          "body": "Loady extracts and saves just the audio track."
+        }
+      ],
+      "faq": [
+        {
+          "q": "Can I get just the audio from a video link?",
+          "a": "Yes — paste the video's link and switch to the Audio tab; Loady extracts the audio track for you."
+        },
+        {
+          "q": "MP3 or M4A — what's the difference?",
+          "a": "MP3 is the most universally compatible format. M4A can preserve the source's original audio codec without re-encoding, which some listeners prefer."
+        },
+        {
+          "q": "What bitrate should I pick?",
+          "a": "192 kbps is a good default for everyday listening. Choose 320 kbps if you want audio closer to the original source."
+        },
+        {
+          "q": "Do guests get audio downloads too?",
+          "a": "Yes — audio downloads count toward the same free guest allowance as video and image downloads."
+        }
+      ]
+    },
+    "image": {
+      "h1": "Image Downloader",
+      "intro": "Not every link is a video. Loady also recognizes image posts and multi-photo carousel posts, and saves them at their original resolution.",
+      "aboutTitle": "Single photos and carousels",
+      "aboutBody": "Paste the link to a single image post and Loady saves the full-resolution photo directly. For a carousel post — one that holds several photos and videos together, common on Instagram — Loady lists every item individually, so you can save just the ones you want, or all of them at once.",
+      "qualityTitle": "How this differs from video",
+      "qualityBody": "Image downloads skip the video pipeline entirely: no conversion, no quality ladder to choose from — just the best available copy of the image, saved as-is.",
+      "steps": [
+        {
+          "title": "Paste a link",
+          "body": "Drop in the link to an image or carousel post."
+        },
+        {
+          "title": "Review the items",
+          "body": "For a carousel, Loady lists each photo and video in the post."
+        },
+        {
+          "title": "Download",
+          "body": "Save one item, several, or the entire post at once."
+        }
+      ],
+      "faq": [
+        {
+          "q": "Does Loady support Instagram carousel posts?",
+          "a": "Yes — Loady detects multi-item carousel posts and lets you choose which photos and videos to save."
+        },
+        {
+          "q": "What resolution do I get?",
+          "a": "Loady saves the best available copy of the image, without extra compression."
+        },
+        {
+          "q": "Does an image count as one download?",
+          "a": "Yes. In a carousel, each item you save counts individually toward your plan's allowance."
+        },
+        {
+          "q": "Do I need an account to save an image?",
+          "a": "No — image downloads work with the same free guest allowance as video and audio."
+        }
+      ]
+    }
   }
 }

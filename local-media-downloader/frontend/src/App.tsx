@@ -28,7 +28,10 @@ import Landing from "./pages/Landing";
 import Copyright from "./pages/legal/Copyright";
 import Privacy from "./pages/legal/Privacy";
 import Terms from "./pages/legal/Terms";
+import NotFoundPage from "./pages/NotFoundPage";
 import Pricing from "./pages/Pricing";
+import SeoHomePage from "./pages/seo/SeoHomePage";
+import SeoToolPage from "./pages/seo/SeoToolPage";
 import SettingsPage from "./pages/SettingsPage";
 import Usage from "./pages/Usage";
 import { api } from "./services/api";
@@ -121,6 +124,19 @@ function AppShell() {
               <Route path="/admin/activity" element={<AdminRoute><AdminActivity /></AdminRoute>} />
               <Route path="/admin/system" element={<AdminRoute><AdminSystem /></AdminRoute>} />
               <Route path="/admin/ads" element={<AdminRoute><AdminAds /></AdminRoute>} />
+
+              {/* Bilingual, indexable public SEO pages - see docs/SEO.md.
+                  Deliberately separate from "/" (the interactive marketing
+                  landing above): distinct, locale-URL-driven content built
+                  for organic search rather than a duplicate of the app
+                  landing page. React Router ranks static segments above
+                  dynamic ones, so this never shadows any literal route
+                  above (e.g. /pricing still matches /pricing, not /:lang). */}
+              <Route path="/:lang" element={<SeoHomePage />} />
+              <Route path="/:lang/video-downloader" element={<SeoToolPage page="video" />} />
+              <Route path="/:lang/audio-downloader" element={<SeoToolPage page="audio" />} />
+              <Route path="/:lang/image-downloader" element={<SeoToolPage page="image" />} />
+              <Route path="*" element={<NotFoundPage />} />
             </Routes>
           </div>
           {!showSidebar && <Footer />}
