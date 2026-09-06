@@ -2,7 +2,7 @@ FROM python:3.12-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg ca-certificates curl tini \
+    && apt-get install -y --no-install-recommends ffmpeg ca-certificates curl libpq5 tini \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 loady \
     && useradd --uid 10001 --gid loady --create-home loady
