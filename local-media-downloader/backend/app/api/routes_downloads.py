@@ -20,10 +20,13 @@ download_manager._save_history), so there is nothing for a guest to retry.
 from __future__ import annotations
 
 import json
+import mimetypes
 import uuid
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Cookie, Depends, Request, Response
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import GUEST_COOKIE_NAME, get_current_user, get_db, get_guest_id, get_optional_user
@@ -36,7 +39,9 @@ from app.services import guest_service
 from app.services.account_service import account_service
 from app.services.download_gate_service import download_gate_service
 from app.services.download_manager import manager
+from app.services.guest_storage_service import ensure_within_guest_dir
 from app.services.rate_limit_service import guest_download_limiter
+from app.services.user_storage_service import ensure_within_user_dir
 from app.utils.exceptions import JobNotFoundError, RateLimitedError, UnsupportedUrlError
 from app.utils.url_detect import detect_platform, is_supported_platform, is_valid_url
 
@@ -44,6 +49,25 @@ router = APIRouter(prefix="/api/downloads", tags=["downloads"])
 
 _GUEST_IP_LIMIT = 20
 _GUEST_IP_WINDOW_SECONDS = 3600.0
+
+
+def _completed_file_for_owner(job_id: str, user: Optional[User], guest_id: Optional[str]) -> Path:
+    """Resolve a completed download by opaque server record id, never client path."""
+    if user is not None:
+        record = history_repo.get(job_id, user_id=user.id)
+        if record is None or record.status.value != "completed" or not record.filepath:
+            raise JobNotFoundError("Completed download not found.")
+        path = ensure_within_user_dir(Path(record.filepath), user.id)
+    elif guest_id is not None:
+        job = manager.get_job(job_id, guest_id=guest_id)
+        if job.stage.value != "completed" or not job.filepath:
+            raise JobNotFoundError("Completed download not found.")
+        path = ensure_within_guest_dir(Path(job.filepath), guest_id)
+    else:
+        raise JobNotFoundError("Completed download not found.")
+    if not path.is_file():
+        raise JobNotFoundError("Downloaded file is no longer available.")
+    return path
 
 
 def _validate_url(request: CreateDownloadRequest) -> None:
@@ -143,6 +167,17 @@ async def get_guest_quota(
         _set_guest_cookie(response, guest_id)
     used, limit = guest_service.get_quota_status(db, guest_id)
     return GuestQuotaOut(remaining=max(0, limit - used), limit=limit)
+
+
+@router.get("/{job_id}/file", response_class=FileResponse)
+async def download_file(
+    job_id: str,
+    user: Optional[User] = Depends(get_optional_user),
+    guest_id: Optional[str] = Depends(get_guest_id),
+) -> FileResponse:
+    path = _completed_file_for_owner(job_id, user, guest_id)
+    media_type, _ = mimetypes.guess_type(path.name)
+    return FileResponse(path=path, filename=path.name, media_type=media_type or "application/octet-stream")
 
 
 @router.get("", response_model=list[DownloadJobOut])

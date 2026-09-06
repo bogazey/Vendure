@@ -2,6 +2,7 @@ import type { DownloadJobOut } from "../types/api";
 import { formatBytes, formatEta, formatSpeed } from "../utils/format";
 import { PLATFORM_COLORS, PLATFORM_ICONS, PLATFORM_LABELS } from "../utils/platform";
 import { useTranslation } from "react-i18next";
+import { downloadFileUrl } from "../services/api";
 
 interface DownloadQueueItemProps {
   job: DownloadJobOut;
@@ -71,6 +72,11 @@ export default function DownloadQueueItem({ job, onCancel }: DownloadQueueItemPr
 
         {job.stage === "failed" && job.error_message && (
           <p className="mt-1 text-[11px] text-red-400">{job.error_message}</p>
+        )}
+        {job.stage === "completed" && job.filepath && (
+          <a href={downloadFileUrl(job.id)} className="mt-2 inline-flex rounded-full border border-brand-aqua/40 px-2.5 py-1 text-xs text-brand-aqua hover:border-brand-aqua/70">
+            {t("app.openFile")}
+          </a>
         )}
       </div>
     </div>

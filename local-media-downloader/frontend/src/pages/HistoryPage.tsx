@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import AdSlot from "../components/AdSlot";
 import ErrorBanner from "../components/ErrorBanner";
-import { ApiError, api } from "../services/api";
+import { ApiError, api, downloadFileUrl } from "../services/api";
 import { appPageShell } from "../styles/ui";
 import type { HistoryRecordOut, Platform } from "../types/api";
 import { formatBytes, formatDate } from "../utils/format";
@@ -254,18 +254,12 @@ function HistoryRow({
       <div className="flex shrink-0 gap-1.5">
         {record.status === "completed" && record.filepath && (
           <>
-            <button
-              onClick={() => api.openPath(record.filepath!).catch(() => undefined)}
+            <a
+              href={downloadFileUrl(record.id)}
               className="rounded-full border border-white/10 px-2.5 py-1 text-xs text-slate-300 hover:border-white/30"
             >
               {t("app.openFile")}
-            </button>
-            <button
-              onClick={() => api.openContainingFolder(record.filepath!).catch(() => undefined)}
-              className="rounded-full border border-white/10 px-2.5 py-1 text-xs text-slate-300 hover:border-white/30"
-            >
-              {t("app.openFolder")}
-            </button>
+            </a>
           </>
         )}
         {(record.status === "failed" || record.status === "cancelled") && (
