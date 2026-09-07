@@ -1,0 +1,573 @@
+* {
+    box-sizing: border-box;
+}
+
+:root {
+    color-scheme: light;
+    --bg: #f6f5f2;
+    --surface: #ffffff;
+    --border: #e6e3dd;
+    --text: #1c1b19;
+    --text-muted: #6b6863;
+    --accent: #0f766e;
+    --accent-contrast: #ffffff;
+    --radius: 14px;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+html,
+body,
+#root {
+    height: 100%;
+    margin: 0;
+}
+
+body {
+    background: var(--bg);
+    color: var(--text);
+}
+
+button {
+    font-family: inherit;
+}
+
+.app-shell {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+.app-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1.25rem;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    z-index: 500;
+}
+
+.app-title {
+    font-weight: 700;
+    font-size: 1.05rem;
+}
+
+.nav-bar {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.nav-link {
+    padding: 0.4rem 0.9rem;
+    border-radius: 999px;
+    text-decoration: none;
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.nav-link.active {
+    background: var(--accent);
+    color: var(--accent-contrast);
+}
+
+.app-main {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* ---------- Map ---------- */
+
+.map-page {
+    position: relative;
+    height: 100%;
+}
+
+.leaflet-container {
+    height: 100%;
+    width: 100%;
+}
+
+.map-legend {
+    position: absolute;
+    bottom: 1rem;
+    left: 1rem;
+    z-index: 400;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.6rem 0.8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    font-size: 0.8rem;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.venue-marker-wrapper {
+    background: transparent;
+    border: none;
+}
+
+.venue-marker {
+    position: relative;
+    width: 34px;
+    height: 34px;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    background: var(--marker-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+    border: 2px solid #fff;
+}
+
+.venue-marker-icon {
+    transform: rotate(45deg);
+    font-size: 15px;
+}
+
+.venue-marker--pulsing::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    background: var(--marker-color);
+    opacity: 0.5;
+    animation: venue-pulse 1.2s ease-out infinite;
+    z-index: -1;
+}
+
+@keyframes venue-pulse {
+    0% {
+        transform: scale(0.6);
+        opacity: 0.6;
+    }
+    100% {
+        transform: scale(2.2);
+        opacity: 0;
+    }
+}
+
+.map-popup {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: 160px;
+}
+
+.map-popup-meta {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+
+/* ---------- Buttons ---------- */
+
+.btn {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    border-radius: 999px;
+    padding: 0.5rem 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.btn:hover {
+    background: var(--bg);
+}
+
+.btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-contrast);
+}
+
+.btn-primary:hover {
+    filter: brightness(1.05);
+}
+
+.btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-small {
+    padding: 0.3rem 0.7rem;
+    font-size: 0.8rem;
+}
+
+/* ---------- Venue detail ---------- */
+
+.page-padded {
+    padding: 1.5rem;
+}
+
+.venue-detail {
+    padding-bottom: 2rem;
+}
+
+.back-link {
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-weight: 600;
+    padding: 1rem 1.25rem 0;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.venue-hero {
+    height: 220px;
+    margin: 0.75rem 1.25rem 0;
+    border-radius: var(--radius);
+    background-size: cover;
+    background-position: center;
+    display: flex;
+    align-items: flex-end;
+    overflow: hidden;
+    position: relative;
+}
+
+.venue-hero-overlay {
+    background: linear-gradient(0deg, rgba(0, 0, 0, 0.65), rgba(0, 0, 0, 0));
+    width: 100%;
+    padding: 1rem;
+    color: #fff;
+}
+
+.venue-hero-overlay h1 {
+    margin: 0.3rem 0 0.1rem;
+    font-size: 1.4rem;
+}
+
+.venue-hero-overlay p {
+    margin: 0;
+    opacity: 0.9;
+    font-size: 0.9rem;
+}
+
+.badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.venue-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.25rem 0;
+}
+
+.checkin-count {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.section-title {
+    padding: 0 1.25rem;
+    margin: 1.5rem 0 0.5rem;
+    font-size: 1.05rem;
+}
+
+.empty-state {
+    padding: 0 1.25rem;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.photo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 0.75rem;
+    padding: 0 1.25rem;
+}
+
+.photo-card {
+    margin: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.photo-card img {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+    display: block;
+}
+
+.photo-card figcaption {
+    padding: 0.55rem 0.7rem 0.7rem;
+}
+
+.photo-card-subtitle {
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.photo-card-caption {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin-top: 0.15rem;
+}
+
+.photo-card-timestamp {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-top: 0.3rem;
+}
+
+/* ---------- Check-in modal ---------- */
+
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 18, 15, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 1rem;
+}
+
+.modal {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    width: 100%;
+    max-width: 420px;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal h3 {
+    margin-top: 0;
+}
+
+.photo-drop {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+    overflow: hidden;
+}
+
+.photo-preview {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.field-label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+}
+
+.modal textarea {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.6rem;
+    font-family: inherit;
+    resize: vertical;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.6rem;
+    margin-top: 1.25rem;
+}
+
+.checkin-success {
+    text-align: center;
+    padding: 0.5rem 0 0;
+}
+
+.checkin-success-icon {
+    font-size: 2.5rem;
+}
+
+/* ---------- Profile ---------- */
+
+.profile-page {
+    padding-bottom: 2rem;
+}
+
+.profile-header {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    padding: 1.5rem 1.25rem 0;
+}
+
+.profile-avatar {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--border);
+}
+
+.profile-header h1 {
+    margin: 0;
+    font-size: 1.3rem;
+}
+
+.profile-username {
+    margin: 0.1rem 0;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.profile-bio {
+    margin: 0.2rem 0 0;
+    font-size: 0.9rem;
+}
+
+.profile-stats {
+    display: flex;
+    gap: 1.5rem;
+    padding: 1rem 1.25rem;
+}
+
+.stat {
+    text-align: center;
+}
+
+.stat-value {
+    font-size: 1.3rem;
+    font-weight: 700;
+}
+
+.stat-label {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.places-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 0 1.25rem;
+}
+
+.place-stamp {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.5rem;
+    cursor: pointer;
+    text-align: left;
+}
+
+.place-stamp-photo {
+    width: 52px;
+    height: 52px;
+    border-radius: 10px;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.place-stamp-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.place-stamp-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.place-stamp-meta {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.place-stamp-count {
+    font-weight: 700;
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 560px) {
+    .app-title {
+        font-size: 0.9rem;
+    }
+
+    .nav-link {
+        padding: 0.35rem 0.7rem;
+        font-size: 0.82rem;
+    }
+
+    .venue-hero {
+        height: 170px;
+        margin: 0.6rem 0.8rem 0;
+    }
+
+    .venue-actions,
+    .section-title,
+    .empty-state,
+    .photo-grid,
+    .places-list {
+        padding-left: 0.8rem;
+        padding-right: 0.8rem;
+    }
+
+    .back-link {
+        padding-left: 0.8rem;
+    }
+
+    .profile-header {
+        padding-left: 0.8rem;
+        padding-right: 0.8rem;
+    }
+
+    .profile-stats {
+        padding-left: 0.8rem;
+    }
+
+    .map-legend {
+        left: 0.5rem;
+        bottom: 0.5rem;
+        font-size: 0.72rem;
+    }
+}
