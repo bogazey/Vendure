@@ -50,6 +50,7 @@ export default function SeoToolPage({ page }: { page: Exclude<SeoPageKey, "home"
         description={t(`seo.meta.${page}.description`)}
         lang={lang}
         hreflang={hreflangAlternates(page)}
+        ogImage="https://loady.cc/assets/brand/loady-og.png?v=db4ff8097b78"
         structuredData={[
           softwareApplicationStructuredData(),
           breadcrumbStructuredData([

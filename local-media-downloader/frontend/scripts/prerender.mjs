@@ -65,6 +65,7 @@ function buildHeadExtras(seo) {
   tags.push(`<meta property="og:type" content="website" />`);
   if (seo.ogImage) tags.push(`<meta property="og:image" content="${escapeHtml(seo.ogImage)}" />`);
   tags.push(`<meta name="twitter:card" content="${seo.ogImage ? "summary_large_image" : "summary"}" />`);
+  if (seo.ogImage) tags.push(`<meta name="twitter:image" content="${escapeHtml(seo.ogImage)}" />`);
   for (const alt of seo.hreflang ?? []) {
     tags.push(`<link rel="alternate" hreflang="${alt.hreflang}" href="${escapeHtml(alt.href)}" />`);
   }

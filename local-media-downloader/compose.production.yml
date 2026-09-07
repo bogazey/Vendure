@@ -22,7 +22,7 @@ services:
     cap_drop: [ALL]
     cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID, NET_BIND_SERVICE]
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/robots.txt"]
+      test: ["CMD", "wget", "-q", "--spider", "--no-check-certificate", "https://127.0.0.1/robots.txt"]
       interval: 30s
       timeout: 5s
       retries: 3

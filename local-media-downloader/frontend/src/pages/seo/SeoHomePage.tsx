@@ -30,6 +30,7 @@ export default function SeoHomePage() {
         description={t("seo.meta.home.description")}
         lang={lang}
         hreflang={hreflangAlternates("home")}
+        ogImage="https://loady.cc/assets/brand/loady-og.png?v=db4ff8097b78"
         structuredData={[websiteStructuredData(), softwareApplicationStructuredData()]}
       />
 
