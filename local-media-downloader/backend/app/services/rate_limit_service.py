@@ -48,3 +48,8 @@ password_reset_limiter = RateLimiter()
 # blunts one IP cycling guest cookies to request far more than the
 # allowance in a short window. See routes_downloads.create_download.
 guest_download_limiter = RateLimiter()
+# Extraction is CPU/network expensive even before a download begins. The
+# production deployment runs one backend process, so this lightweight guard
+# is intentionally local and predictable.
+analyze_limiter = RateLimiter()
+billing_limiter = RateLimiter()

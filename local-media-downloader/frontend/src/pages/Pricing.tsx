@@ -130,6 +130,7 @@ export default function Pricing() {
       <div className="grid items-stretch gap-5 md:grid-cols-3 md:gap-4 lg:gap-6">
         {PLAN_ROWS.map((plan) => {
           const price = plan === "free" ? 0 : PLAN_PRICES[plan][period];
+          const displayPrice = plan !== "free" && period === "annual" ? price.toFixed(2) : price;
           const isCurrent = currentPlan === plan;
           const isRecommended = plan === "pro";
           const features = t(`pricing.plans.${plan}.features`, { returnObjects: true }) as string[];
@@ -177,7 +178,7 @@ export default function Pricing() {
                 <p className="text-sm text-slate-400">{t(`pricing.plans.${plan}.tagline`)}</p>
               </div>
               <div>
-                <span className="font-display text-4xl font-bold tracking-tight text-slate-50">${price}</span>
+                <span className="font-display text-4xl font-bold tracking-tight text-slate-50">${displayPrice}</span>
                 {plan !== "free" && (
                   <span className="text-sm text-slate-500">/{period === "monthly" ? t("pricing.month") : t("pricing.year")}</span>
                 )}

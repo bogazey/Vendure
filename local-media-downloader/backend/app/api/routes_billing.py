@@ -28,16 +28,23 @@ from app.models.commercial_schemas import CheckoutRequest, CheckoutResponse
 from app.services import paddle_service
 from app.services.account_service import account_service
 from app.services.paddle_client import paddle_client
-from app.utils.exceptions import BillingError, InvalidWebhookSignatureError
+from app.services.rate_limit_service import billing_limiter
+from app.utils.exceptions import BillingError, InvalidWebhookSignatureError, RateLimitedError
 
 router = APIRouter(prefix="/api/billing", tags=["billing"])
 logger = get_logger("billing_api")
+
+
+def _enforce_billing_limit(user: User) -> None:
+    if not billing_limiter.allow(f"user:{user.id}", max_events=30, window_seconds=300):
+        raise RateLimitedError("Too many billing requests. Please wait a few minutes and try again.")
 
 
 @router.post("/checkout", response_model=CheckoutResponse)
 async def create_checkout(
     payload: CheckoutRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> CheckoutResponse:
+    _enforce_billing_limit(user)
     if account_service.get_active_subscription(db, user.id):
         raise HTTPException(409, "Manage your existing subscription from Billing.")
     return paddle_service.build_checkout(user, payload.plan, payload.billing_period)
@@ -63,6 +70,7 @@ def _live_subscription(db, user):
 def manage_subscription(action: Literal["cancel", "resume", "change-plan"],
                         payload: CheckoutRequest | None = None,
                         user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    _enforce_billing_limit(user)
     subscription, live = _live_subscription(db, user)
     if live.get("status") not in ("active", "trialing"):
         raise HTTPException(409, "Subscription cannot be changed in its current state.")
@@ -99,6 +107,7 @@ def manage_subscription(action: Literal["cancel", "resume", "change-plan"],
 
 @router.post("/payment-method")
 def update_payment_method(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    _enforce_billing_limit(user)
     subscription, live = _live_subscription(db, user)
     settings = get_commercial_settings()
     if live.get("collection_mode") != "automatic" or live.get("status") not in ("active", "past_due"):
@@ -115,6 +124,7 @@ def update_payment_method(user: User = Depends(get_current_user), db: Session = 
 @router.get("/history")
 def payment_history(after: str | None = Query(None, pattern=r"^txn_[a-z0-9]{26}$"),
                     user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    _enforce_billing_limit(user)
     subscription = _owned_subscription(db, user)
     result = paddle_client.list_transactions(subscription.provider_subscription_id, after)
     rows = []
@@ -133,6 +143,7 @@ def payment_history(after: str | None = Query(None, pattern=r"^txn_[a-z0-9]{26}$
 @router.get("/history/{transaction_id}/invoice")
 def transaction_invoice(transaction_id: str = Path(pattern=r"^txn_[a-z0-9]{26}$"),
                         user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    _enforce_billing_limit(user)
     subscription = _owned_subscription(db, user)
     transaction = paddle_client.get_transaction(transaction_id).get("data") or {}
     if transaction.get("subscription_id") != subscription.provider_subscription_id:

@@ -88,13 +88,16 @@ export default function Dashboard() {
   }, [jobs, account]);
 
   const handleAnalyze = async (url: string) => {
+    track("analyze_started");
     setAnalyzing(true);
     setError(null);
     setMedia(null);
     try {
       const result = await api.analyze(url);
       setMedia(result);
+      track("analyze_succeeded");
     } catch (err) {
+      track("analyze_failed");
       if (err instanceof ApiError) {
         setError({ message: err.message, technical: err.technical });
       } else {

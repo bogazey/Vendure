@@ -38,7 +38,13 @@ def _reset_rate_limiters():
     on how many earlier tests happened to run first."""
     from app.services import rate_limit_service
 
-    for limiter in (rate_limit_service.login_limiter, rate_limit_service.signup_limiter, rate_limit_service.password_reset_limiter):
+    for limiter in (
+        rate_limit_service.login_limiter,
+        rate_limit_service.signup_limiter,
+        rate_limit_service.password_reset_limiter,
+        rate_limit_service.analyze_limiter,
+        rate_limit_service.billing_limiter,
+    ):
         limiter._hits.clear()
     yield
 
@@ -540,6 +546,16 @@ class TestLoginRateLimiting:
             resp = c.post("/api/auth/login", json={"email": email, "password": "wrongpassword"})
             assert resp.status_code == 401
         resp = c.post("/api/auth/login", json={"email": email, "password": "wrongpassword"})
+        assert resp.status_code == 429
+        assert resp.json()["code"] == "RATE_LIMITED"
+
+
+class TestAnalyzeRateLimiting:
+    def test_analyze_has_a_friendly_ip_limit_for_guests(self):
+        c = TestClient(app)
+        for _ in range(60):
+            assert c.post("/api/analyze", json={"url": "not-a-url"}).status_code == 400
+        resp = c.post("/api/analyze", json={"url": "not-a-url"})
         assert resp.status_code == 429
         assert resp.json()["code"] == "RATE_LIMITED"
 

@@ -5,6 +5,7 @@ import ErrorBanner from "../../components/ErrorBanner";
 import LoadyLogo from "../../components/LoadyLogo";
 import { useAuth } from "../../context/AuthContext";
 import { ApiError, api } from "../../services/api";
+import { track } from "../../lib/analytics";
 import { useNoindex } from "../../seo/useNoindex";
 import { brandLink } from "../../styles/ui";
 import { authCardClass } from "./formStyles";
@@ -26,6 +27,7 @@ export default function VerifyEmail() {
       .verifyEmail(token)
       .then(() => {
         setStatus("done");
+        track("verification_completed");
         refresh();
       })
       .catch((err) => {

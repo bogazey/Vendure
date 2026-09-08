@@ -241,6 +241,7 @@ class _FakeStreamResponse:
         self._chunks = chunks
         self.headers = headers or {}
         self._raise_exc = raise_exc
+        self.is_redirect = False
 
     def raise_for_status(self) -> None:
         if self._raise_exc is not None:
@@ -291,6 +292,12 @@ class TestImageDownloads:
     @pytest.fixture(autouse=True)
     def _patch_image_pipeline(self, monkeypatch, tmp_path):
         monkeypatch.setattr(dm_module, "httpx", type("M", (), {"Client": FakeHttpxClient, "HTTPError": httpx.HTTPError}))
+        monkeypatch.setattr(dm_module, "assert_public_http_url", lambda _url: None)
+        monkeypatch.setattr(
+            dm_module,
+            "get_commercial_settings",
+            lambda: type("Commercial", (), {"direct_image_max_bytes": 1024})(),
+        )
         # No ffmpeg available at all - proves the image path never needs it.
         monkeypatch.setattr(ytdlp_service, "check_ffmpeg", lambda: (False, None))
         monkeypatch.setattr(
@@ -310,6 +317,7 @@ class TestImageDownloads:
             lambda info: ("https://cdn.example.com/photo.jpg", 1080, 1080, "jpg"),
         )
         FakeHttpxClient.chunks = [b"\xff\xd8\xff" + b"0" * 200]
+        FakeHttpxClient.headers = {}
         FakeHttpxClient.raise_exc = None
         FakeHttpxClient.last_headers = None
         yield
@@ -327,6 +335,23 @@ class TestImageDownloads:
         history = history_repo.get(job.id)
         assert history is not None
         assert history.format_label is not None and "Image" in history.format_label
+
+    async def test_oversized_content_length_is_rejected_without_partial_file(self, _isolated_manager, tmp_path):
+        FakeHttpxClient.headers = {"content-length": "2048"}
+        request = CreateDownloadRequest(url="https://www.instagram.com/p/ABC123/", media_type=MediaType.IMAGE)
+        job = _isolated_manager.create_job(request)
+        await asyncio.wait_for(_wait_for_terminal(_isolated_manager, job.id), timeout=5)
+        assert _isolated_manager.get_job(job.id).stage == DownloadStage.FAILED
+        assert not any(tmp_path.rglob("*.part"))
+
+    async def test_stream_exceeding_limit_without_content_length_is_rejected(self, _isolated_manager, tmp_path):
+        FakeHttpxClient.headers = {}
+        FakeHttpxClient.chunks = [b"\xff\xd8\xff" + b"0" * 700, b"1" * 700]
+        request = CreateDownloadRequest(url="https://www.instagram.com/p/ABC123/", media_type=MediaType.IMAGE)
+        job = _isolated_manager.create_job(request)
+        await asyncio.wait_for(_wait_for_terminal(_isolated_manager, job.id), timeout=5)
+        assert _isolated_manager.get_job(job.id).stage == DownloadStage.FAILED
+        assert not any(tmp_path.rglob("*.part"))
 
     async def test_image_download_propagates_extractor_headers(self, _isolated_manager):
         request = CreateDownloadRequest(url="https://www.instagram.com/p/ABC123/", media_type=MediaType.IMAGE)

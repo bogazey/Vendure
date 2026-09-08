@@ -10,6 +10,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 
 from app.utils.exceptions import NetworkError, NoDownloadableMediaError, UnavailableMediaError
+from app.utils.outbound_url import assert_public_http_url
 
 _PHOTO_PATH_RE = re.compile(r"/(?:@[^/]+/)?photo/(\d+)(?:/|$)")
 _TIKTOK_HOSTS = {"tiktok.com", "www.tiktok.com", "m.tiktok.com", "vm.tiktok.com", "vt.tiktok.com"}
@@ -61,6 +62,7 @@ def _photo_id(url: str) -> str | None:
 
 
 def _request(client: httpx.Client, url: str, retries: int) -> httpx.Response:
+    assert_public_http_url(url, allowed_hosts=_TIKTOK_HOSTS)
     attempts = max(1, min(retries + 1, 4))
     last_error: httpx.HTTPError | None = None
     for attempt in range(attempts):

@@ -20,7 +20,7 @@ Do not expose the app before production email delivery and Paddle launch configu
 
 Copy `.env.production.example` to `.env.production`, generate unique values for `SECRET_KEY` and both database passwords, and keep that file off Git. Run Compose with `--env-file .env.production`; `LOADY_ENV_FILE` tells the backend service which file to load.
 
-`VITE_API_BASE_URL` is intentionally empty in production so browser requests use same-origin `/api`. `LMD_MAX_CONCURRENT_DOWNLOADS=1` is the beta default. Existing persisted `app.db` settings can override this; verify the Settings page still reports one simultaneous download after restoring an old database.
+`VITE_API_BASE_URL` is intentionally empty in production so browser requests use same-origin `/api`. `LMD_MAX_CONCURRENT_DOWNLOADS=1` is the beta safety cap. When explicitly set, it caps any higher value persisted in `app.db` without deleting or rewriting the stored setting.
 
 `EMAIL_BACKEND=disabled` suppresses token-bearing reset/verification messages. A real provider remains a launch requirement. Production mode will never fall back to logging full auth links.
 
@@ -129,3 +129,20 @@ These leave capacity for Ubuntu and Docker on the 4-vCPU/8-GB beta VPS. Monitor 
 - SEO route returns SPA shell: rebuild the frontend image and inspect `/usr/share/nginx/html/en/index.html`.
 - Unknown route returns 200: ensure the committed Nginx config is mounted and no upstream CDN rewrites 404s.
 - Reset email absent: expected while `EMAIL_BACKEND=disabled`; configure an approved provider before launch.
+- TikTok photo post fails: confirm backend outbound HTTPS first, then inspect whether public embed metadata changed. The fallback uses public TikTok metadata only and deliberately rejects private/internal redirect destinations; normal TikTok videos remain on yt-dlp.
+
+## Pre-launch security and operations
+
+See `docs/LAUNCH_CHECKLIST.md` for the privileged IPv4/IPv6 firewall audit, Cloudflare and Search Console checks, Paddle Live migration, Resend key rotation, administrator promotion, monitoring, and legal review. Run `scripts/production-smoke.sh` after each release and `scripts/restore-rehearsal.sh` against backups without attaching production database volumes.
+
+## Content Security Policy validation
+
+CSP emission and enforcement are intentionally deferred: a report-only header without a reporting endpoint provides no durable evidence and can create misleading confidence. Before enabling CSP, validate Paddle checkout, the payment-method overlay, media thumbnails/previews, Google Fonts, and normal frontend/API operation in a production-equivalent browser session.
+
+Candidate policy for that validation (not currently emitted):
+
+```text
+default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self' https://cdn.paddle.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.paddle.com https://*.paddle.net; frame-src https://*.paddle.com https://*.paddle.net; worker-src 'self' blob:
+```
+
+Do not enforce this candidate or add broader `unsafe-*` workarounds until browser observations confirm every required origin and directive.

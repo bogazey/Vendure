@@ -1,7 +1,12 @@
 from types import SimpleNamespace
+import asyncio
 
+from starlette.requests import Request
+
+from app import main
 from app.api import routes_health
 from app.services import email_service
+from app.utils.exceptions import ExtractorFailureError
 
 
 def test_production_email_never_uses_log_backend(monkeypatch):
@@ -24,3 +29,15 @@ def test_production_health_hides_filesystem_paths(monkeypatch, tmp_path):
     health = routes_health.compute_health()
     assert health.ffmpeg_path is None
     assert health.download_dir == ""
+
+
+def test_production_error_responses_hide_technical_details(monkeypatch):
+    monkeypatch.setattr(main, "get_commercial_settings", lambda: SimpleNamespace(app_env="production"))
+    request = Request({"type": "http", "method": "GET", "path": "/api/test", "headers": []})
+    response = asyncio.run(main.app_error_handler(request, ExtractorFailureError("Try again.", technical="secret path")))
+    assert b"secret path" not in response.body
+    assert b'"technical":null' in response.body
+
+    response = asyncio.run(main.unhandled_error_handler(request, RuntimeError("database password leaked")))
+    assert b"database password leaked" not in response.body
+    assert b'"technical":null' in response.body

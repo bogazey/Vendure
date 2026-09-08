@@ -77,6 +77,14 @@ class CommercialSettings(BaseSettings):
     partial_media_ttl_hours: int = Field(default=6, alias="PARTIAL_MEDIA_TTL_HOURS")
     media_cleanup_interval_minutes: int = Field(default=60, alias="MEDIA_CLEANUP_INTERVAL_MINUTES")
     media_max_bytes: int = Field(default=40 * 1024**3, alias="MEDIA_MAX_BYTES")
+    # Per-file ceiling for direct image/CDN streaming. This is separate from
+    # MEDIA_MAX_BYTES, which is the aggregate disposable-media volume ceiling.
+    direct_image_max_bytes: int = Field(
+        default=50 * 1024**2,
+        ge=1024**2,
+        le=100 * 1024**2,
+        alias="DIRECT_IMAGE_MAX_BYTES",
+    )
 
     # --- Ads ---
     ads_enabled: bool = Field(default=True, alias="ADS_ENABLED")

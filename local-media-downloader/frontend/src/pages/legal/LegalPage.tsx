@@ -1,13 +1,14 @@
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 export function LegalPage({ title, children }: { title: string; children: ReactNode }) {
+  const { i18n } = useTranslation();
   return (
     <div className="relative z-10 mx-auto flex max-w-2xl flex-col gap-5 px-6 py-14">
       <div>
         <h1 className="font-display text-2xl font-bold text-slate-50">{title}</h1>
-        <p className="mt-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300 backdrop-blur-xl">
-          Draft placeholder text. This has not been reviewed by a lawyer and should not be treated as final legal
-          copy - have it reviewed before this product accepts real customers.
+        <p className="mt-2 text-xs text-slate-400">
+          {i18n.resolvedLanguage === "ar" ? "سارية من سبتمبر 2026" : "Effective September 2026"}
         </p>
       </div>
       <div className="glass-panel flex flex-col gap-4 p-6 text-sm leading-relaxed text-slate-300">{children}</div>

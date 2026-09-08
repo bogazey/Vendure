@@ -56,6 +56,7 @@ def _response(status: int, url: str, *, text: str = "", location: str | None = N
 @pytest.fixture(autouse=True)
 def _mock_http(monkeypatch):
     monkeypatch.setattr(tiktok_photo_service.httpx, "Client", FakeClient)
+    monkeypatch.setattr(tiktok_photo_service, "assert_public_http_url", lambda *_args, **_kwargs: None)
     FakeClient.responses = []
     FakeClient.calls = []
     FakeClient.kwargs = {}

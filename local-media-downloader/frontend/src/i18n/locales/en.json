@@ -99,6 +99,8 @@
     "terms": "Terms",
     "privacy": "Privacy",
     "copyright": "Copyright",
+    "acceptableUse": "Acceptable use",
+    "refunds": "Billing & refunds",
     "notice": "Loady is a personal media utility for content you own or are otherwise authorized to access and download. It is not intended to bypass copy protection, DRM, or paywalls.",
     "copyrightLine": "© {{year}} Loady. Not affiliated with YouTube, TikTok, Instagram, or Facebook.",
     "createAccount": "Create account"
@@ -109,7 +111,7 @@
     "body": "Start free. Upgrade when you need higher quality, more downloads, or creator tools.",
     "monthly": "Monthly",
     "annual": "Annual",
-    "save": "save ~18%",
+    "save": "save ~20%",
     "popular": "Most popular",
     "payment": "Payment received — confirming your upgrade…",
     "current": "Current plan",

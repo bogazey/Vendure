@@ -15,12 +15,14 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urljoin
 
 import httpx
 import yt_dlp
 from yt_dlp.utils import DownloadCancelled, sanitize_filename
 
 from app.config.logging_config import get_logger
+from app.config.commercial_settings import get_commercial_settings
 from app.database import history_repo
 from app.database.commercial_db import session_scope
 from app.models.enums import ContainerMode, CookieSource, DownloadStage, MediaType, Platform
@@ -34,12 +36,14 @@ from app.services.user_storage_service import ensure_within_user_dir, user_downl
 from app.utils.exceptions import (
     FfmpegMissingError,
     FfmpegProcessingError,
+    FormatUnavailableError,
     InvalidPathError,
     JobNotFoundError,
     NoDownloadableMediaError,
     UnavailableMediaError,
 )
 from app.utils.paths import resolve_safe_directory, validate_directory_writable
+from app.utils.outbound_url import assert_public_http_url
 from app.utils.url_detect import detect_platform
 
 # Checked against the first bytes actually received over the wire before an
@@ -434,10 +438,14 @@ class DownloadManager:
         job.stage = DownloadStage.DOWNLOADING
         self._bump_revision()
 
-        headers = {
+        candidate_headers = {
             "User-Agent": "Mozilla/5.0 (compatible; Loady/1.0)",
             **(info.get("http_headers") or {}),
         }
+        # Extractor metadata is untrusted. Forward only ordinary representation
+        # headers, never cookies/authorization to a CDN or redirect target.
+        allowed_headers = {"user-agent", "referer", "accept", "accept-language"}
+        headers = {key: value for key, value in candidate_headers.items() if key.lower() in allowed_headers}
         self._download_image_file(job, image_url, headers, target, settings)
         job.filepath = str(target)
 
@@ -456,34 +464,51 @@ class DownloadManager:
         self, job: DownloadJob, url: str, headers: dict[str, str], target: Path, settings: AppSettings
     ) -> None:
         tmp_target = target.with_name(f"{target.name}.part")
+        max_bytes = get_commercial_settings().direct_image_max_bytes
         try:
-            with httpx.Client(follow_redirects=True, timeout=settings.network_timeout_seconds) as client:
-                with client.stream("GET", url, headers=headers) as response:
-                    response.raise_for_status()
-                    total = int(response.headers.get("content-length") or 0) or None
-                    job.total_bytes = total
-                    downloaded = 0
-                    first_chunk = True
-                    with open(tmp_target, "wb") as f:
-                        for chunk in response.iter_bytes(chunk_size=65536):
-                            if job.cancel_event.is_set():
-                                raise DownloadCancelled("Cancelled by user")
-                            if first_chunk:
-                                if not _looks_like_image_bytes(chunk):
-                                    raise NoDownloadableMediaError(
-                                        "This post does not contain downloadable media."
-                                    )
-                                first_chunk = False
-                            f.write(chunk)
-                            downloaded += len(chunk)
-                            job.downloaded_bytes = downloaded
-                            if total:
-                                job.progress_percent = min(99.0, downloaded / total * 100)
-                            self._bump_revision()
-                    if first_chunk:
-                        # Response body was empty - nothing to validate as an
-                        # image, so treat it the same as an invalid response.
-                        raise NoDownloadableMediaError("This post does not contain downloadable media.")
+            with httpx.Client(follow_redirects=False, timeout=settings.network_timeout_seconds) as client:
+                current_url = url
+                for redirect_count in range(6):
+                    assert_public_http_url(current_url)
+                    with client.stream("GET", current_url, headers=headers) as response:
+                        if response.is_redirect:
+                            location = response.headers.get("location")
+                            if not location:
+                                raise UnavailableMediaError("The media server returned an invalid redirect.")
+                            current_url = urljoin(current_url, location)
+                            continue
+                        response.raise_for_status()
+                        total = int(response.headers.get("content-length") or 0) or None
+                        if total is not None and total > max_bytes:
+                            raise FormatUnavailableError("This image is too large to download.")
+                        job.total_bytes = total
+                        downloaded = 0
+                        first_chunk = True
+                        with open(tmp_target, "wb") as f:
+                            for chunk in response.iter_bytes(chunk_size=65536):
+                                if job.cancel_event.is_set():
+                                    raise DownloadCancelled("Cancelled by user")
+                                if first_chunk:
+                                    if not _looks_like_image_bytes(chunk):
+                                        raise NoDownloadableMediaError(
+                                            "This post does not contain downloadable media."
+                                        )
+                                    first_chunk = False
+                                downloaded += len(chunk)
+                                if downloaded > max_bytes:
+                                    raise FormatUnavailableError("This image is too large to download.")
+                                f.write(chunk)
+                                job.downloaded_bytes = downloaded
+                                if total:
+                                    job.progress_percent = min(99.0, downloaded / total * 100)
+                                self._bump_revision()
+                        if first_chunk:
+                            # Response body was empty - nothing to validate as an
+                            # image, so treat it the same as an invalid response.
+                            raise NoDownloadableMediaError("This post does not contain downloadable media.")
+                    break
+                else:
+                    raise UnavailableMediaError("The media URL redirected too many times.")
         except httpx.HTTPError as exc:
             tmp_target.unlink(missing_ok=True)
             raise UnavailableMediaError(

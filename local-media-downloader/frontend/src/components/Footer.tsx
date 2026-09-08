@@ -76,6 +76,12 @@ export default function Footer() {
           <Link to="/copyright" className={footerLinkClass}>
             {t("footer.copyright")}
           </Link>
+          <Link to="/acceptable-use" className={footerLinkClass}>
+            {t("footer.acceptableUse")}
+          </Link>
+          <Link to="/refund-policy" className={footerLinkClass}>
+            {t("footer.refunds")}
+          </Link>
         </FooterColumn>
       </div>
 

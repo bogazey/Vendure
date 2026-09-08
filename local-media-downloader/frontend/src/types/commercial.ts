@@ -183,6 +183,6 @@ export const PLAN_LABELS: Record<Plan, string> = {
 };
 
 export const PLAN_PRICES: Record<"pro" | "creator", { monthly: number; annual: number }> = {
-  pro: { monthly: 4.99, annual: 49 },
-  creator: { monthly: 9.99, annual: 99 },
+  pro: { monthly: 4.99, annual: 47.9 },
+  creator: { monthly: 9.99, annual: 95.9 },
 };

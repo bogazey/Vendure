@@ -17,13 +17,24 @@ _SETTINGS_KEY = "app_settings"
 
 
 def get_settings() -> AppSettings:
+    configured_cap = os.environ.get("LMD_MAX_CONCURRENT_DOWNLOADS")
     stored = settings_repo.load_all().get(_SETTINGS_KEY)
     if stored:
         try:
-            return AppSettings(**stored)
+            settings = AppSettings(**stored)
+            if configured_cap is not None:
+                cap = max(1, min(10, int(configured_cap)))
+                if settings.max_concurrent_downloads > cap:
+                    logger.warning(
+                        "Capping persisted media concurrency %d at configured production limit %d",
+                        settings.max_concurrent_downloads,
+                        cap,
+                    )
+                    settings = settings.model_copy(update={"max_concurrent_downloads": cap})
+            return settings
         except Exception:
             logger.warning("Stored settings failed validation; falling back to defaults")
-    default_concurrency = int(os.environ.get("LMD_MAX_CONCURRENT_DOWNLOADS", "2"))
+    default_concurrency = int(configured_cap or "2")
     return AppSettings(download_dir=str(DEFAULT_DOWNLOAD_DIR), max_concurrent_downloads=default_concurrency)
 
 

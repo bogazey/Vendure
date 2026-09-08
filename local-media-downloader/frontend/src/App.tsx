@@ -28,6 +28,8 @@ import Landing from "./pages/Landing";
 import Copyright from "./pages/legal/Copyright";
 import Privacy from "./pages/legal/Privacy";
 import Terms from "./pages/legal/Terms";
+import AcceptableUse from "./pages/legal/AcceptableUse";
+import RefundPolicy from "./pages/legal/RefundPolicy";
 import NotFoundPage from "./pages/NotFoundPage";
 import Pricing from "./pages/Pricing";
 import SeoHomePage from "./pages/seo/SeoHomePage";
@@ -111,6 +113,8 @@ function AppShell() {
               <Route path="/terms" element={<Terms />} />
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/copyright" element={<Copyright />} />
+              <Route path="/acceptable-use" element={<AcceptableUse />} />
+              <Route path="/refund-policy" element={<RefundPolicy />} />
 
               <Route path="/dashboard" element={<GuestAllowedRoute>{gated(<Dashboard />)}</GuestAllowedRoute>} />
               <Route path="/history" element={<ProtectedRoute>{gated(<HistoryPage />)}</ProtectedRoute>} />

@@ -16,6 +16,11 @@ class TestSettingsPersistence:
         assert reloaded.max_concurrent_downloads == 4
         assert reloaded.download_dir == str(tmp_path.resolve())
 
+    def test_explicit_environment_limit_caps_persisted_concurrency(self, monkeypatch, tmp_path):
+        update_settings(UpdateSettingsRequest(download_dir=str(tmp_path), max_concurrent_downloads=4))
+        monkeypatch.setenv("LMD_MAX_CONCURRENT_DOWNLOADS", "1")
+        assert get_settings().max_concurrent_downloads == 1
+
     def test_partial_update_preserves_other_fields(self, tmp_path):
         update_settings(UpdateSettingsRequest(download_dir=str(tmp_path)))
         update_settings(UpdateSettingsRequest(mp3_bitrate=320))

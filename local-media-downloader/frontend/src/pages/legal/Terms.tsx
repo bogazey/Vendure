@@ -1,6 +1,18 @@
 import { LegalPage, LegalSection } from "./LegalPage";
+import { useTranslation } from "react-i18next";
 
 export default function Terms() {
+  const { i18n } = useTranslation();
+  const ar = i18n.resolvedLanguage === "ar";
+  if (ar) return (
+    <LegalPage title="شروط الخدمة">
+      <LegalSection heading="الخدمة"><p>Loady أداة لاستيراد وحفظ وتحويل ومعالجة الوسائط التي تملكها أو لديك تصريح بتنزيلها. لا تمنحك الخدمة حقوقاً في محتوى الغير.</p></LegalSection>
+      <LegalSection heading="مسؤولياتك"><p>أنت مسؤول عن امتلاك الحقوق أو الأذونات اللازمة وعن الالتزام بالقانون وشروط المنصة المصدر.</p></LegalSection>
+      <LegalSection heading="الاستخدام المحظور"><p>يُحظر تجاوز إدارة الحقوق الرقمية أو أنظمة الدفع أو المصادقة، والوصول غير المصرح به إلى المحتوى الخاص، وإساءة استخدام الخدمة أو الإضرار بها.</p></LegalSection>
+      <LegalSection heading="الخطط والفوترة"><p>تُدفع الخطط المدفوعة مقدماً شهرياً أو سنوياً عبر Paddle. يمكنك إدارة التغيير أو الإلغاء من صفحة الفوترة وفق الشروط المعروضة هناك.</p></LegalSection>
+      <LegalSection heading="التوفر والتغييرات"><p>قد تتغير المنصات الخارجية أو تتوقف عن العمل. قد نحدّث الخدمة أو هذه الشروط، وسننشر النسخة المحدّثة وتاريخ سريانها.</p></LegalSection>
+    </LegalPage>
+  );
   return (
     <LegalPage title="Terms of Service">
       <LegalSection heading="What this service is">

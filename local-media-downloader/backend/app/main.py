@@ -30,6 +30,7 @@ from app.api import (
     routes_settings,
 )
 from app.config.logging_config import get_logger, setup_logging
+from app.config.commercial_settings import get_commercial_settings
 from app.database import history_repo
 from app.database.db import get_connection
 from app.services import ytdlp_service
@@ -95,9 +96,10 @@ app.add_middleware(
 
 @app.exception_handler(AppError)
 async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
+    technical = exc.technical if get_commercial_settings().app_env != "production" else None
     return JSONResponse(
         status_code=exc.status_code,
-        content={"message": exc.message, "technical": exc.technical, "code": exc.code},
+        content={"message": exc.message, "technical": technical, "code": exc.code},
     )
 
 
@@ -107,8 +109,8 @@ async def unhandled_error_handler(request: Request, exc: Exception) -> JSONRespo
     return JSONResponse(
         status_code=500,
         content={
-            "message": "Something went wrong. See the technical details for more information.",
-            "technical": str(exc),
+            "message": "Something went wrong. Please try again.",
+            "technical": str(exc) if get_commercial_settings().app_env != "production" else None,
         },
     )
 

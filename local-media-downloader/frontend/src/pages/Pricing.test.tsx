@@ -30,8 +30,8 @@ describe("Pricing", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: /Annual/ }));
 
-    expect(screen.getByText("$49")).toBeInTheDocument();
-    expect(screen.getByText("$99")).toBeInTheDocument();
+    expect(screen.getByText("$47.90")).toBeInTheDocument();
+    expect(screen.getByText("$95.90")).toBeInTheDocument();
   });
 
   it("marks the account's current plan and disables its button", () => {
