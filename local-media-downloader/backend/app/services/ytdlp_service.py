@@ -44,6 +44,7 @@ from app.utils.exceptions import (
 )
 from app.utils.timecode import validate_clip_range
 from app.utils.url_detect import detect_platform, is_supported_platform, looks_like_playlist_url
+from app.services import tiktok_photo_service
 
 logger = get_logger("ytdlp")
 
@@ -436,6 +437,25 @@ def pick_best_image(info: dict[str, Any]) -> Optional[tuple[str, Optional[int], 
     return _pick_best_image(info)
 
 
+def _tiktok_photo_fallback(url: str, settings: AppSettings, original_error: DownloadError) -> dict[str, Any]:
+    """Try the public-photo fallback without broadening normal extraction."""
+    classified = classify_error(original_error, url)
+    direct_photo = tiktok_photo_service.is_photo_url(url)
+    short_url = tiktok_photo_service.is_short_url(url)
+    if detect_platform(url) != Platform.TIKTOK or not (direct_photo or short_url):
+        raise classified from original_error
+    if direct_photo and not isinstance(classified, UnsupportedUrlError):
+        raise classified from original_error
+    try:
+        return tiktok_photo_service.extract_photo_info(
+            url, timeout=settings.network_timeout_seconds, retries=settings.retries
+        )
+    except tiktok_photo_service.NotTikTokPhotoUrl:
+        # In particular, a vm/vt short link which resolves to a normal video
+        # must keep yt-dlp's original behavior and friendly error mapping.
+        raise classified from original_error
+
+
 def extract_entry_for_download(
     url: str, settings: AppSettings, playlist_item_indices: Optional[list[int]] = None
 ) -> dict[str, Any]:
@@ -456,7 +476,7 @@ def extract_entry_for_download(
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
     except DownloadError as exc:
-        raise classify_error(exc, url) from exc
+        info = _tiktok_photo_fallback(url, settings, exc)
 
     if info is None:
         raise UnavailableMediaError("No media information could be extracted from this URL.")
@@ -465,6 +485,11 @@ def extract_entry_for_download(
         entries = [e for e in info.get("entries") or [] if e]
         if not entries:
             raise NoDownloadableMediaError("This post does not contain downloadable media.")
+        if playlist_item_indices:
+            selected = set(playlist_item_indices)
+            entries = [entry for index, entry in enumerate(entries, start=1) if index in selected]
+            if not entries:
+                raise NoDownloadableMediaError("This post does not contain the selected media item.")
         info = entries[0]
     return info
 
@@ -511,7 +536,7 @@ def analyze(url: str, settings: AppSettings) -> AnalyzeResponse:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
     except DownloadError as exc:
-        raise classify_error(exc, url) from exc
+        info = _tiktok_photo_fallback(url, settings, exc)
 
     if info is None:
         raise UnavailableMediaError("No media information could be extracted from this URL.")
