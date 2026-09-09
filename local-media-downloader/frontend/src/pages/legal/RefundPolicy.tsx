@@ -13,7 +13,27 @@ export default function RefundPolicy() {
         <p>{ar ? "يمكنك إدارة خطتك من صفحة الفوترة. يسري الإلغاء في نهاية الفترة الحالية ما لم توضّح شاشة الفوترة خلاف ذلك." : "You can manage your plan from Billing. Cancellation takes effect at the end of the current period unless the billing screen states otherwise."}</p>
       </LegalSection>
       <LegalSection heading={ar ? "طلبات الاسترداد" : "Refund requests"}>
-        <p>{ar ? "تخضع طلبات الاسترداد للقانون المعمول به وشروط Paddle وظروف عملية الشراء. تواصل معنا عبر قناة الدعم المنشورة للخدمة مع معرّف المعاملة؛ ولا ترسل بيانات البطاقة." : "Refund requests are assessed under applicable law, Paddle's terms, and the circumstances of the purchase. Contact us through the service's published support channel with the transaction ID; never send card details."}</p>
+        <p>
+          {ar ? (
+            <>
+              تخضع طلبات الاسترداد للقانون المعمول به وشروط Paddle وظروف عملية الشراء. تواصل معنا عبر البريد
+              الإلكتروني{" "}
+              <a href="mailto:support@loady.cc" dir="ltr" className="font-medium text-brand-aqua transition-colors hover:text-brand-purple">
+                support@loady.cc
+              </a>{" "}
+              مع معرّف المعاملة؛ ولا ترسل بيانات البطاقة.
+            </>
+          ) : (
+            <>
+              Refund requests are assessed under applicable law, Paddle&apos;s terms, and the circumstances of the
+              purchase. Contact us at{" "}
+              <a href="mailto:support@loady.cc" className="font-medium text-brand-aqua transition-colors hover:text-brand-purple">
+                support@loady.cc
+              </a>{" "}
+              with the transaction ID; never send card details.
+            </>
+          )}
+        </p>
       </LegalSection>
     </LegalPage>
   );

@@ -9,7 +9,7 @@ export default function Privacy() {
       <LegalSection heading="البيانات التي نجمعها"><p>نجمع بيانات الحساب، وحالة الفوترة من معالج الدفع، وسجلات الاستخدام اللازمة لتطبيق حدود الخطط وتشغيل الخدمة بأمان.</p></LegalSection>
       <LegalSection heading="كيفية استخدامها"><p>نستخدم البيانات لتشغيل حسابك، وتقديم التنزيلات، ومنع إساءة الاستخدام، ومعالجة الاشتراكات، وإرسال رسائل التحقق وإعادة تعيين كلمة المرور والخدمة.</p></LegalSection>
       <LegalSection heading="الوسائط والمدفوعات"><p>تُخزّن ملفات الوسائط مؤقتاً ثم تُحذف وفق سياسة الاحتفاظ. لا نرسل روابط الوسائط أو عناوينها إلى مزود تحليلات. تتولى Paddle بيانات البطاقة ولا تمر عبر خوادمنا.</p></LegalSection>
-      <LegalSection heading="خياراتك"><p>يمكنك طلب حذف حسابك والبيانات المرتبطة به عبر قناة الدعم المنشورة للخدمة، مع مراعاة السجلات التي يجب الاحتفاظ بها قانونياً أو لمنع الاحتيال.</p></LegalSection>
+      <LegalSection heading="خياراتك"><p>يمكنك طلب حذف حسابك والبيانات المرتبطة به عبر البريد الإلكتروني <a href="mailto:support@loady.cc" dir="ltr" className="font-medium text-brand-aqua transition-colors hover:text-brand-purple">support@loady.cc</a>، مع مراعاة السجلات التي يجب الاحتفاظ بها قانونياً أو لمنع الاحتيال.</p></LegalSection>
     </LegalPage>
   );
   return (
@@ -34,7 +34,14 @@ export default function Privacy() {
         </p>
       </LegalSection>
       <LegalSection heading="Data retention">
-        <p>Downloaded media is temporary and removed under our retention policy. You can request deletion of your account and associated data through the service's published support channel, subject to records we must retain for legal or fraud-prevention purposes.</p>
+        <p>
+          Downloaded media is temporary and removed under our retention policy. You can request deletion of your
+          account and associated data by emailing{" "}
+          <a href="mailto:support@loady.cc" className="font-medium text-brand-aqua transition-colors hover:text-brand-purple">
+            support@loady.cc
+          </a>
+          , subject to records we must retain for legal or fraud-prevention purposes.
+        </p>
       </LegalSection>
     </LegalPage>
   );

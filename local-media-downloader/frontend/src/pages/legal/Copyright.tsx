@@ -8,7 +8,7 @@ export default function Copyright() {
     <LegalPage title="سياسة حقوق النشر">
       <LegalSection heading="الاستخدام المصرّح به فقط"><p>استخدم Loady فقط مع المحتوى الذي تملكه أو لديك إذن بتنزيله. لا تدعم الخدمة تجاوز الحماية أو الوصول إلى محتوى خاص أو مقيّد دون تصريح.</p></LegalSection>
       <LegalSection heading="مسؤوليتك"><p>أنت مسؤول عن الامتثال لقانون حقوق النشر وشروط المنصة المصدر عند تنزيل المحتوى واستخدامه.</p></LegalSection>
-      <LegalSection heading="الإبلاغ عن مشكلة"><p>يمكن لصاحب الحقوق إرسال تفاصيل المحتوى والحقوق والطلب عبر قناة الدعم المنشورة للخدمة. سنراجع الطلبات المكتملة ونتخذ الإجراء المناسب.</p></LegalSection>
+      <LegalSection heading="الإبلاغ عن مشكلة"><p>يمكن لصاحب الحقوق إرسال تفاصيل المحتوى والحقوق والطلب عبر البريد الإلكتروني <a href="mailto:support@loady.cc" dir="ltr" className="font-medium text-brand-aqua transition-colors hover:text-brand-purple">support@loady.cc</a>. سنراجع الطلبات المكتملة ونتخذ الإجراء المناسب.</p></LegalSection>
     </LegalPage>
   );
   return (
@@ -30,8 +30,11 @@ export default function Copyright() {
       <LegalSection heading="Reporting a copyright concern">
         <p>
           Rights holders can submit the content location, identification of the protected work, contact details,
-          and a good-faith statement through the service's published support channel. We will review complete
-          notices and take appropriate action.
+          and a good-faith statement by emailing{" "}
+          <a href="mailto:support@loady.cc" className="font-medium text-brand-aqua transition-colors hover:text-brand-purple">
+            support@loady.cc
+          </a>
+          . We will review complete notices and take appropriate action.
         </p>
       </LegalSection>
     </LegalPage>
