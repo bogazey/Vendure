@@ -107,10 +107,17 @@ def get_commercial_settings() -> CommercialSettings:
                 "in your environment for anything beyond local development."
             )
         if _settings.paddle_env != "sandbox":
+            # This does NOT block or fall back to Sandbox - paddle_client.py's
+            # _base_url() genuinely switches to https://api.paddle.com (Paddle
+            # Live) for any value other than "sandbox". The log message used
+            # to claim this was "refused," which was never true; it's a
+            # go-live notice, not a safety interlock.
             logger.warning(
-                "PADDLE_ENV=%s - this build is only intended to run against "
-                "Paddle Sandbox. Refusing to treat this as a live billing "
-                "environment.",
+                "PADDLE_ENV=%s - Paddle API calls now target the LIVE endpoint "
+                "(https://api.paddle.com), not Sandbox. Confirm this is "
+                "intentional and that PADDLE_API_KEY, PADDLE_CLIENT_TOKEN, "
+                "PADDLE_WEBHOOK_SECRET, and all four price IDs are genuine "
+                "Paddle Live values before accepting real payments.",
                 _settings.paddle_env,
             )
     return _settings

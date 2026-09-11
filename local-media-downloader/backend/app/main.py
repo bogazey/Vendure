@@ -73,7 +73,24 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             pass
 
 
-app = FastAPI(title="Local Media Downloader API", version="1.0.0", lifespan=lifespan)
+# Nginx's path allowlist (see frontend/nginx.conf, frontend/nginx.tls.conf)
+# already keeps /docs, /redoc, and /openapi.json unreachable from the public
+# internet in production, but that's the only layer doing so - the backend
+# container itself has never disabled them. Disable them here too, so the
+# interactive schema/API explorer isn't live at the application level if
+# that network boundary is ever bypassed or misconfigured. Development/test
+# environments (the settings default) keep them, since they're genuinely
+# useful there.
+_is_production = get_commercial_settings().app_env.strip().lower() == "production"
+
+app = FastAPI(
+    title="Local Media Downloader API",
+    version="1.0.0",
+    lifespan=lifespan,
+    docs_url=None if _is_production else "/docs",
+    redoc_url=None if _is_production else "/redoc",
+    openapi_url=None if _is_production else "/openapi.json",
+)
 
 LOCAL_ORIGINS = [
     "http://127.0.0.1:5173",
