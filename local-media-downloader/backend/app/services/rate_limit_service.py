@@ -53,3 +53,7 @@ guest_download_limiter = RateLimiter()
 # is intentionally local and predictable.
 analyze_limiter = RateLimiter()
 billing_limiter = RateLimiter()
+# Browser-submitted analytics events (page_view only - see routes_analytics.py)
+# are untrusted input from every visitor, signed in or not; this bounds how
+# much one visitor/IP can grow the analytics table regardless of intent.
+analytics_limiter = RateLimiter()

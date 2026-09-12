@@ -17,11 +17,17 @@ from sqlalchemy.orm import Session
 from app.config.commercial_settings import get_commercial_settings
 from app.config.logging_config import get_logger
 from app.database.commercial_models import BillingEvent, Subscription, UsagePeriod, User
-from app.models.commercial_enums import BillingEventStatus, BillingPeriod, Plan, SubscriptionStatus
+from app.models.commercial_enums import AnalyticsEventType, BillingEventStatus, BillingPeriod, Plan, SubscriptionStatus
 from app.models.commercial_schemas import CheckoutResponse
-from app.services import email_service
+from app.services import analytics_service, email_service
 from app.services.plan_policy import get_policy
 from app.utils.exceptions import BillingError, InvalidWebhookSignatureError
+
+# Plan movements (upgrade vs downgrade) recorded to analytics are directional
+# only - this mirrors frontend/src/types/commercial.ts's PLAN_RANK, kept as a
+# small local constant here rather than a shared import since the two layers
+# never share code today.
+_PLAN_RANK = {Plan.FREE.value: 0, Plan.PRO.value: 1, Plan.CREATOR.value: 2}
 
 logger = get_logger("paddle_service")
 
@@ -192,6 +198,24 @@ def _upsert_subscription_from_event(session: Session, data: dict) -> None:
     subscription.cancel_at_period_end = (data.get("scheduled_change") or {}).get("action") == "cancel"
 
     _sync_usage_period_credits_for_plan_change(session, subscription, old_plan, subscription.plan)
+    _record_plan_change_analytics(session, subscription, old_plan, subscription.plan)
+
+
+def _record_plan_change_analytics(session: Session, subscription: Subscription, old_plan: str, new_plan: str) -> None:
+    """Fires on every real plan change, including a brand new subscription's
+    first `free -> pro`/`free -> creator` transition (a new Subscription row
+    is only ever created here with a temporary `plan=free` placeholder,
+    immediately overwritten above by the actual purchased plan) - that IS
+    the paid-conversion moment. A no-op status/date-only webhook update
+    (old_plan == new_plan) records nothing."""
+    if old_plan == new_plan:
+        return
+    event_type = (
+        AnalyticsEventType.PLAN_UPGRADED
+        if _PLAN_RANK.get(new_plan, 0) > _PLAN_RANK.get(old_plan, 0)
+        else AnalyticsEventType.PLAN_DOWNGRADED
+    )
+    analytics_service.record_event(session, event_type, user_id=subscription.user_id, plan=new_plan, from_plan=old_plan)
 
 
 def _sync_usage_period_credits_for_plan_change(
@@ -230,6 +254,10 @@ def _handle_subscription_canceled(session: Session, data: dict) -> None:
     if subscription is None:
         return
     subscription.status = SubscriptionStatus.CANCELED.value
+    analytics_service.record_event(
+        session, AnalyticsEventType.SUBSCRIPTION_CANCELLED,
+        user_id=subscription.user_id, plan=subscription.plan, from_plan=subscription.plan,
+    )
     user = session.get(User, subscription.user_id)
     if user:
         email_service.send_subscription_canceled_email(

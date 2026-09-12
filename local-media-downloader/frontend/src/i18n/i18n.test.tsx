@@ -12,7 +12,7 @@ import { api } from "../services/api";
 
 vi.mock("../context/AuthContext", () => ({ useAuth: vi.fn() }));
 vi.mock("../services/api", () => ({
-  api: { adminGetOverview: vi.fn(), adminGetHealth: vi.fn() },
+  api: { adminGetOverview: vi.fn(), adminGetHealth: vi.fn(), adminAnalyticsOverview: vi.fn() },
   ApiError: class ApiError extends Error {},
 }));
 
@@ -86,6 +86,10 @@ describe("English and Arabic internationalization", () => {
       ffmpeg_available: true,
       download_dir_writable: true,
       database_ok: true,
+    });
+    vi.mocked(api.adminAnalyticsOverview).mockResolvedValue({
+      range: "today", visitors: 0, page_views: 0, downloads_completed: 0,
+      new_users: 0, paid_conversions: 0, active_now: 0, download_success_rate: null,
     });
     await i18n.changeLanguage("ar");
     render(<MemoryRouter><AdminOverview /></MemoryRouter>);

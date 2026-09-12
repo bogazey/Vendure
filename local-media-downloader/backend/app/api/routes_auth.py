@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import ACCESS_COOKIE_NAME, REFRESH_COOKIE_NAME, get_current_user, get_db
 from app.config.commercial_settings import get_commercial_settings
 from app.database.commercial_models import User
+from app.models.commercial_enums import AnalyticsEventType
 from app.models.commercial_schemas import (
     ForgotPasswordRequest,
     LoginRequest,
@@ -20,6 +21,7 @@ from app.models.commercial_schemas import (
     UserOut,
     VerifyEmailRequest,
 )
+from app.services import analytics_service
 from app.services.auth_service import AuthResult, auth_service
 from app.services.rate_limit_service import login_limiter, password_reset_limiter, signup_limiter
 from app.utils.exceptions import InvalidTokenError, RateLimitedError
@@ -76,6 +78,17 @@ async def signup(payload: SignupRequest, request: Request, response: Response, d
         raise RateLimitedError("Too many signup attempts. Please try again later.")
     result = auth_service.signup(db, payload.email, payload.password)
     _set_session_cookies(response, result)
+
+    visitor_id = analytics_service.ensure_visitor_id(request, response)
+    if not analytics_service.request_is_bot(request):
+        analytics_service.record_event(
+            db, AnalyticsEventType.SIGNUP_COMPLETED,
+            visitor_id=visitor_id, user_id=result.user.id,
+            country_code=analytics_service.request_country_code(request),
+            **analytics_service.request_device_context(request),
+        )
+        db.commit()
+
     return UserOut.model_validate(result.user, from_attributes=True)
 
 

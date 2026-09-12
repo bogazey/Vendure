@@ -25,9 +25,10 @@ from app.config.logging_config import get_logger
 from app.config.commercial_settings import get_commercial_settings
 from app.database import history_repo
 from app.database.commercial_db import session_scope
+from app.models.commercial_enums import AnalyticsEventType
 from app.models.enums import ContainerMode, CookieSource, DownloadStage, MediaType, Platform
 from app.models.schemas import AppSettings, CreateDownloadRequest, DownloadJobOut
-from app.services import guest_service, ytdlp_service
+from app.services import analytics_service, guest_service, ytdlp_service
 from app.services.guest_storage_service import ensure_within_guest_dir, guest_download_dir
 from app.services.settings_service import get_settings
 from app.services.usage_service import usage_service
@@ -89,6 +90,16 @@ class DownloadJob:
     # request.quality_key == "best" - see ytdlp_service.build_format_selector's
     # max_height parameter, which is what actually enforces it.
     max_resolution_height: Optional[int] = None
+    # Captured once, at HTTP-request time, from the same context download_
+    # started was recorded with (see routes_downloads.create_download) -
+    # a background job has no live request to re-derive these from when it
+    # finishes, so they ride along on the job itself. Analytics-only; never
+    # used for any gating/authorization decision.
+    visitor_id: Optional[str] = None
+    analytics_country_code: Optional[str] = None
+    analytics_device_type: Optional[str] = None
+    analytics_browser_family: Optional[str] = None
+    analytics_os_family: Optional[str] = None
     title: Optional[str] = None
     uploader: Optional[str] = None
     thumbnail: Optional[str] = None
@@ -191,8 +202,11 @@ class DownloadManager:
         guest_id: Optional[str] = None,
         reservation_id: Optional[str] = None,
         max_resolution_height: Optional[int] = None,
+        visitor_id: Optional[str] = None,
+        analytics_context: Optional[dict[str, Optional[str]]] = None,
     ) -> DownloadJob:
         platform = detect_platform(request.url)
+        context = analytics_context or {}
         job = DownloadJob(
             id=job_id or str(uuid.uuid4()),
             request=request,
@@ -201,6 +215,11 @@ class DownloadManager:
             guest_id=guest_id,
             reservation_id=reservation_id,
             max_resolution_height=max_resolution_height,
+            visitor_id=visitor_id,
+            analytics_country_code=context.get("country_code"),
+            analytics_device_type=context.get("device_type"),
+            analytics_browser_family=context.get("browser_family"),
+            analytics_os_family=context.get("os_family"),
         )
         with self._lock:
             self._jobs[job.id] = job
@@ -663,6 +682,28 @@ class DownloadManager:
             finally:
                 session.close()
 
+    def _record_download_analytics(self, job: DownloadJob, event_type: AnalyticsEventType, failure_category: Optional[str] = None) -> None:
+        """Best-effort only - analytics must never affect the download
+        pipeline itself. Uses its own session (this runs in a background
+        task with no FastAPI request-scoped session to reuse), mirroring
+        _finalize_usage's pattern."""
+        session = session_scope()
+        try:
+            analytics_service.record_event(
+                session, event_type,
+                visitor_id=job.visitor_id, user_id=job.user_id, job_id=job.id,
+                source_platform=job.platform.value, media_type=job.request.media_type.value,
+                format=analytics_service.derive_format_label(job.request), failure_category=failure_category,
+                country_code=job.analytics_country_code, device_type=job.analytics_device_type,
+                browser_family=job.analytics_browser_family, os_family=job.analytics_os_family,
+            )
+            session.commit()
+        except Exception:
+            session.rollback()
+            logger.exception("Failed to record download analytics for job %s", job.id)
+        finally:
+            session.close()
+
     def _finish_as_completed(self, job: DownloadJob) -> None:
         job.stage = DownloadStage.COMPLETED
         job.progress_percent = 100.0
@@ -670,6 +711,7 @@ class DownloadManager:
         self._bump_revision()
         self._save_history(job)
         self._finalize_usage(job, committed=True)
+        self._record_download_analytics(job, AnalyticsEventType.DOWNLOAD_COMPLETED)
         logger.info("Job %s completed", job.id)
 
     def _finish_as_cancelled(self, job: DownloadJob) -> None:
@@ -689,6 +731,7 @@ class DownloadManager:
         self._bump_revision()
         self._save_history(job)
         self._finalize_usage(job, committed=False)
+        self._record_download_analytics(job, AnalyticsEventType.DOWNLOAD_FAILED, analytics_service.classify_failure(exc))
         logger.error("Job %s failed: %s", job.id, job.error_message)
 
     def _save_history(self, job: DownloadJob) -> None:

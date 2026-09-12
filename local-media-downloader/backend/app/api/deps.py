@@ -17,6 +17,7 @@ from app.utils.exceptions import AuthError, ForbiddenError
 ACCESS_COOKIE_NAME = "lmd_access"
 REFRESH_COOKIE_NAME = "lmd_refresh"
 GUEST_COOKIE_NAME = "lmd_guest"
+VISITOR_COOKIE_NAME = "lmd_visitor"
 
 
 def get_db() -> Iterator[Session]:

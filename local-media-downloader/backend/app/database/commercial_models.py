@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     Boolean,
     ForeignKey,
+    Index,
     Integer,
     JSON,
     String,
@@ -251,6 +252,62 @@ class UserDownloadPreferences(Base):
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=_now, onupdate=_now, nullable=False
     )
+
+
+class AnalyticsEvent(Base):
+    """First-party, privacy-conscious analytics: one row per tracked event.
+
+    Deliberately holds NO free-form metadata JSON and NO raw media URLs/IP
+    addresses - every field is a specific, whitelisted, aggregate-safe
+    attribute (see app/services/analytics_service.py, which is the only
+    writer). `visitor_id` is an opaque, unauthenticated random token minted
+    into a first-party cookie (see ensure_visitor) - it grants no privilege,
+    so unlike GuestQuota's token it is never checked against a server-side
+    row; a forged value can only skew someone's own analytics, never another
+    user's data or any entitlement. `job_id` lets a download's `started` and
+    `completed`/`failed` events be joined for processing-time stats without
+    ever repeating the submitted URL. Raw rows are retained for
+    ANALYTICS_RETENTION_DAYS (see media_cleanup_service / commercial_settings)
+    then purged - see docs/ANALYTICS.md for the full retention policy."""
+
+    __tablename__ = "analytics_events"
+    __table_args__ = (Index("ix_analytics_events_type_ts", "event_type", "timestamp"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    event_type: Mapped[str] = mapped_column(String(30), index=True, nullable=False)
+    visitor_id: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
+    user_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"), index=True, nullable=True)
+    timestamp: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, index=True, nullable=False)
+
+    # page_view only
+    path: Mapped[str | None] = mapped_column(String(255), index=True, nullable=True)
+    locale: Mapped[str | None] = mapped_column(String(5), nullable=True)
+    referrer_domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    utm_source: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    utm_medium: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    utm_campaign: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    # analyze/download events
+    job_id: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
+    source_platform: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    media_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    format: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    failure_category: Mapped[str | None] = mapped_column(String(40), nullable=True)
+
+    # plan_upgraded / plan_downgraded / subscription_cancelled: `plan` is the
+    # resulting plan, `from_plan` the plan immediately before the change -
+    # together they let admin reporting show real movements (e.g.
+    # "pro -> creator") without guessing direction from a single value.
+    plan: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    from_plan: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    # request/client context, derived server-side only - never trusted from
+    # the browser payload (see analytics_service.record_event)
+    country_code: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    device_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    browser_family: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    os_family: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    client: Mapped[str] = mapped_column(String(20), default="web", nullable=False)
 
 
 class EmailVerificationToken(Base):

@@ -5,6 +5,7 @@ import { adminPageShell } from "../../styles/ui";
 
 const TABS = [
   { to: "/admin", end: true, key: "overview" },
+  { to: "/admin/statistics", end: false, key: "statistics" },
   { to: "/admin/users", end: false, key: "users" },
   { to: "/admin/billing", end: false, key: "billing" },
   { to: "/admin/activity", end: false, key: "activity" },

@@ -33,9 +33,10 @@ from app.api.deps import GUEST_COOKIE_NAME, get_current_user, get_db, get_guest_
 from app.config.commercial_settings import get_commercial_settings
 from app.database import history_repo
 from app.database.commercial_models import User
+from app.models.commercial_enums import AnalyticsEventType
 from app.models.commercial_schemas import GuestQuotaOut
 from app.models.schemas import CreateDownloadRequest, DownloadJobOut
-from app.services import guest_service
+from app.services import analytics_service, guest_service
 from app.services.account_service import account_service
 from app.services.download_gate_service import download_gate_service
 from app.services.download_manager import manager
@@ -97,12 +98,28 @@ def _set_guest_cookie(response: Response, guest_id: str) -> None:
     )
 
 
+def _record_download_started(
+    db: Session, request: CreateDownloadRequest, job_id: str, visitor_id: str,
+    user_id: Optional[str], analytics_context: dict,
+) -> None:
+    analytics_service.record_event(
+        db, AnalyticsEventType.DOWNLOAD_STARTED,
+        visitor_id=visitor_id, user_id=user_id, job_id=job_id,
+        source_platform=detect_platform(request.url).value, media_type=request.media_type.value,
+        format=analytics_service.derive_format_label(request), **analytics_context,
+    )
+    # Commit immediately (see routes_analyze.py for the same reasoning) -
+    # get_db()'s end-of-request commit would roll this back too if anything
+    # later in the request raises.
+    db.commit()
+
+
 def _gate_and_create(
-    request: CreateDownloadRequest, user: User, db: Session
+    request: CreateDownloadRequest, user: User, db: Session, job_id: str,
+    visitor_id: str, analytics_context: dict,
 ) -> DownloadJobOut:
     _validate_url(request)
     plan, subscription = account_service.get_current_plan(db, user.id)
-    job_id = str(uuid.uuid4())
 
     reservation_id, max_resolution_height = download_gate_service.authorize_and_reserve(
         db, user, plan, subscription, request, job_id
@@ -111,22 +128,28 @@ def _gate_and_create(
     # commit/refund it in the background - get_db's end-of-request commit
     # happens too late for that race to be safe.
     db.commit()
+    _record_download_started(db, request, job_id, visitor_id, user.id, analytics_context)
 
     job = manager.create_job(
         request, job_id=job_id, user_id=user.id, reservation_id=reservation_id,
-        max_resolution_height=max_resolution_height,
+        max_resolution_height=max_resolution_height, visitor_id=visitor_id, analytics_context=analytics_context,
     )
     return job.to_out()
 
 
 def _gate_and_create_guest(
-    request: CreateDownloadRequest, guest_id: str, db: Session
+    request: CreateDownloadRequest, guest_id: str, db: Session, job_id: str,
+    visitor_id: str, analytics_context: dict,
 ) -> DownloadJobOut:
     _validate_url(request)
     max_resolution_height = guest_service.authorize_and_reserve(db, guest_id, request)
     db.commit()
+    _record_download_started(db, request, job_id, visitor_id, None, analytics_context)
 
-    job = manager.create_job(request, guest_id=guest_id, max_resolution_height=max_resolution_height)
+    job = manager.create_job(
+        request, job_id=job_id, guest_id=guest_id, max_resolution_height=max_resolution_height,
+        visitor_id=visitor_id, analytics_context=analytics_context,
+    )
     return job.to_out()
 
 
@@ -139,8 +162,15 @@ async def create_download(
     guest_token: Optional[str] = Cookie(default=None, alias=GUEST_COOKIE_NAME),
     db: Session = Depends(get_db),
 ) -> DownloadJobOut:
+    job_id = str(uuid.uuid4())
+    visitor_id = analytics_service.ensure_visitor_id(http_request, response)
+    analytics_context = {
+        "country_code": analytics_service.request_country_code(http_request),
+        **analytics_service.request_device_context(http_request),
+    }
+
     if user is not None:
-        return _gate_and_create(request, user, db)
+        return _gate_and_create(request, user, db, job_id, visitor_id, analytics_context)
 
     # Server-side quota (guest_service) is the real enforcement; this is a
     # coarse secondary guard against one IP cycling guest cookies to farm
@@ -152,7 +182,7 @@ async def create_download(
     if is_new:
         db.commit()
         _set_guest_cookie(response, guest_id)
-    return _gate_and_create_guest(request, guest_id, db)
+    return _gate_and_create_guest(request, guest_id, db, job_id, visitor_id, analytics_context)
 
 
 @router.get("/guest-quota", response_model=GuestQuotaOut)
@@ -223,6 +253,8 @@ async def cancel_download(
 @router.post("/{job_id}/retry", response_model=DownloadJobOut, status_code=201)
 async def retry_download(
     job_id: str,
+    http_request: Request,
+    response: Response,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DownloadJobOut:
@@ -231,4 +263,10 @@ async def retry_download(
         raise JobNotFoundError("History record not found.")
     raw = history_repo.get_request_json(job_id)
     request = CreateDownloadRequest(**json.loads(raw)) if raw else CreateDownloadRequest(url=record.url)
-    return _gate_and_create(request, user, db)
+    new_job_id = str(uuid.uuid4())
+    visitor_id = analytics_service.ensure_visitor_id(http_request, response)
+    analytics_context = {
+        "country_code": analytics_service.request_country_code(http_request),
+        **analytics_service.request_device_context(http_request),
+    }
+    return _gate_and_create(request, user, db, new_job_id, visitor_id, analytics_context)

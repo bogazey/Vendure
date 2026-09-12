@@ -8,7 +8,7 @@ from pathlib import Path
 from app.config.commercial_settings import get_commercial_settings
 from app.config.logging_config import get_logger
 from app.database.commercial_db import session_scope
-from app.services import guest_service
+from app.services import analytics_service, guest_service
 from app.services.download_manager import manager
 from app.services.guest_storage_service import remove_guest_dir
 from app.utils.paths import is_within
@@ -97,8 +97,22 @@ def cleanup_once() -> None:
     for guest_id in expired_guest_ids:
         remove_guest_dir(guest_id)
     removed = cleanup_media_files(active_paths=manager.active_filepaths())
+
+    session = session_scope()
+    try:
+        purged_events = analytics_service.purge_expired_events(session)
+        session.commit()
+    except Exception:
+        session.rollback()
+        purged_events = 0
+        logger.exception("Analytics retention cleanup failed")
+    finally:
+        session.close()
+
     if expired_guest_ids or removed:
         logger.info("Media cleanup removed %d expired guest directories and %d stale files", len(expired_guest_ids), removed)
+    if purged_events:
+        logger.info("Analytics retention cleanup purged %d expired event(s)", purged_events)
 
 
 async def periodic_cleanup() -> None:

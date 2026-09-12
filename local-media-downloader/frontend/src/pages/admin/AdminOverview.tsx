@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import ErrorBanner from "../../components/ErrorBanner";
 import { ApiError, api } from "../../services/api";
 import { statLabel, statTile, statValue } from "../../styles/ui";
+import type { AnalyticsOverviewOut } from "../../types/analytics";
 import type { AdminHealthOut, AdminOverviewOut } from "../../types/commercial";
 import { formatDate } from "../../utils/format";
 import AdminLayout from "./AdminLayout";
@@ -11,6 +12,7 @@ import { actionLabelKey, HealthDot } from "./adminShared";
 export default function AdminOverview() {
   const { t } = useTranslation();
   const [overview, setOverview] = useState<AdminOverviewOut | null>(null);
+  const [analytics, setAnalytics] = useState<AnalyticsOverviewOut | null>(null);
   const [health, setHealth] = useState<AdminHealthOut | null>(null);
   const [healthError, setHealthError] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,6 +26,9 @@ export default function AdminOverview() {
         return null;
       }),
       api.adminGetHealth().then(setHealth).catch(() => setHealthError(true)),
+      // Best-effort - the Overview page must stay useful even if the
+      // analytics summary alone fails to load (see docs/ANALYTICS.md).
+      api.adminAnalyticsOverview("today").then(setAnalytics).catch(() => undefined),
     ])
       .then(([overviewResult]) => {
         if (overviewResult) setOverview(overviewResult);
@@ -65,6 +70,33 @@ export default function AdminOverview() {
               <span className={statValue}>{overview.creator_count}</span>
             </div>
           </div>
+
+          {analytics && (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              <div className={statTile}>
+                <span className={statLabel}>{t("admin.overview.visitorsToday")}</span>
+                <span className={statValue}>{analytics.visitors}</span>
+              </div>
+              <div className={statTile}>
+                <span className={statLabel}>{t("admin.overview.downloadsToday")}</span>
+                <span className={statValue}>{analytics.downloads_completed}</span>
+              </div>
+              <div className={statTile}>
+                <span className={statLabel}>{t("admin.overview.newUsersToday")}</span>
+                <span className={statValue}>{analytics.new_users}</span>
+              </div>
+              <div className={statTile}>
+                <span className={statLabel}>{t("admin.overview.downloadSuccessRate")}</span>
+                <span className={statValue}>
+                  {analytics.download_success_rate !== null ? `${analytics.download_success_rate.toFixed(1)}%` : "—"}
+                </span>
+              </div>
+              <div className={statTile}>
+                <span className={statLabel}>{t("admin.overview.activeNow")}</span>
+                <span className={statValue}>{analytics.active_now}</span>
+              </div>
+            </div>
+          )}
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className={statTile}>

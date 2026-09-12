@@ -70,6 +70,38 @@ class AdminActionType(str, Enum):
     AD_PLACEMENT_UPDATED = "ad_placement_updated"
 
 
+class AnalyticsEventType(str, Enum):
+    """The full, closed set of analytics events Loady records. Anything not
+    in this list is rejected outright - see analytics_service.py and
+    docs/ANALYTICS.md for which of these are browser- vs server-generated."""
+
+    PAGE_VIEW = "page_view"
+    ANALYZE_STARTED = "analyze_started"
+    ANALYZE_COMPLETED = "analyze_completed"
+    ANALYZE_FAILED = "analyze_failed"
+    DOWNLOAD_STARTED = "download_started"
+    DOWNLOAD_COMPLETED = "download_completed"
+    DOWNLOAD_FAILED = "download_failed"
+    SIGNUP_COMPLETED = "signup_completed"
+    PLAN_UPGRADED = "plan_upgraded"
+    PLAN_DOWNGRADED = "plan_downgraded"
+    SUBSCRIPTION_CANCELLED = "subscription_cancelled"
+
+
+class AnalyticsFailureCategory(str, Enum):
+    """Sanitized, admin-safe failure buckets - never a raw exception message,
+    stack trace, or yt-dlp output (those stay in server logs only)."""
+
+    UNSUPPORTED_SOURCE = "unsupported_source"
+    METADATA_FAILURE = "metadata_failure"
+    FORMAT_UNAVAILABLE = "format_unavailable"
+    DOWNLOAD_FAILURE = "download_failure"
+    PROCESSING_FAILURE = "processing_failure"
+    TIMEOUT = "timeout"
+    RATE_LIMITED = "rate_limited"
+    OTHER = "other"
+
+
 class AdPlacementId(str, Enum):
     """Stable identifiers for the fixed set of ad placements the frontend
     can render (see components/AdSlot.tsx). Adding a new placement means

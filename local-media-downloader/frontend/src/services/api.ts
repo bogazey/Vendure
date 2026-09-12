@@ -29,6 +29,19 @@ import type {
   UpdateDownloadPreferencesRequest,
   UserOut,
 } from "../types/commercial";
+import type {
+  AnalyticsOverviewOut,
+  AnalyticsRange,
+  DevicesOut,
+  DownloadsOut,
+  FunnelOut,
+  GeographyOut,
+  PagesOut,
+  RevenueOut,
+  SourcesOut,
+  TrackEventPayload,
+  TrafficOut,
+} from "../types/analytics";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? "http://127.0.0.1:8000" : "");
 
@@ -278,6 +291,32 @@ export const api = {
     const qs = query.toString();
     return request<AdminActionLogOut[]>(`/api/admin/audit-log${qs ? `?${qs}` : ""}`);
   },
+
+  // --- Analytics ---
+  // Fire-and-forget from the caller's perspective (see lib/pageTracking.ts) -
+  // this call itself is a normal request and can reject, but nothing in the
+  // app awaits it in a way that would surface that failure to the user.
+  trackEvent: (payload: TrackEventPayload) =>
+    request<void>("/api/analytics/event", { method: "POST", body: JSON.stringify(payload) }),
+
+  adminAnalyticsOverview: (range: AnalyticsRange) =>
+    request<AnalyticsOverviewOut>(`/api/admin/analytics/overview?range=${range}`),
+  adminAnalyticsTraffic: (range: AnalyticsRange) =>
+    request<TrafficOut>(`/api/admin/analytics/traffic?range=${range}`),
+  adminAnalyticsPages: (range: AnalyticsRange) =>
+    request<PagesOut>(`/api/admin/analytics/pages?range=${range}`),
+  adminAnalyticsSources: (range: AnalyticsRange) =>
+    request<SourcesOut>(`/api/admin/analytics/sources?range=${range}`),
+  adminAnalyticsGeography: (range: AnalyticsRange) =>
+    request<GeographyOut>(`/api/admin/analytics/geography?range=${range}`),
+  adminAnalyticsDevices: (range: AnalyticsRange) =>
+    request<DevicesOut>(`/api/admin/analytics/devices?range=${range}`),
+  adminAnalyticsDownloads: (range: AnalyticsRange) =>
+    request<DownloadsOut>(`/api/admin/analytics/downloads?range=${range}`),
+  adminAnalyticsFunnel: (range: AnalyticsRange) =>
+    request<FunnelOut>(`/api/admin/analytics/funnel?range=${range}`),
+  adminAnalyticsRevenue: (range: AnalyticsRange) =>
+    request<RevenueOut>(`/api/admin/analytics/revenue?range=${range}`),
 
   // --- Ads ---
   listAdPlacements: () => request<AdPlacementOut[]>("/api/ads/placements"),

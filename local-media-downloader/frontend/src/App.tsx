@@ -9,11 +9,13 @@ import Header from "./components/Header";
 import ProtectedRoute, { AdminRoute, GuestAllowedRoute } from "./components/ProtectedRoute";
 import Sidebar from "./components/Sidebar";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { usePageViewTracking } from "./lib/pageTracking";
 import Account from "./pages/Account";
 import AdminActivity from "./pages/admin/AdminActivity";
 import AdminAds from "./pages/admin/AdminAds";
 import AdminBilling from "./pages/admin/AdminBilling";
 import AdminOverview from "./pages/admin/AdminOverview";
+import AdminStatistics from "./pages/admin/AdminStatistics";
 import AdminSystem from "./pages/admin/AdminSystem";
 import AdminUsers from "./pages/admin/AdminUsers";
 import ForgotPassword from "./pages/auth/ForgotPassword";
@@ -53,6 +55,7 @@ function AppShell() {
   const location = useLocation();
   const isAppRoute = APP_ROUTE_PREFIXES.some((p) => location.pathname.startsWith(p));
   const showSidebar = isAppRoute && !!account;
+  usePageViewTracking();
 
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [healthError, setHealthError] = useState(false);
@@ -123,6 +126,7 @@ function AppShell() {
               <Route path="/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
               <Route path="/usage" element={<ProtectedRoute><Usage /></ProtectedRoute>} />
               <Route path="/admin" element={<AdminRoute><AdminOverview /></AdminRoute>} />
+              <Route path="/admin/statistics" element={<AdminRoute><AdminStatistics /></AdminRoute>} />
               <Route path="/admin/users" element={<AdminRoute><AdminUsers /></AdminRoute>} />
               <Route path="/admin/billing" element={<AdminRoute><AdminBilling /></AdminRoute>} />
               <Route path="/admin/activity" element={<AdminRoute><AdminActivity /></AdminRoute>} />

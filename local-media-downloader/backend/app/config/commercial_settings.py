@@ -89,6 +89,14 @@ class CommercialSettings(BaseSettings):
     # --- Ads ---
     ads_enabled: bool = Field(default=True, alias="ADS_ENABLED")
 
+    # --- Analytics ---
+    # First-party, privacy-conscious web analytics - see app/services/
+    # analytics_service.py and docs/ANALYTICS.md. Raw events are purged after
+    # this many days by the existing periodic media-cleanup task; there is no
+    # separate aggregated/long-term table in V1 (see docs/ANALYTICS.md
+    # "Scaling considerations" for the documented upgrade path).
+    analytics_retention_days: int = Field(default=90, ge=1, le=365, alias="ANALYTICS_RETENTION_DAYS")
+
     # --- Frontend origin (for email links, CORS is handled in main.py) ---
     frontend_base_url: str = Field(default="http://127.0.0.1:5173", alias="FRONTEND_BASE_URL")
 

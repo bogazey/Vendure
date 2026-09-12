@@ -3,15 +3,31 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import AdminOverview from "./AdminOverview";
 import { api } from "../../services/api";
+import type { AnalyticsOverviewOut } from "../../types/analytics";
 import type { AdminHealthOut, AdminOverviewOut } from "../../types/commercial";
 
 vi.mock("../../services/api", () => ({
   api: {
     adminGetOverview: vi.fn(),
     adminGetHealth: vi.fn(),
+    adminAnalyticsOverview: vi.fn(),
   },
   ApiError: class ApiError extends Error {},
 }));
+
+function makeAnalyticsOverview(overrides: Partial<AnalyticsOverviewOut> = {}): AnalyticsOverviewOut {
+  return {
+    range: "today",
+    visitors: 5,
+    page_views: 11,
+    downloads_completed: 3,
+    new_users: 1,
+    paid_conversions: 0,
+    active_now: 2,
+    download_success_rate: 100,
+    ...overrides,
+  };
+}
 
 function makeOverview(overrides: Partial<AdminOverviewOut> = {}): AdminOverviewOut {
   return {
@@ -50,6 +66,7 @@ function renderPage() {
 
 beforeEach(() => {
   vi.mocked(api.adminGetHealth).mockResolvedValue(makeHealth());
+  vi.mocked(api.adminAnalyticsOverview).mockResolvedValue(makeAnalyticsOverview());
 });
 
 describe("AdminOverview", () => {
@@ -61,6 +78,28 @@ describe("AdminOverview", () => {
     expect(screen.getByText("40")).toBeInTheDocument();
     expect(screen.getByText("12")).toBeInTheDocument();
     expect(screen.getByText("517")).toBeInTheDocument();
+  });
+
+  it("renders the analytics summary row (visitors/downloads/new users/success rate/active now) today", async () => {
+    vi.mocked(api.adminGetOverview).mockResolvedValue(makeOverview());
+    vi.mocked(api.adminAnalyticsOverview).mockResolvedValue(
+      makeAnalyticsOverview({ visitors: 123, downloads_completed: 45, new_users: 6, active_now: 7, download_success_rate: 92.5 })
+    );
+    renderPage();
+
+    expect(await screen.findByText("123")).toBeInTheDocument();
+    expect(screen.getByText("45")).toBeInTheDocument();
+    expect(screen.getByText("6")).toBeInTheDocument();
+    expect(screen.getByText("7")).toBeInTheDocument();
+    expect(screen.getByText("92.5%")).toBeInTheDocument();
+  });
+
+  it("still renders the overview even if the analytics summary fails to load", async () => {
+    vi.mocked(api.adminGetOverview).mockResolvedValue(makeOverview());
+    vi.mocked(api.adminAnalyticsOverview).mockRejectedValue(new Error("boom"));
+    renderPage();
+
+    expect(await screen.findByText("42")).toBeInTheDocument();
   });
 
   it("shows recent billing failures and admin actions when present", async () => {

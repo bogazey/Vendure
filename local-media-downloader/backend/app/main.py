@@ -19,6 +19,8 @@ from app.api import (
     routes_account,
     routes_ads,
     routes_admin,
+    routes_admin_analytics,
+    routes_analytics,
     routes_analyze,
     routes_auth,
     routes_billing,
@@ -137,6 +139,8 @@ app.include_router(routes_auth.router)
 app.include_router(routes_account.router)
 app.include_router(routes_billing.router)
 app.include_router(routes_admin.router)
+app.include_router(routes_admin_analytics.router)
+app.include_router(routes_analytics.router)
 app.include_router(routes_ads.router)
 app.include_router(routes_analyze.router)
 app.include_router(routes_downloads.router)
