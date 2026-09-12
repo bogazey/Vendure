@@ -7,7 +7,7 @@ import { track } from "../lib/analytics";
 import { openPaddleCheckout } from "../lib/paddle";
 import { ApiError, api } from "../services/api";
 import type { BillingPeriod, Plan } from "../types/commercial";
-import { PLAN_PRICES } from "../types/commercial";
+import { PLAN_PRICES, PLAN_RANK } from "../types/commercial";
 
 const ASSETS = "/assets/design";
 
@@ -28,13 +28,23 @@ export default function Pricing() {
 
   const handleSelect = async (plan: Plan) => {
     setError(null);
-    if (plan === "free") {
-      if (!account) navigate("/signup");
-      else navigate("/dashboard");
+    if (!account) {
+      if (plan === "free") navigate("/signup");
+      else navigate("/signup", { state: { intendedPlan: plan, intendedPeriod: period } });
       return;
     }
-    if (!account) {
-      navigate("/signup", { state: { intendedPlan: plan, intendedPeriod: period } });
+    if (PLAN_RANK[plan] <= PLAN_RANK[account.subscription.plan]) {
+      // The current plan itself is handled by the disabled "Current plan"
+      // button above and never reaches here. A genuinely lower tier is never
+      // a one-click checkout or downgrade from this page - it routes to the
+      // existing Manage subscription flow (BillingManagement), which already
+      // handles cancellation (-> free) and Paddle change-plan (Pro<->Creator)
+      // behind an explicit confirmation step.
+      navigate("/billing");
+      return;
+    }
+    if (plan === "free") {
+      navigate("/dashboard");
       return;
     }
     if (["active", "trialing", "past_due"].includes(account.subscription.status)) {
@@ -132,7 +142,11 @@ export default function Pricing() {
           const price = plan === "free" ? 0 : PLAN_PRICES[plan][period];
           const displayPrice = plan !== "free" && period === "annual" ? price.toFixed(2) : price;
           const isCurrent = currentPlan === plan;
-          const isRecommended = plan === "pro";
+          const isLowerTier = !!currentPlan && PLAN_RANK[plan] < PLAN_RANK[currentPlan];
+          // "Most popular" is a marketing badge for Pro - it must never make
+          // a lower tier than the account's current plan look like the
+          // recommended upgrade (e.g. a Creator viewing the Pro card).
+          const isRecommended = plan === "pro" && !isLowerTier;
           const features = t(`pricing.plans.${plan}.features`, { returnObjects: true }) as string[];
           return (
             <div
@@ -196,15 +210,17 @@ export default function Pricing() {
                 type="button"
                 disabled={isCurrent || checkingOut === plan}
                 onClick={() => handleSelect(plan)}
-                className={isRecommended ? "btn-gradient w-full" : "btn-glass w-full"}
+                className={isRecommended && !isCurrent ? "btn-gradient w-full" : "btn-glass w-full"}
               >
                 {isCurrent
                   ? t("pricing.current")
-                  : checkingOut === plan
-                    ? t("pricing.starting")
-                    : plan === "free"
-                      ? t("pricing.startFree")
-                      : t("pricing.upgrade")}
+                  : isLowerTier
+                    ? t("pricing.manageSubscription")
+                    : checkingOut === plan
+                      ? t("pricing.starting")
+                      : plan === "free"
+                        ? t("pricing.startFree")
+                        : t("pricing.upgrade")}
               </button>
             </div>
           );

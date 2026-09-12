@@ -182,6 +182,15 @@ export const PLAN_LABELS: Record<Plan, string> = {
   creator: "Creator",
 };
 
+// Single canonical ordering for plan comparisons - every "is this an
+// upgrade/downgrade/the current plan" check across the app must go through
+// this instead of comparing plan strings directly.
+export const PLAN_RANK: Record<Plan, number> = {
+  free: 0,
+  pro: 1,
+  creator: 2,
+};
+
 export const PLAN_PRICES: Record<"pro" | "creator", { monthly: number; annual: number }> = {
   pro: { monthly: 4.99, annual: 47.9 },
   creator: { monthly: 9.99, annual: 95.9 },

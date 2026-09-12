@@ -118,6 +118,7 @@
     "starting": "Starting checkout…",
     "startFree": "Start free",
     "upgrade": "Upgrade",
+    "manageSubscription": "Manage subscription",
     "month": "mo",
     "year": "yr",
     "checkoutError": "Could not start checkout.",
