@@ -16,6 +16,12 @@ import type { AnalyzeResponse, CreateDownloadRequest, DownloadStage, GuestQuotaO
 
 const UPGRADE_ERROR_CODES = new Set(["PLAN_LIMIT_REACHED", "DAILY_LIMIT_REACHED", "FEATURE_NOT_INCLUDED", "UPGRADE_REQUIRED"]);
 
+// Signed-out visitors get exactly the Free plan's resolution ceiling (see
+// guest_service.py, which reuses Plan.FREE's policy) - this mirrors that
+// same, already publicly-advertised number (see the pricing/FAQ copy) only
+// for display purposes; the backend is the actual enforcement point either way.
+const GUEST_MAX_RESOLUTION_HEIGHT = 720;
+
 export default function Dashboard() {
   const { t } = useTranslation();
   const location = useLocation();
@@ -192,7 +198,12 @@ export default function Dashboard() {
               </Link>
             </div>
           ) : (
-            <FormatSelector media={media} onStartDownload={handleStartDownload} submitting={submitting} />
+            <FormatSelector
+              media={media}
+              onStartDownload={handleStartDownload}
+              submitting={submitting}
+              maxResolutionHeight={account ? account.features.max_resolution_height : GUEST_MAX_RESOLUTION_HEIGHT}
+            />
           )}
           {queuedMessage && (
             <p className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 backdrop-blur-xl">

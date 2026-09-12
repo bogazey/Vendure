@@ -37,13 +37,24 @@ function makeEntry(overrides: Partial<MediaEntry> = {}): MediaEntry {
 
 describe("FormatSelector", () => {
   it("shows video/audio quality controls for an ordinary video result", () => {
-    render(<FormatSelector media={makeMedia()} onStartDownload={vi.fn()} submitting={false} />);
+    render(<FormatSelector media={makeMedia()} onStartDownload={vi.fn()} submitting={false} maxResolutionHeight={null} />);
     expect(screen.getByText("Best Available")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /start download/i })).toBeInTheDocument();
   });
 
+  it("shows the plan's resolution ceiling next to Best Available when the plan is capped", () => {
+    render(<FormatSelector media={makeMedia()} onStartDownload={vi.fn()} submitting={false} maxResolutionHeight={720} />);
+    expect(screen.getByText("Best Available · Up to 720p on your plan")).toBeInTheDocument();
+    expect(screen.queryByText("Best Available", { exact: true })).not.toBeInTheDocument();
+  });
+
+  it("shows plain Best Available with no suffix when the plan is uncapped", () => {
+    render(<FormatSelector media={makeMedia()} onStartDownload={vi.fn()} submitting={false} maxResolutionHeight={null} />);
+    expect(screen.getByText("Best Available")).toBeInTheDocument();
+  });
+
   it("shows a single Download Image action for an image result, with no video/audio controls", () => {
-    render(<FormatSelector media={makeMedia({ media_type: "image", image_url: "https://example.com/a.jpg" })} onStartDownload={vi.fn()} submitting={false} />);
+    render(<FormatSelector media={makeMedia({ media_type: "image", image_url: "https://example.com/a.jpg" })} onStartDownload={vi.fn()} submitting={false} maxResolutionHeight={720} />);
 
     expect(screen.getByRole("button", { name: "Download Image" })).toBeInTheDocument();
     expect(screen.queryByText("Video")).not.toBeInTheDocument();
@@ -53,7 +64,7 @@ describe("FormatSelector", () => {
 
   it("submits an image download request when Download Image is clicked", async () => {
     const onStartDownload = vi.fn();
-    render(<FormatSelector media={makeMedia({ media_type: "image" })} onStartDownload={onStartDownload} submitting={false} />);
+    render(<FormatSelector media={makeMedia({ media_type: "image" })} onStartDownload={onStartDownload} submitting={false} maxResolutionHeight={720} />);
     await userEvent.click(screen.getByRole("button", { name: "Download Image" }));
 
     expect(onStartDownload).toHaveBeenCalledWith(
@@ -67,6 +78,7 @@ describe("FormatSelector", () => {
         media={makeMedia({ is_playlist: true, media_items: [makeEntry({ index: 1 }), makeEntry({ index: 2, media_type: "video", duration: 5 })] })}
         onStartDownload={vi.fn()}
         submitting={false}
+        maxResolutionHeight={720}
       />
     );
     expect(screen.getByText("2 items in this post")).toBeInTheDocument();

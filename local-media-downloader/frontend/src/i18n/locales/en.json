@@ -340,6 +340,8 @@
   "format": {
     "video": "Video",
     "audioOnly": "Audio Only",
+    "bestAvailable": "Best Available",
+    "bestAvailableUpToHeight": "Best Available · Up to {{height}}p on your plan",
     "bitrate": "Bitrate",
     "start": "Start",
     "end": "End",

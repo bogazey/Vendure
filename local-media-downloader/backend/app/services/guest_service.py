@@ -29,7 +29,7 @@ from app.models.enums import MediaType
 from app.models.schemas import CreateDownloadRequest
 from app.services import plan_policy
 from app.services.entitlement_service import entitlement_service
-from app.utils.exceptions import GuestQuotaExceededError, PlanLimitReachedError
+from app.utils.exceptions import GuestQuotaExceededError
 
 _TOKEN_BYTES = 32
 
@@ -57,15 +57,6 @@ def resolve_or_create(session: Session, presented_token: Optional[str]) -> tuple
     return guest_id, True
 
 
-def _height_for_gating(quality_key: str) -> Optional[int]:
-    if not quality_key or quality_key == "best":
-        return None
-    try:
-        return int(quality_key)
-    except ValueError:
-        return None
-
-
 def get_quota_status(session: Session, guest_id: str) -> tuple[int, int]:
     """Returns (used, limit) where `used` counts both completed downloads
     and any currently in-flight (reserved) ones - i.e. "how many of the
@@ -78,21 +69,24 @@ def get_quota_status(session: Session, guest_id: str) -> tuple[int, int]:
     return quota.downloads_completed + quota.downloads_reserved, limit
 
 
-def authorize_and_reserve(session: Session, guest_id: str, request: CreateDownloadRequest) -> None:
+def authorize_and_reserve(session: Session, guest_id: str, request: CreateDownloadRequest) -> Optional[int]:
     """Raises PlanLimitReachedError/FeatureNotIncludedError for anything a
     Free-plan account couldn't do either (guests get exactly Free's feature
     ceiling), or GuestQuotaExceededError once the allowance is spent.
     Reserves one unit of the allowance on success - the caller must call
     commit_download() on genuine success or refund_download() on failure/
-    cancellation (mirrors usage_service.reserve/commit/refund)."""
+    cancellation (mirrors usage_service.reserve/commit/refund).
+
+    Returns Free's resolution cap (None if Free were ever uncapped) to pass
+    through to DownloadManager.create_job, the same way
+    download_gate_service does for authenticated users - this is what makes
+    a guest's "Best Available" resolve to at most that height instead of
+    being rejected outright."""
+    max_resolution_height: Optional[int] = None
     if request.media_type == MediaType.VIDEO:
         policy = plan_policy.get_policy(Plan.FREE)
-        if request.quality_key == "best" and policy.max_resolution_height is not None:
-            raise PlanLimitReachedError(
-                f"Guest downloads support up to {policy.max_resolution_height}p. "
-                "Create a free account to unlock Best Available."
-            )
-        height = _height_for_gating(request.quality_key)
+        max_resolution_height = policy.max_resolution_height
+        height = plan_policy.parse_explicit_height(request.quality_key)
         entitlement_service.check_resolution(Plan.FREE, height)
         if request.format_id:
             entitlement_service.check_feature(Plan.FREE, "advanced_formats")
@@ -114,6 +108,7 @@ def authorize_and_reserve(session: Session, guest_id: str, request: CreateDownlo
         raise GuestQuotaExceededError(
             "You've used your free downloads. Create a free account to keep downloading."
         )
+    return max_resolution_height
 
 
 def commit_download(session: Session, guest_id: str) -> None:

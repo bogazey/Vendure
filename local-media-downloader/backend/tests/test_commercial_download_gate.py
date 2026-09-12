@@ -38,10 +38,11 @@ class TestFreeVideoGating:
     def test_720p_allowed(self, db_session):
         user = _user(db_session)
         request = CreateDownloadRequest(url="https://youtube.com/watch?v=x", media_type="video", quality_key="720")
-        reservation_id = download_gate_service.authorize_and_reserve(
+        reservation_id, max_resolution_height = download_gate_service.authorize_and_reserve(
             db_session, user, Plan.FREE, None, request, "job-1"
         )
         assert reservation_id
+        assert max_resolution_height == 720
 
     def test_1080p_blocked_for_free(self, db_session):
         user = _user(db_session)
@@ -49,11 +50,18 @@ class TestFreeVideoGating:
         with pytest.raises(PlanLimitReachedError):
             download_gate_service.authorize_and_reserve(db_session, user, Plan.FREE, None, request, "job-1")
 
-    def test_best_quality_blocked_for_capped_plan(self, db_session):
+    def test_best_quality_allowed_for_capped_plan_and_resolves_to_plan_cap(self, db_session):
+        # "Best Available" used to be rejected outright for a capped plan,
+        # forcing the user to manually pick a specific resolution - it now
+        # resolves automatically to the plan's own ceiling instead (see
+        # test_best_available_plan_aware.py for the full scenario matrix).
         user = _user(db_session)
         request = CreateDownloadRequest(url="https://youtube.com/watch?v=x", media_type="video", quality_key="best")
-        with pytest.raises(PlanLimitReachedError):
-            download_gate_service.authorize_and_reserve(db_session, user, Plan.FREE, None, request, "job-1")
+        reservation_id, max_resolution_height = download_gate_service.authorize_and_reserve(
+            db_session, user, Plan.FREE, None, request, "job-1"
+        )
+        assert reservation_id
+        assert max_resolution_height == 720
 
     def test_clip_range_blocked_for_free(self, db_session):
         user = _user(db_session)
@@ -102,7 +110,7 @@ class TestProVideoGating:
     def test_4k_allowed_for_pro(self, db_session):
         user = _user(db_session)
         request = CreateDownloadRequest(url="https://youtube.com/watch?v=x", media_type="video", quality_key="2160")
-        reservation_id = download_gate_service.authorize_and_reserve(
+        reservation_id, _ = download_gate_service.authorize_and_reserve(
             db_session, user, Plan.PRO, None, request, "job-1"
         )
         assert reservation_id
@@ -115,7 +123,7 @@ class TestProVideoGating:
             quality_key="480",
             clip={"start": "00:00:01", "end": "00:00:05"},
         )
-        reservation_id = download_gate_service.authorize_and_reserve(
+        reservation_id, _ = download_gate_service.authorize_and_reserve(
             db_session, user, Plan.PRO, None, request, "job-1"
         )
         assert reservation_id
@@ -124,7 +132,7 @@ class TestProVideoGating:
         user = _user(db_session)
         _set_prefs(db_session, user, container_mode=ContainerMode.ORIGINAL)
         request = CreateDownloadRequest(url="https://youtube.com/watch?v=x", media_type="video", quality_key="480")
-        reservation_id = download_gate_service.authorize_and_reserve(
+        reservation_id, _ = download_gate_service.authorize_and_reserve(
             db_session, user, Plan.PRO, None, request, "job-1"
         )
         assert reservation_id
@@ -161,7 +169,7 @@ class TestImageGating:
     def test_image_allowed_on_free_plan(self, db_session):
         user = _user(db_session)
         request = CreateDownloadRequest(url="https://www.instagram.com/p/ABC123/", media_type="image")
-        reservation_id = download_gate_service.authorize_and_reserve(db_session, user, Plan.FREE, None, request, "job-1")
+        reservation_id, _ = download_gate_service.authorize_and_reserve(db_session, user, Plan.FREE, None, request, "job-1")
         assert reservation_id
         usage = usage_service.get_usage_out(db_session, user, Plan.FREE, None)
         assert usage.daily_free_downloads_used == 1
@@ -178,5 +186,5 @@ class TestImageGating:
         # leak onto images - there is no "resolution" concept for a photo.
         user = _user(db_session)
         request = CreateDownloadRequest(url="https://www.instagram.com/p/ABC123/", media_type="image")
-        reservation_id = download_gate_service.authorize_and_reserve(db_session, user, Plan.FREE, None, request, "job-1")
+        reservation_id, _ = download_gate_service.authorize_and_reserve(db_session, user, Plan.FREE, None, request, "job-1")
         assert reservation_id

@@ -125,18 +125,34 @@ class TestGuestQuotaService:
 
     def test_guest_gets_free_plans_resolution_ceiling(self):
         """Guests get exactly the Free plan's feature ceiling - e.g.
-        "best" quality (no explicit height) is rejected the same way it
+        an explicit over-cap resolution pick is rejected the same way it
         would be for a Free-plan account."""
         from app.utils.exceptions import PlanLimitReachedError
 
         session = get_session_factory()()
         try:
             guest_id = _new_guest_id()
+            over_cap_request = CreateDownloadRequest(
+                url="https://www.youtube.com/watch?v=abc123", media_type=MediaType.VIDEO, quality_key="1080"
+            )
+            with pytest.raises(PlanLimitReachedError):
+                guest_service.authorize_and_reserve(session, guest_id, over_cap_request)
+        finally:
+            session.close()
+
+    def test_guest_best_available_resolves_to_free_plans_cap_instead_of_being_blocked(self):
+        """"Best Available" used to be rejected outright for guests, forcing
+        a manual resolution pick - it now resolves automatically to Free's
+        720p ceiling instead, exactly like an authenticated Free account
+        (see test_best_available_plan_aware.py for the full matrix)."""
+        session = get_session_factory()()
+        try:
+            guest_id = _new_guest_id()
             best_request = CreateDownloadRequest(
                 url="https://www.youtube.com/watch?v=abc123", media_type=MediaType.VIDEO, quality_key="best"
             )
-            with pytest.raises(PlanLimitReachedError):
-                guest_service.authorize_and_reserve(session, guest_id, best_request)
+            max_resolution_height = guest_service.authorize_and_reserve(session, guest_id, best_request)
+            assert max_resolution_height == 720
         finally:
             session.close()
 

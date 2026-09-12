@@ -11,11 +11,16 @@ interface FormatSelectorProps {
   media: AnalyzeResponse;
   onStartDownload: (request: CreateDownloadRequest) => void;
   submitting: boolean;
+  // The account's plan resolution ceiling (PlanFeaturesOut.max_resolution_height),
+  // or the guest-equivalent default - null means uncapped (Pro/Creator today).
+  // Display only: the backend is the actual enforcement point regardless of
+  // what this says (see download_gate_service.py / guest_service.py).
+  maxResolutionHeight: number | null;
 }
 
 const MP3_BITRATES = [128, 192, 256, 320];
 
-export default function FormatSelector({ media, onStartDownload, submitting }: FormatSelectorProps) {
+export default function FormatSelector({ media, onStartDownload, submitting, maxResolutionHeight }: FormatSelectorProps) {
   const { t } = useTranslation();
   const [mediaType, setMediaType] = useState<MediaType>("video");
   const [videoQuality, setVideoQuality] = useState("best");
@@ -45,6 +50,18 @@ export default function FormatSelector({ media, onStartDownload, submitting }: F
     () => (selectedFormat ? null : media.video_presets.find((p) => p.key === videoQuality) ?? null),
     [media.video_presets, videoQuality, selectedFormat],
   );
+
+  // "Best Available" automatically downloads at the highest quality the
+  // source offers, up to the account's plan ceiling (see
+  // ytdlp_service.build_format_selector's max_height parameter, which is
+  // what actually enforces this) - the label makes that behavior visible so
+  // a Free user never has to guess or manually pick 720p to get it.
+  const presetLabel = (preset: (typeof media.video_presets)[number]): string =>
+    preset.key === "best"
+      ? maxResolutionHeight != null
+        ? t("format.bestAvailableUpToHeight", { height: maxResolutionHeight })
+        : t("format.bestAvailable")
+      : preset.label;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
@@ -134,7 +151,7 @@ export default function FormatSelector({ media, onStartDownload, submitting }: F
                     : "border-white/10 text-slate-300 hover:border-white/25"
                 } ${!preset.available ? "cursor-not-allowed opacity-30" : ""}`}
               >
-                <div>{preset.label}</div>
+                <div>{presetLabel(preset)}</div>
                 {preset.expected_container && (
                   <div className="mt-0.5 text-[10px] font-normal uppercase tracking-wide text-slate-500">
                     {preset.expected_container}

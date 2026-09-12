@@ -104,7 +104,7 @@ def _gate_and_create(
     plan, subscription = account_service.get_current_plan(db, user.id)
     job_id = str(uuid.uuid4())
 
-    reservation_id = download_gate_service.authorize_and_reserve(
+    reservation_id, max_resolution_height = download_gate_service.authorize_and_reserve(
         db, user, plan, subscription, request, job_id
     )
     # Commit the reservation now, before the job can possibly race to
@@ -112,7 +112,10 @@ def _gate_and_create(
     # happens too late for that race to be safe.
     db.commit()
 
-    job = manager.create_job(request, job_id=job_id, user_id=user.id, reservation_id=reservation_id)
+    job = manager.create_job(
+        request, job_id=job_id, user_id=user.id, reservation_id=reservation_id,
+        max_resolution_height=max_resolution_height,
+    )
     return job.to_out()
 
 
@@ -120,10 +123,10 @@ def _gate_and_create_guest(
     request: CreateDownloadRequest, guest_id: str, db: Session
 ) -> DownloadJobOut:
     _validate_url(request)
-    guest_service.authorize_and_reserve(db, guest_id, request)
+    max_resolution_height = guest_service.authorize_and_reserve(db, guest_id, request)
     db.commit()
 
-    job = manager.create_job(request, guest_id=guest_id)
+    job = manager.create_job(request, guest_id=guest_id, max_resolution_height=max_resolution_height)
     return job.to_out()
 
 

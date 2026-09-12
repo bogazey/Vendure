@@ -663,6 +663,7 @@ def build_format_selector(
     format_has_video: Optional[bool] = None,
     format_has_audio: Optional[bool] = None,
     container_mode: ContainerMode = ContainerMode.COMPATIBILITY,
+    max_height: Optional[int] = None,
 ) -> str:
     if format_id:
         if format_has_video and not format_has_audio:
@@ -685,6 +686,19 @@ def build_format_selector(
     compat = container_mode == ContainerMode.COMPATIBILITY
 
     if quality_key == "best" or not quality_key:
+        if max_height is not None:
+            # "Best Available" still means "the best quality this account is
+            # allowed", not an unconditional true best - a plan cap turns it
+            # into exactly the same request as an explicit "{max_height}p"
+            # pick, reusing that branch's orientation-safe height<=X/width<=X
+            # selector construction below verbatim (see the portrait-video
+            # fix) rather than duplicating it. A source under the cap still
+            # naturally resolves to its own real best (yt-dlp's own "at most
+            # X" semantics - see the height<=X/width<=X branch), never
+            # upscaled and never rejected.
+            return build_format_selector(
+                media_type, str(max_height), None, container_mode=container_mode,
+            )
         if compat:
             # Prefer the best H.264 video (any resolution) + M4A audio; if the
             # video has NO H.264 option at all (common for 4K/8K, which
@@ -697,7 +711,9 @@ def build_format_selector(
     try:
         height = int(quality_key)
     except ValueError:
-        return build_format_selector(media_type, "best", None, container_mode=container_mode)
+        return build_format_selector(
+            media_type, "best", None, container_mode=container_mode, max_height=max_height,
+        )
 
     # A preset like "720p" names a quality tier by the video's SHORT side,
     # not literally its `height` field: for landscape/square video those are
@@ -760,6 +776,7 @@ def build_download_opts(
     output_template: str,
     progress_hook: Callable[[dict], None],
     postprocessor_hook: Callable[[dict], None],
+    max_resolution_height: Optional[int] = None,
 ) -> dict[str, Any]:
     opts = _base_opts(settings)
     opts.update(
@@ -773,6 +790,7 @@ def build_download_opts(
                 request.format_has_video,
                 request.format_has_audio,
                 settings.container_mode,
+                max_height=max_resolution_height,
             ),
             "progress_hooks": [progress_hook],
             "postprocessor_hooks": [postprocessor_hook],

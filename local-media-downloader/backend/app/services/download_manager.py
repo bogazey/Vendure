@@ -84,6 +84,11 @@ class DownloadJob:
     user_id: Optional[str] = None
     guest_id: Optional[str] = None
     reservation_id: Optional[str] = None
+    # The caller's plan resolution ceiling (set by download_gate_service /
+    # guest_service at gate time), None if uncapped. Only meaningful when
+    # request.quality_key == "best" - see ytdlp_service.build_format_selector's
+    # max_height parameter, which is what actually enforces it.
+    max_resolution_height: Optional[int] = None
     title: Optional[str] = None
     uploader: Optional[str] = None
     thumbnail: Optional[str] = None
@@ -185,6 +190,7 @@ class DownloadManager:
         user_id: Optional[str] = None,
         guest_id: Optional[str] = None,
         reservation_id: Optional[str] = None,
+        max_resolution_height: Optional[int] = None,
     ) -> DownloadJob:
         platform = detect_platform(request.url)
         job = DownloadJob(
@@ -194,6 +200,7 @@ class DownloadManager:
             user_id=user_id,
             guest_id=guest_id,
             reservation_id=reservation_id,
+            max_resolution_height=max_resolution_height,
         )
         with self._lock:
             self._jobs[job.id] = job
@@ -382,7 +389,8 @@ class DownloadManager:
         output_template = str(download_dir / "%(title).150B [%(id)s].%(ext)s")
 
         opts = ytdlp_service.build_download_opts(
-            job.request, settings, output_template, progress_hook, postprocessor_hook
+            job.request, settings, output_template, progress_hook, postprocessor_hook,
+            max_resolution_height=job.max_resolution_height,
         )
 
         job.stage = DownloadStage.DOWNLOADING

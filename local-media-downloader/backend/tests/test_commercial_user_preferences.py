@@ -142,7 +142,7 @@ class TestIsolation:
 
         user = _user(db_session)
         request = CreateDownloadRequest(url="https://youtube.com/watch?v=x", media_type="video", quality_key="480")
-        reservation_id = download_gate_service.authorize_and_reserve(
+        reservation_id, _ = download_gate_service.authorize_and_reserve(
             db_session, user, Plan.FREE, None, request, "job-1"
         )
         assert reservation_id

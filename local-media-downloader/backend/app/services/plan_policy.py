@@ -82,6 +82,32 @@ def get_policy(plan: Plan) -> PlanPolicy:
     return PLAN_POLICIES[plan]
 
 
+def parse_explicit_height(quality_key: str) -> Optional[int]:
+    """The explicit numeric resolution height the caller asked for, or None
+    for "best available" (or an unrecognized key, treated the same way).
+    Shared by download_gate_service and guest_service so this parsing - and
+    the "what does 'best' mean" question it feeds into - lives in exactly
+    one place rather than two near-identical private copies."""
+    if not quality_key or quality_key == "best":
+        return None
+    try:
+        return int(quality_key)
+    except ValueError:
+        return None
+
+
+def resolve_best_available_cap(plan: Plan) -> Optional[int]:
+    """The height ceiling a "Best Available" request must respect for this
+    plan - i.e. what "best" actually resolves to, before the download even
+    knows what the source offers. None means uncapped: true best, whatever
+    the source's own highest quality is (see PlanPolicy.max_resolution_height
+    - this is a thin, named wrapper around it so callers ask "what's the cap"
+    rather than reaching into policy internals directly, and so there is one
+    obvious place to look if that ever needs to become more than a single
+    field lookup)."""
+    return get_policy(plan).max_resolution_height
+
+
 # --- Credit cost model ---------------------------------------------------
 #
 # Kept here (not scattered into the download pipeline) so pricing changes are

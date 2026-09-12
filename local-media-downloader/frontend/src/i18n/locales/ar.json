@@ -340,6 +340,8 @@
   "format": {
     "video": "فيديو",
     "audioOnly": "صوت فقط",
+    "bestAvailable": "أفضل جودة متاحة",
+    "bestAvailableUpToHeight": "أفضل جودة متاحة · حتى {{height}}p ضمن خطتك",
     "bitrate": "معدل البت",
     "start": "البداية",
     "end": "النهاية",
