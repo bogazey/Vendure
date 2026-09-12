@@ -258,7 +258,7 @@ function HistoryRow({
               href={downloadFileUrl(record.id)}
               className="rounded-full border border-white/10 px-2.5 py-1 text-xs text-slate-300 hover:border-white/30"
             >
-              {t("app.openFile")}
+              {t("app.downloadAgain")}
             </a>
           </>
         )}

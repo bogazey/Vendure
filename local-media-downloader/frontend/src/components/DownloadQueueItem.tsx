@@ -75,7 +75,7 @@ export default function DownloadQueueItem({ job, onCancel }: DownloadQueueItemPr
         )}
         {job.stage === "completed" && job.filepath && (
           <a href={downloadFileUrl(job.id)} className="mt-2 inline-flex rounded-full border border-brand-aqua/40 px-2.5 py-1 text-xs text-brand-aqua hover:border-brand-aqua/70">
-            {t("app.openFile")}
+            {t("app.downloadAgain")}
           </a>
         )}
       </div>

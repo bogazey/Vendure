@@ -34,6 +34,23 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? "ht
 
 export const downloadFileUrl = (id: string) => `${API_BASE}/api/downloads/${encodeURIComponent(id)}/file`;
 
+// A temporary, invisible same-origin-navigating <a> - not window.open() (which
+// popup blockers can kill) and not a fetch-into-Blob (which would pull large
+// media files fully into JS memory first). The endpoint already responds
+// with a Content-Disposition: attachment header (see routes_downloads.py's
+// FileResponse), so the browser downloads it directly; the auth cookie rides
+// along exactly as it does for the existing manual download link, since this
+// is just a normal top-level GET navigation under the hood.
+export const triggerFileDownload = (id: string): void => {
+  const anchor = document.createElement("a");
+  anchor.href = downloadFileUrl(id);
+  anchor.rel = "noopener";
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+};
+
 export class ApiError extends Error {
   technical?: string | null;
   code?: string | null;

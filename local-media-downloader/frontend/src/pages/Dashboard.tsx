@@ -10,7 +10,7 @@ import UrlInput from "../components/UrlInput";
 import { useAuth } from "../context/AuthContext";
 import { useDownloadProgress } from "../hooks/useDownloadProgress";
 import { track } from "../lib/analytics";
-import { ApiError, api } from "../services/api";
+import { ApiError, api, triggerFileDownload } from "../services/api";
 import { appPageShell } from "../styles/ui";
 import type { AnalyzeResponse, CreateDownloadRequest, DownloadStage, GuestQuotaOut } from "../types/api";
 
@@ -39,6 +39,17 @@ export default function Dashboard() {
   const [guestQuota, setGuestQuota] = useState<GuestQuotaOut | null>(null);
   const { jobs, connected } = useDownloadProgress();
   const previousStages = useRef<Map<string, DownloadStage>>(new Map());
+  // Job ids created from THIS page instance (via handleStartDownload) -
+  // never populated from the initial history fetch/SSE snapshot, so an old
+  // completed job loaded on mount (or restored after a refresh) is never a
+  // candidate for auto-download, only one the user just started here.
+  const sessionJobIdsRef = useRef<Set<string>>(new Set());
+  // Job ids whose automatic download has already fired - separate from
+  // sessionJobIdsRef so "started here" and "already auto-downloaded" are
+  // each their own concern; guards against firing twice from repeated SSE
+  // frames, polling, re-renders, or React StrictMode's double effect-invoke
+  // (refs persist across that, so this Set is never silently recreated).
+  const autoDownloadedRef = useRef<Set<string>>(new Set());
 
   const refreshGuestQuota = useCallback(() => {
     if (account) return;
@@ -79,8 +90,28 @@ export default function Dashboard() {
     for (const job of jobs) {
       const prevStage = previousStages.current.get(job.id);
       if (prevStage !== job.stage) {
-        if (job.stage === "completed") track("download_completed");
-        else if (job.stage === "failed") track("download_failed");
+        if (job.stage === "completed") {
+          track("download_completed");
+          // Only a job this page instance actually started, that hasn't
+          // already been auto-downloaded, and that really has a finished
+          // file to hand over (never failed/cancelled/analysis-only - those
+          // can't reach "completed" with a filepath at all) gets the
+          // browser download kicked off automatically - see
+          // triggerFileDownload's own comment for why a hidden <a> rather
+          // than window.open()/a fetch-to-Blob.
+          if (job.filepath && sessionJobIdsRef.current.has(job.id) && !autoDownloadedRef.current.has(job.id)) {
+            autoDownloadedRef.current.add(job.id);
+            try {
+              triggerFileDownload(job.id);
+            } catch {
+              // Never let a client-side download hiccup touch the job's own
+              // state - it stays "completed" and visible, and the manual
+              // "Download again" button is still right there as a fallback.
+            }
+          }
+        } else if (job.stage === "failed") {
+          track("download_failed");
+        }
         // A completed job consumes one guest download; a failed or
         // cancelled job refunds its reservation (see guest_service.py) -
         // either way the remaining count on screen needs to catch up.
@@ -118,7 +149,11 @@ export default function Dashboard() {
     setSubmitting(true);
     setError(null);
     try {
-      await api.createDownload(request);
+      const job = await api.createDownload(request);
+      // Registers this job as eligible for auto-download once it completes -
+      // an old job loaded from history (or restored after a refresh) is
+      // never added here, so it never auto-downloads (see sessionJobIdsRef).
+      sessionJobIdsRef.current.add(job.id);
       track("download_started");
       setQueuedMessage(t("app.queued"));
       setTimeout(() => setQueuedMessage(null), 4000);
