@@ -19,7 +19,12 @@ class TestBuildFormatSelector:
 
     def test_specific_height(self):
         selector = build_format_selector(MediaType.VIDEO, "1080", None, container_mode=ContainerMode.ORIGINAL)
-        assert selector == "bestvideo[height<=1080]+bestaudio/best[height<=1080]"
+        assert selector == (
+            "bestvideo[height<=1080][aspect_ratio>=1]+bestaudio"
+            "/bestvideo[width<=1080][aspect_ratio<1]+bestaudio"
+            "/best[height<=1080][aspect_ratio>=1]"
+            "/best[width<=1080][aspect_ratio<1]"
+        )
 
     def test_invalid_quality_key_falls_back_to_best(self):
         selector = build_format_selector(

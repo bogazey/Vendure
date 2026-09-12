@@ -245,6 +245,7 @@ def _format_to_option(fmt: dict[str, Any]) -> FormatOption:
         ext=fmt.get("ext", ""),
         resolution=fmt.get("resolution"),
         height=fmt.get("height"),
+        width=fmt.get("width"),
         fps=fmt.get("fps"),
         vcodec=vcodec if has_video else None,
         acodec=acodec if has_audio else None,
@@ -353,8 +354,45 @@ def _is_mp4_compatible_audio_codec(acodec: Optional[str]) -> bool:
     return bool(acodec) and acodec != "none" and acodec.lower().startswith(_MP4_COMPATIBLE_AUDIO_PREFIXES)
 
 
-def _has_compatible_mp4_video(formats: list[FormatOption], max_height: Optional[int]) -> bool:
-    """Whether an H.264 video stream exists (at or under max_height, if given).
+# --- Orientation-safe quality dimension ------------------------------------
+#
+# A quality tier like "720p" conventionally names a video's SHORT side, not
+# literally its height: for landscape/square video that's the same thing
+# (height <= width), but for portrait video (e.g. TikTok/Reels/Shorts) the
+# frame is taller than it is wide, so yt-dlp's `height` field reports the
+# LONG side (e.g. 1280 for a 720-wide portrait clip) while the format's own
+# "720p" label refers to its width. Comparing raw `height` against a preset
+# threshold is therefore only correct for landscape video; for portrait video
+# it either rejects every real format (height is always far above the
+# threshold) or accidentally matches a lower-quality stream whose height
+# happens to fall under the threshold by coincidence. min(width, height) is
+# the orientation-agnostic quality dimension both cases need - deliberately
+# derived from the format's own reported dimensions, never from parsing
+# format_id/label text (which isn't a reliable or universal signal).
+def _effective_quality_dimension(width: Optional[int], height: Optional[int]) -> Optional[int]:
+    """The frame dimension that names this format's quality tier - min(width,
+    height) when both are known, falling back to whichever single dimension
+    is available, or None if neither is."""
+    has_width = bool(width and width > 0)
+    has_height = bool(height and height > 0)
+    if has_width and has_height:
+        return min(width, height)  # type: ignore[arg-type]
+    if has_height:
+        return height
+    if has_width:
+        return width
+    return None
+
+
+def _quality_dimension(f: FormatOption) -> Optional[int]:
+    return _effective_quality_dimension(f.width, f.height)
+
+
+def _has_compatible_mp4_video(formats: list[FormatOption], max_quality_dimension: Optional[int]) -> bool:
+    """Whether an H.264 video stream exists (at or under max_quality_dimension,
+    if given, measured on the orientation-safe quality dimension - see
+    _effective_quality_dimension - so a portrait stream's long/height side
+    is never compared against a short-side preset threshold).
 
     Used to both bias the download format selector toward native MP4 (so we
     only transcode when actually necessary) and to predict the "expected
@@ -363,7 +401,8 @@ def _has_compatible_mp4_video(formats: list[FormatOption], max_height: Optional[
     for f in formats:
         if not f.has_video or not _is_mp4_compatible_video_codec(f.vcodec):
             continue
-        if max_height is not None and f.height and f.height > max_height:
+        dimension = _quality_dimension(f)
+        if max_quality_dimension is not None and dimension and dimension > max_quality_dimension:
             continue
         return True
     return False
@@ -390,7 +429,12 @@ def needs_mp4_transcode(info: dict[str, Any]) -> bool:
 def _build_presets(
     formats: list[FormatOption], container_mode: ContainerMode = ContainerMode.COMPATIBILITY
 ) -> tuple[list[QualityPreset], list[QualityPreset]]:
-    video_heights = {f.height for f in formats if f.has_video and f.height}
+    # Availability and "best matching stream" lookups both key off the
+    # orientation-safe quality dimension (min(width, height)) rather than raw
+    # height, so a portrait video's presets reflect its real short-side
+    # quality tiers instead of its (much larger) long-side height - see
+    # _effective_quality_dimension.
+    video_qualities = {q for f in formats if f.has_video and (q := _quality_dimension(f))}
     has_audio_stream = any(f.has_audio for f in formats)
     compat = container_mode == ContainerMode.COMPATIBILITY
 
@@ -410,16 +454,16 @@ def _build_presets(
         # Original/Best Quality mode: best-effort guess at the container the
         # highest-quality matching stream naturally uses (for display only -
         # history records the real, final container after downloading).
-        candidates = [f for f in formats if f.has_video and (height is None or (f.height or 0) <= height)]
-        best = max(candidates, key=lambda f: f.height or 0, default=None)
+        candidates = [f for f in formats if f.has_video and (height is None or (_quality_dimension(f) or 0) <= height)]
+        best = max(candidates, key=lambda f: _quality_dimension(f) or 0, default=None)
         return QualityPreset(
             key=key, label=label, kind=FormatKind.VIDEO, available=True, height=height,
             expected_container=best.ext if best else None, will_transcode=False,
         )
 
-    video_presets = [_video_preset("best", "Best Available", bool(video_heights), None)]
+    video_presets = [_video_preset("best", "Best Available", bool(video_qualities), None)]
     for h in VIDEO_HEIGHT_PRESETS:
-        available = any(vh >= h for vh in video_heights) if video_heights else False
+        available = any(vq >= h for vq in video_qualities) if video_qualities else False
         video_presets.append(_video_preset(str(h), f"{h}p", available, h))
 
     audio_presets = [
@@ -655,18 +699,59 @@ def build_format_selector(
     except ValueError:
         return build_format_selector(media_type, "best", None, container_mode=container_mode)
 
+    # A preset like "720p" names a quality tier by the video's SHORT side,
+    # not literally its `height` field: for landscape/square video those are
+    # the same thing, but for portrait video (TikTok/Reels/Shorts) the frame
+    # is taller than wide, so yt-dlp reports `height` as the LONG side while
+    # the format's own "720p"-style label refers to width instead (see
+    # _effective_quality_dimension for the full explanation). yt-dlp's format
+    # filter syntax has no min(width, height) and - critically - no way to
+    # compare one field against another at all: the right-hand side of a
+    # numeric filter must be a literal number (confirmed against yt-dlp's own
+    # _build_format_filter, which regex-matches the value as [0-9.]+ only;
+    # "[width>=height]" is a SyntaxError, not merely wrong). So orientation
+    # can't be tested with a `width`/`height` guard - it needs a field that is
+    # itself a plain number we can compare against a literal. yt-dlp already
+    # computes exactly that: `aspect_ratio` (width/height, rounded), filled in
+    # on every format before selection ever runs (YoutubeDL.process_video_result,
+    # well before _select_formats), so `aspect_ratio>=1` (landscape/square) and
+    # `aspect_ratio<1` (portrait) are valid, literal-comparable, mutually
+    # exclusive guards. Two alternatives, one per orientation, then rely on
+    # yt-dlp's existing "/" fallback semantics (try the next alternative only
+    # when the previous one matches nothing at all) to pick whichever applies:
+    # the landscape alternative only ever matches aspect_ratio>=1 formats, the
+    # portrait one only ever matches aspect_ratio<1 formats, so a portrait
+    # preset can never accidentally match on a portrait stream's much-larger
+    # raw height value (which is what silently served the wrong, lower-quality
+    # stream before), and a landscape preset's behavior is completely
+    # unchanged (its own alternative already matches, so the portrait
+    # alternative never runs).
+    #
+    # Residual limitation: a format missing width or height (no known real
+    # extractor omits these for video formats) gets no aspect_ratio computed
+    # either, so it's excluded from both alternatives here, whereas
+    # _effective_quality_dimension itself would still use whichever single
+    # dimension is known - a DSL constraint, not something expressible in one
+    # selector string.
+    landscape_or_square = f"[height<={height}][aspect_ratio>=1]"
+    portrait = f"[width<={height}][aspect_ratio<1]"
+
     if compat:
         # Common preset heights (1080p and below) almost always have a native
         # H.264 option, so prefer it and avoid an unnecessary transcode;
         # still falls back to any codec at that height (and ultimately to the
         # post-download conversion step) if not.
         return (
-            f"bestvideo[vcodec^=avc1][height<={height}]+bestaudio[ext=m4a]"
-            f"/bestvideo[vcodec^=avc1][height<={height}]+bestaudio"
-            f"/bestvideo[height<={height}]+bestaudio"
-            f"/best[height<={height}]"
+            f"bestvideo[vcodec^=avc1]{landscape_or_square}+bestaudio[ext=m4a]"
+            f"/bestvideo[vcodec^=avc1]{portrait}+bestaudio[ext=m4a]"
+            f"/bestvideo[vcodec^=avc1]{landscape_or_square}+bestaudio"
+            f"/bestvideo[vcodec^=avc1]{portrait}+bestaudio"
+            f"/bestvideo{landscape_or_square}+bestaudio"
+            f"/bestvideo{portrait}+bestaudio"
+            f"/best{landscape_or_square}"
+            f"/best{portrait}"
         )
-    return f"bestvideo[height<={height}]+bestaudio/best[height<={height}]"
+    return f"bestvideo{landscape_or_square}+bestaudio/bestvideo{portrait}+bestaudio/best{landscape_or_square}/best{portrait}"
 
 
 def build_download_opts(

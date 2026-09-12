@@ -24,6 +24,7 @@ export interface FormatOption {
   ext: string;
   resolution: string | null;
   height: number | null;
+  width: number | null;
   fps: number | null;
   vcodec: string | null;
   acodec: string | null;

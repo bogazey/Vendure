@@ -80,13 +80,18 @@ class TestBuildFormatSelectorContainerMode:
         )
         assert "vcodec^=avc1" in selector
         assert "height<=1080" in selector
-        assert selector.endswith("/best[height<=1080]")
+        assert selector.endswith("/best[width<=1080][aspect_ratio<1]")
 
     def test_1080p_original_has_no_codec_bias(self):
         selector = ytdlp_service.build_format_selector(
             MediaType.VIDEO, "1080", None, container_mode=ContainerMode.ORIGINAL
         )
-        assert selector == "bestvideo[height<=1080]+bestaudio/best[height<=1080]"
+        assert selector == (
+            "bestvideo[height<=1080][aspect_ratio>=1]+bestaudio"
+            "/bestvideo[width<=1080][aspect_ratio<1]+bestaudio"
+            "/best[height<=1080][aspect_ratio>=1]"
+            "/best[width<=1080][aspect_ratio<1]"
+        )
 
     def test_advanced_format_id_selection_unaffected_by_container_mode(self):
         compat = ytdlp_service.build_format_selector(

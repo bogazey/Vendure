@@ -33,6 +33,10 @@ class FormatOption(BaseModel):
     ext: str
     resolution: Optional[str] = None
     height: Optional[int] = None
+    # Absent for older/mocked FormatOption instances (e.g. existing tests) -
+    # every consumer must keep working with width=None, falling back to
+    # height alone (see ytdlp_service._effective_quality_dimension).
+    width: Optional[int] = None
     fps: Optional[float] = None
     vcodec: Optional[str] = None
     acodec: Optional[str] = None
