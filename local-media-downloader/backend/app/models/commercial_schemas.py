@@ -27,6 +27,11 @@ class SignupRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=200)
+    # "Keep me logged in" - default False (unchecked) means the session
+    # cookie is cleared once the browser itself closes; True means it
+    # persists across browser restarts. See auth_service.login /
+    # routes_auth._set_session_cookies.
+    remember_me: bool = False
 
 
 class ForgotPasswordRequest(BaseModel):

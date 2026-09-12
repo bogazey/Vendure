@@ -71,7 +71,42 @@ describe("AuthProvider", () => {
       await ctx!.login("a@example.com", "pw");
     });
 
-    expect(api.login).toHaveBeenCalledWith("a@example.com", "pw");
+    expect(api.login).toHaveBeenCalledWith("a@example.com", "pw", false);
     expect(ctx!.account?.user.email).toBe("a@example.com");
+  });
+
+  it("login() forwards the rememberMe choice to the API", async () => {
+    vi.mocked(api.getAccount).mockRejectedValueOnce(new Error("401")).mockResolvedValueOnce(FREE_ACCOUNT);
+    vi.mocked(api.login).mockResolvedValue(undefined as never);
+
+    let ctx: ReturnType<typeof useAuth> | null = null;
+    function Capture() {
+      ctx = useAuth();
+      return null;
+    }
+    render(
+      <AuthProvider>
+        <Capture />
+      </AuthProvider>
+    );
+    await waitFor(() => expect(ctx?.loading).toBe(false));
+
+    await act(async () => {
+      await ctx!.login("a@example.com", "pw", true);
+    });
+
+    expect(api.login).toHaveBeenCalledWith("a@example.com", "pw", true);
+  });
+
+  it("bootstraps the account exactly once even if the mount effect runs twice (StrictMode double-invoke)", async () => {
+    vi.mocked(api.getAccount).mockResolvedValue(FREE_ACCOUNT);
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>
+    );
+    await waitFor(() => expect(screen.getByText("signed in as a@example.com")).toBeInTheDocument());
+    // A duplicate bootstrap would show up as a second call to /api/account.
+    expect(api.getAccount).toHaveBeenCalledTimes(1);
   });
 });

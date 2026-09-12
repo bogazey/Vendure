@@ -17,6 +17,7 @@ export default function Login() {
   const location = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -29,7 +30,7 @@ export default function Login() {
     setSubmitting(true);
     setError(null);
     try {
-      await login(email, password);
+      await login(email, password, rememberMe);
       const destination = from ? `${from.pathname}${from.search}` : "/dashboard";
       navigate(destination, { replace: true, state: initialUrl ? { initialUrl } : undefined });
     } catch (err) {
@@ -80,6 +81,16 @@ export default function Login() {
             onChange={(e) => setPassword(e.target.value)}
             className={inputClass}
           />
+        </label>
+
+        <label className="flex items-center gap-2 text-sm text-slate-400">
+          <input
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(e) => setRememberMe(e.target.checked)}
+            className="h-4 w-4 shrink-0 rounded border-white/20 bg-transparent accent-brand-aqua"
+          />
+          <span>{t("auth.rememberMe")}</span>
         </label>
 
         <button type="submit" disabled={submitting} className={primaryButtonClass}>

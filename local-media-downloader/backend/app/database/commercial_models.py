@@ -214,6 +214,11 @@ class RefreshToken(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    # Whether this session was created with "Keep me logged in" checked - read
+    # back on every /api/auth/refresh rotation (see auth_service.refresh) so
+    # the ORIGINAL login-time choice keeps applying to every reissued token
+    # pair for this session's whole lifetime, not just the first one.
+    remember_me: Mapped[bool] = mapped_column(Boolean(), default=False, server_default="false", nullable=False)
 
 
 class PasswordResetToken(Base):

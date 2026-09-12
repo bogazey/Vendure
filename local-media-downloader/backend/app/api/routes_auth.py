@@ -33,10 +33,19 @@ def _client_key(request: Request) -> str:
 
 def _set_session_cookies(response: Response, result: AuthResult) -> None:
     settings = get_commercial_settings()
+    # "Keep me logged in" unchecked -> omit Max-Age entirely, which makes
+    # these true browser session cookies (cleared when the browser itself
+    # closes, not on a page refresh or navigation - those just resend
+    # whatever cookies are already stored). Checked -> the existing
+    # Max-Age-based persistent cookie, unchanged from before this option
+    # existed. Either way the cookie is still httpOnly/Secure/SameSite=Lax -
+    # this only changes *how long* it lives, never its other protections.
+    access_max_age = settings.access_token_ttl_minutes * 60 if result.remember_me else None
+    refresh_max_age = settings.refresh_token_ttl_days * 24 * 3600 if result.remember_me else None
     response.set_cookie(
         ACCESS_COOKIE_NAME,
         result.access_token,
-        max_age=settings.access_token_ttl_minutes * 60,
+        max_age=access_max_age,
         httponly=True,
         secure=settings.cookie_secure,
         samesite="lax",
@@ -46,7 +55,7 @@ def _set_session_cookies(response: Response, result: AuthResult) -> None:
     response.set_cookie(
         REFRESH_COOKIE_NAME,
         result.refresh_token,
-        max_age=settings.refresh_token_ttl_days * 24 * 3600,
+        max_age=refresh_max_age,
         httponly=True,
         secure=settings.cookie_secure,
         samesite="lax",
@@ -75,7 +84,7 @@ async def login(payload: LoginRequest, request: Request, response: Response, db:
     key = f"{_client_key(request)}:{payload.email.lower()}"
     if not login_limiter.allow(key, max_events=10, window_seconds=300):
         raise RateLimitedError("Too many login attempts. Please wait a few minutes and try again.")
-    result = auth_service.login(db, payload.email, payload.password)
+    result = auth_service.login(db, payload.email, payload.password, remember_me=payload.remember_me)
     _set_session_cookies(response, result)
     return UserOut.model_validate(result.user, from_attributes=True)
 

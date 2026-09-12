@@ -64,7 +64,33 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+// The access-token cookie is short-lived (~15 minutes) by design; the
+// refresh-token cookie lives much longer (session or persistent, depending
+// on "Keep me logged in" - see routes_auth.py). Without this, any request
+// made after the access token expires - most commonly just reloading the
+// page after being away for a while - would 401 even though a perfectly
+// valid refresh token is sitting right there unused, which is the actual
+// root cause of "logged out on refresh". A single in-flight promise is
+// shared across concurrent 401s (rather than each firing its own refresh
+// call) because /api/auth/refresh ROTATES the refresh token on every use -
+// two concurrent calls would race, and the second would fail against the
+// now-already-rotated cookie the first one just replaced.
+const AUTH_PATH_PREFIX = "/api/auth/";
+let refreshInFlight: Promise<boolean> | null = null;
+
+function trySessionRefresh(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = fetch(`${API_BASE}/api/auth/refresh`, { method: "POST", credentials: "include" })
+      .then((r) => r.ok)
+      .catch(() => false)
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+  return refreshInFlight;
+}
+
+async function request<T>(path: string, init?: RequestInit, _isRetry = false): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${API_BASE}${path}`, {
@@ -77,6 +103,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     });
   } catch {
     throw new ApiError("Could not reach the local backend. Is it running?", 0);
+  }
+
+  // Never intercept the auth endpoints themselves (login/signup/logout/
+  // refresh/me) - a 401 there is a real credentials/session-expiry answer,
+  // not a stale-access-token situation to silently paper over, and
+  // retrying /api/auth/refresh from inside its own failure would recurse.
+  if (response.status === 401 && !_isRetry && !path.startsWith(AUTH_PATH_PREFIX)) {
+    const refreshed = await trySessionRefresh();
+    if (refreshed) {
+      return request<T>(path, init, true);
+    }
   }
 
   if (!response.ok) {
@@ -153,8 +190,11 @@ export const api = {
   signup: (email: string, password: string) =>
     request<UserOut>("/api/auth/signup", { method: "POST", body: JSON.stringify({ email, password }) }),
 
-  login: (email: string, password: string) =>
-    request<UserOut>("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+  login: (email: string, password: string, rememberMe: boolean = false) =>
+    request<UserOut>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password, remember_me: rememberMe }),
+    }),
 
   logout: () => request<void>("/api/auth/logout", { method: "POST" }),
 

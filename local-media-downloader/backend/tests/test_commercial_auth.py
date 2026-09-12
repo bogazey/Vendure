@@ -66,6 +66,56 @@ class TestSignupLogin:
             auth_service.login(db_session, email, "correcthorse9!")
 
 
+class TestRememberMe:
+    """"Keep me logged in": whether a session's cookies get a Max-Age
+    (persistent, survives browser restarts) or none at all (a true session
+    cookie, cleared once the browser closes) - see
+    routes_auth._set_session_cookies. AuthService itself only tracks the
+    boolean choice through signup/login/refresh; the HTTP-level Set-Cookie
+    assertions live in test_commercial_api.py."""
+
+    def test_login_defaults_to_remember_me_false(self, db_session):
+        email = _email()
+        auth_service.signup(db_session, email, "correcthorse9!")
+        result = auth_service.login(db_session, email, "correcthorse9!")
+        assert result.remember_me is False
+
+    def test_login_remember_me_true_is_carried_on_the_result(self, db_session):
+        email = _email()
+        auth_service.signup(db_session, email, "correcthorse9!")
+        result = auth_service.login(db_session, email, "correcthorse9!", remember_me=True)
+        assert result.remember_me is True
+
+    def test_signup_is_always_remember_me_true(self, db_session):
+        # Signup has no checkbox - preserves the pre-existing, always-
+        # persistent behavior a fresh signup had before this option existed.
+        result = auth_service.signup(db_session, _email(), "correcthorse9!")
+        assert result.remember_me is True
+
+    def test_refresh_preserves_remember_me_true_across_rotation(self, db_session):
+        email = _email()
+        auth_service.signup(db_session, email, "correcthorse9!")
+        login = auth_service.login(db_session, email, "correcthorse9!", remember_me=True)
+        db_session.flush()
+
+        refreshed = auth_service.refresh(db_session, login.refresh_token)
+        db_session.flush()
+        assert refreshed.remember_me is True
+
+        # And it keeps carrying forward through a second rotation.
+        refreshed_again = auth_service.refresh(db_session, refreshed.refresh_token)
+        assert refreshed_again.remember_me is True
+
+    def test_refresh_preserves_remember_me_false_across_rotation(self, db_session):
+        email = _email()
+        auth_service.signup(db_session, email, "correcthorse9!")
+        login = auth_service.login(db_session, email, "correcthorse9!", remember_me=False)
+        db_session.flush()
+
+        refreshed = auth_service.refresh(db_session, login.refresh_token)
+        assert refreshed.remember_me is False
+
+
 class TestRefreshAndLogout:
     def test_refresh_rotates_token_and_revokes_old_one(self, db_session):
         email = _email()
@@ -178,6 +228,128 @@ class TestEmailVerification:
     def test_verify_email_rejects_bad_token(self, db_session):
         with pytest.raises(InvalidTokenError):
             auth_service.verify_email(db_session, "not-a-real-token")
+
+
+class TestSessionCookieLifetimeHttp:
+    """HTTP-level: the actual Set-Cookie headers /api/auth/login and
+    /api/auth/refresh produce, which is what a real browser (and the
+    frontend's silent-refresh fix for the "logged out on refresh" bug)
+    actually depends on."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_rate_limiters(self):
+        # signup_limiter/login_limiter are process-lifetime singletons keyed
+        # by client host, and TestClient always reports the same fake host -
+        # this class makes several signup/login calls per test, so without a
+        # reset it would eventually rate-limit itself (or a later test file
+        # in the same run) - same fixture/pattern test_commercial_api.py
+        # already uses for exactly this reason.
+        from app.services import rate_limit_service
+
+        for limiter in (rate_limit_service.login_limiter, rate_limit_service.signup_limiter):
+            limiter._hits.clear()
+        yield
+
+    def _client(self):
+        from fastapi.testclient import TestClient
+        from app.main import app
+
+        return TestClient(app)
+
+    def _signup(self, client, email: str) -> None:
+        resp = client.post("/api/auth/signup", json={"email": email, "password": "correcthorse9!"})
+        assert resp.status_code == 201, resp.text
+        # Signup's own cookies aren't under test here - only login's.
+        client.cookies.clear()
+
+    def _set_cookie_headers(self, resp) -> list[str]:
+        return resp.headers.get_list("set-cookie")
+
+    def test_login_without_remember_me_sets_session_cookies_no_max_age(self):
+        client = self._client()
+        email = _email()
+        self._signup(client, email)
+
+        resp = client.post("/api/auth/login", json={"email": email, "password": "correcthorse9!"})
+        assert resp.status_code == 200, resp.text
+        headers = self._set_cookie_headers(resp)
+        assert len(headers) == 2
+        for header in headers:
+            assert "max-age" not in header.lower()
+
+    def test_login_with_remember_me_sets_persistent_cookies_with_max_age(self):
+        client = self._client()
+        email = _email()
+        self._signup(client, email)
+
+        resp = client.post(
+            "/api/auth/login", json={"email": email, "password": "correcthorse9!", "remember_me": True}
+        )
+        assert resp.status_code == 200, resp.text
+        headers = self._set_cookie_headers(resp)
+        assert len(headers) == 2
+        for header in headers:
+            assert "max-age" in header.lower()
+
+    def test_refresh_preserves_no_max_age_for_a_non_remembered_session(self):
+        client = self._client()
+        email = _email()
+        self._signup(client, email)
+        login_resp = client.post("/api/auth/login", json={"email": email, "password": "correcthorse9!"})
+        assert login_resp.status_code == 200, login_resp.text
+
+        refresh_resp = client.post("/api/auth/refresh")
+        assert refresh_resp.status_code == 200, refresh_resp.text
+        for header in self._set_cookie_headers(refresh_resp):
+            assert "max-age" not in header.lower()
+
+    def test_refresh_preserves_max_age_for_a_remembered_session(self):
+        client = self._client()
+        email = _email()
+        self._signup(client, email)
+        login_resp = client.post(
+            "/api/auth/login", json={"email": email, "password": "correcthorse9!", "remember_me": True}
+        )
+        assert login_resp.status_code == 200, login_resp.text
+
+        refresh_resp = client.post("/api/auth/refresh")
+        assert refresh_resp.status_code == 200, refresh_resp.text
+        for header in self._set_cookie_headers(refresh_resp):
+            assert "max-age" in header.lower()
+
+    def test_logout_clears_cookies_regardless_of_remember_me(self):
+        client = self._client()
+        email = _email()
+        self._signup(client, email)
+        login_resp = client.post(
+            "/api/auth/login", json={"email": email, "password": "correcthorse9!", "remember_me": True}
+        )
+        assert login_resp.status_code == 200, login_resp.text
+
+        logout_resp = client.post("/api/auth/logout")
+        assert logout_resp.status_code == 204, logout_resp.text
+
+        # A logged-out client's next authenticated call must be rejected -
+        # the cookies were genuinely cleared, not just left as-is.
+        me_resp = client.get("/api/account")
+        assert me_resp.status_code == 401
+
+    def test_all_cookies_are_httponly_secure_flag_and_samesite_unchanged(self):
+        # This patch only changes Max-Age presence - it must never touch the
+        # other protections regardless of remember_me.
+        client = self._client()
+        email = _email()
+        self._signup(client, email)
+        for remember_me in (False, True):
+            resp = client.post(
+                "/api/auth/login",
+                json={"email": email, "password": "correcthorse9!", "remember_me": remember_me},
+            )
+            assert resp.status_code == 200, resp.text
+            for header in self._set_cookie_headers(resp):
+                lowered = header.lower()
+                assert "httponly" in lowered
+                assert "samesite=lax" in lowered
 
 
 class TestSecurityService:

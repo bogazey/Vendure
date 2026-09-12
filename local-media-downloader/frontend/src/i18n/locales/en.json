@@ -166,6 +166,7 @@
     "loginTitle": "Sign in",
     "welcome": "Welcome back.",
     "forgot": "Forgot password?",
+    "rememberMe": "Keep me logged in",
     "signingIn": "Signing in…",
     "loginError": "Could not sign in.",
     "noAccount": "Don't have an account?",

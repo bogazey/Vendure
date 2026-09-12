@@ -40,10 +40,15 @@ def _normalize_email(email: str) -> str:
 
 
 class AuthResult:
-    def __init__(self, user: User, access_token: str, refresh_token: str) -> None:
+    def __init__(self, user: User, access_token: str, refresh_token: str, remember_me: bool) -> None:
         self.user = user
         self.access_token = access_token
         self.refresh_token = refresh_token
+        # "Keep me logged in" for this session - routes_auth._set_session_cookies
+        # reads this to decide whether the cookies get a Max-Age (persistent,
+        # survives browser restarts) or none at all (a true session cookie,
+        # cleared once the browser closes).
+        self.remember_me = remember_me
 
 
 class AuthService:
@@ -64,11 +69,14 @@ class AuthService:
         session.flush()
 
         self._issue_verification_email(session, user)
-        access_token, refresh_token = self._issue_session(session, user)
+        # Signup has no "Keep me logged in" checkbox - preserves the
+        # existing, always-persistent behavior a fresh signup had before
+        # this option existed.
+        access_token, refresh_token = self._issue_session(session, user, remember_me=True)
         logger.info("Signup: new user %s", user.id)
-        return AuthResult(user, access_token, refresh_token)
+        return AuthResult(user, access_token, refresh_token, remember_me=True)
 
-    def login(self, session: Session, email: str, password: str) -> AuthResult:
+    def login(self, session: Session, email: str, password: str, remember_me: bool = False) -> AuthResult:
         email = _normalize_email(email)
         user = session.execute(select(User).where(User.email == email)).scalars().first()
         # Always run the hasher even on a missing user, so responses for
@@ -85,9 +93,9 @@ class AuthService:
         if security_service.needs_rehash(user.password_hash):
             user.password_hash = security_service.hash_password(password)
 
-        access_token, refresh_token = self._issue_session(session, user)
+        access_token, refresh_token = self._issue_session(session, user, remember_me=remember_me)
         logger.info("Login: user %s", user.id)
-        return AuthResult(user, access_token, refresh_token)
+        return AuthResult(user, access_token, refresh_token, remember_me=remember_me)
 
     def refresh(self, session: Session, raw_refresh_token: str) -> AuthResult:
         token_hash = security_service.hash_refresh_token(raw_refresh_token)
@@ -103,10 +111,14 @@ class AuthService:
             raise AccountDisabledError("This account is no longer active.")
 
         # Rotate: revoke the presented token and issue a fresh pair, so a
-        # leaked-and-reused refresh token is detectable/limited.
+        # leaked-and-reused refresh token is detectable/limited. The new pair
+        # carries forward the SAME remember_me the user originally chose at
+        # login, so "Keep me logged in" keeps applying across every silent
+        # rotation for the life of this session, not just the first token.
+        remember_me = record.remember_me
         record.revoked_at = now
-        access_token, refresh_token = self._issue_session(session, user)
-        return AuthResult(user, access_token, refresh_token)
+        access_token, refresh_token = self._issue_session(session, user, remember_me=remember_me)
+        return AuthResult(user, access_token, refresh_token, remember_me=remember_me)
 
     def logout(self, session: Session, raw_refresh_token: str | None) -> None:
         if not raw_refresh_token:
@@ -182,10 +194,14 @@ class AuthService:
         verify_url = f"{settings.frontend_base_url}/verify-email?token={raw}"
         email_service.send_verification_email(user.email, verify_url)
 
-    def _issue_session(self, session: Session, user: User) -> tuple[str, str]:
+    def _issue_session(self, session: Session, user: User, remember_me: bool = True) -> tuple[str, str]:
         access_token = security_service.create_access_token(user.id, user.role)
         raw_refresh, refresh_hash, expires_at = security_service.generate_refresh_token()
-        session.add(RefreshToken(user_id=user.id, token_hash=refresh_hash, expires_at=expires_at))
+        session.add(
+            RefreshToken(
+                user_id=user.id, token_hash=refresh_hash, expires_at=expires_at, remember_me=remember_me,
+            )
+        )
         return access_token, raw_refresh
 
 
