@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db, require_admin
 from app.api.routes_health import compute_health
 from app.database.commercial_models import AdminActionLog, BillingEvent, Subscription, UsagePeriod, User
-from app.models.commercial_enums import AdminActionType, AdPlacementId, Plan, UserStatus
+from app.models.commercial_enums import AdminActionType, AdPlacementId, Plan, SubscriptionProvider, UserStatus
 from app.models.commercial_schemas import (
     AdminActionLogOut,
     AdminAdPlacementOut,
@@ -24,10 +24,11 @@ from app.models.commercial_schemas import (
     AdminOverviewOut,
     AdminSetAccountStatusRequest,
     AdminUpdateAdPlacementRequest,
+    AdminUpdateSubscriptionRequest,
     AdminUserListOut,
     AdminUserOut,
 )
-from app.services import ad_placement_service
+from app.services import ad_placement_service, gift_subscription_service
 from app.services.account_service import ACTIVE_SUBSCRIPTION_STATUSES, account_service
 from app.services.admin_audit_service import admin_audit_service
 from app.services.plan_policy import get_policy
@@ -44,6 +45,18 @@ def _to_admin_user_out(session: Session, user: User) -> AdminUserOut:
     credits_bonus = None
     if usage.credits_included is not None and plan_base_credits is not None:
         credits_bonus = max(0, usage.credits_included - plan_base_credits)
+
+    subscription_provider = subscription.provider if subscription else "none"
+    gifted_granted_at = None
+    gifted_granted_by_email = None
+    gifted_reason = None
+    if subscription is not None and subscription.provider == SubscriptionProvider.GIFTED.value:
+        gifted_granted_at = subscription.created_at
+        gifted_reason = subscription.granted_reason
+        if subscription.granted_by_admin_id:
+            granter = session.get(User, subscription.granted_by_admin_id)
+            gifted_granted_by_email = granter.email if granter else None
+
     return AdminUserOut(
         id=user.id,
         email=user.email,
@@ -55,6 +68,10 @@ def _to_admin_user_out(session: Session, user: User) -> AdminUserOut:
         credits_included=usage.credits_included,
         credits_bonus=credits_bonus,
         created_at=user.created_at,
+        subscription_provider=subscription_provider,
+        gifted_granted_at=gifted_granted_at,
+        gifted_granted_by_email=gifted_granted_by_email,
+        gifted_reason=gifted_reason,
     )
 
 
@@ -114,10 +131,14 @@ async def get_overview(db: Session = Depends(get_db)) -> AdminOverviewOut:
     # subscription, take only their most-recently-updated such row (a user
     # should have at most one, but this stays correct even if not) via a
     # subquery-join rather than a window function, so it runs unchanged on
-    # both SQLite (dev) and PostgreSQL (production).
+    # both SQLite (dev) and PostgreSQL (production). Restricted to
+    # provider="paddle" - paid_subscribers/pro_count/creator_count are
+    # authoritative *revenue* figures and must never include a gifted
+    # subscription (see gift_subscription_service.py and
+    # docs/ANALYTICS.md "Gifted subscriptions are not revenue").
     latest_active_sub = (
         select(Subscription.user_id, func.max(Subscription.updated_at).label("max_updated"))
-        .where(Subscription.status.in_(ACTIVE_SUBSCRIPTION_STATUSES))
+        .where(Subscription.status.in_(ACTIVE_SUBSCRIPTION_STATUSES), Subscription.provider == SubscriptionProvider.PADDLE.value)
         .group_by(Subscription.user_id)
         .subquery()
     )
@@ -129,14 +150,24 @@ async def get_overview(db: Session = Depends(get_db)) -> AdminOverviewOut:
             (Subscription.user_id == latest_active_sub.c.user_id)
             & (Subscription.updated_at == latest_active_sub.c.max_updated),
         )
-        .where(Subscription.status.in_(ACTIVE_SUBSCRIPTION_STATUSES))
+        .where(Subscription.status.in_(ACTIVE_SUBSCRIPTION_STATUSES), Subscription.provider == SubscriptionProvider.PADDLE.value)
         .group_by(Subscription.plan)
     ).all()
     plan_counts = {plan: count for plan, count in plan_rows}
     pro_count = plan_counts.get(Plan.PRO.value, 0)
     creator_count = plan_counts.get(Plan.CREATOR.value, 0)
     paid_subscribers = pro_count + creator_count
-    free_count = max(0, total_users - paid_subscribers)
+
+    # Counted and reported entirely separately - never added into
+    # paid_subscribers (see AdminOverviewOut.gifted_subscribers).
+    gifted_subscribers = db.execute(
+        select(func.count(func.distinct(Subscription.user_id))).where(
+            Subscription.status.in_(ACTIVE_SUBSCRIPTION_STATUSES),
+            Subscription.provider == SubscriptionProvider.GIFTED.value,
+        )
+    ).scalar_one()
+
+    free_count = max(0, total_users - paid_subscribers - gifted_subscribers)
 
     now = datetime.now(timezone.utc)
     credits_consumed = db.execute(
@@ -162,6 +193,7 @@ async def get_overview(db: Session = Depends(get_db)) -> AdminOverviewOut:
         free_count=free_count,
         pro_count=pro_count,
         creator_count=creator_count,
+        gifted_subscribers=gifted_subscribers,
         credits_consumed_current_period=int(credits_consumed),
         recent_billing_failures=_to_billing_event_out_list(db, failure_rows),
         recent_admin_actions=_to_admin_action_log_out_list(db, recent_actions),
@@ -243,6 +275,29 @@ async def set_account_status(
         admin_audit_service.record(
             db, admin, action, user.id, {"previous_status": previous_status, "new_status": payload.status}
         )
+    return _to_admin_user_out(db, user)
+
+
+@router.patch("/users/{user_id}/subscription", response_model=AdminUserOut, dependencies=[Depends(require_admin)])
+async def update_user_subscription(
+    user_id: str,
+    payload: AdminUpdateSubscriptionRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> AdminUserOut:
+    """Admin-managed Gifted Subscription: grant/change (plan=pro|creator) or
+    revoke (plan=free). Never touches Paddle in any way - see
+    gift_subscription_service.py. Blocked outright (409) if the user
+    currently has an active Paddle subscription; the frontend is expected
+    to disable these controls in that state too, but this is the
+    server-authoritative check that actually matters."""
+    user = db.get(User, user_id)
+    if user is None:
+        raise UnavailableMediaError("User not found.")
+    if payload.plan == Plan.FREE:
+        gift_subscription_service.revoke(db, admin, user, payload.reason)
+    else:
+        gift_subscription_service.grant_or_change(db, admin, user, payload.plan, payload.reason)
     return _to_admin_user_out(db, user)
 
 

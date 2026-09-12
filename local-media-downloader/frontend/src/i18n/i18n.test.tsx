@@ -76,6 +76,7 @@ describe("English and Arabic internationalization", () => {
       free_count: 4,
       pro_count: 1,
       creator_count: 0,
+      gifted_subscribers: 0,
       credits_consumed_current_period: 12,
       recent_billing_failures: [],
       recent_admin_actions: [],

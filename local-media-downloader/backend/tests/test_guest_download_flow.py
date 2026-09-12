@@ -67,12 +67,12 @@ class TestGuestQuotaService:
     def _request(self) -> CreateDownloadRequest:
         return CreateDownloadRequest(url="https://www.youtube.com/watch?v=abc123", media_type=MediaType.VIDEO, quality_key="360")
 
-    def test_first_and_second_reservation_succeed_third_is_blocked(self):
+    def test_first_through_fifth_reservation_succeed_sixth_is_blocked(self):
         session = get_session_factory()()
         try:
             guest_id = _new_guest_id()
-            guest_service.authorize_and_reserve(session, guest_id, self._request())
-            guest_service.authorize_and_reserve(session, guest_id, self._request())
+            for _ in range(5):
+                guest_service.authorize_and_reserve(session, guest_id, self._request())
             with pytest.raises(GuestQuotaExceededError):
                 guest_service.authorize_and_reserve(session, guest_id, self._request())
             session.commit()
@@ -85,7 +85,7 @@ class TestGuestQuotaService:
             guest_id = _new_guest_id()
             guest_service.authorize_and_reserve(session, guest_id, self._request())
             used_before, limit = guest_service.get_quota_status(session, guest_id)
-            assert (used_before, limit) == (1, 2)
+            assert (used_before, limit) == (1, 5)
 
             guest_service.commit_download(session, guest_id)
             session.commit()
@@ -107,8 +107,8 @@ class TestGuestQuotaService:
             assert used == 0
             # And the allowance is usable again - a failed/cancelled
             # download must never burn a guest's try.
-            guest_service.authorize_and_reserve(session, guest_id, self._request())
-            guest_service.authorize_and_reserve(session, guest_id, self._request())
+            for _ in range(5):
+                guest_service.authorize_and_reserve(session, guest_id, self._request())
             with pytest.raises(GuestQuotaExceededError):
                 guest_service.authorize_and_reserve(session, guest_id, self._request())
             session.commit()
@@ -182,31 +182,29 @@ class TestGuestDownloadHttpFlow:
         assert resp.status_code == 201, resp.text
         assert "lmd_guest" in resp.cookies
 
-    def test_second_download_succeeds_third_is_blocked_with_402(self):
+    def test_fifth_download_succeeds_sixth_is_blocked_with_402(self):
         c = TestClient(app)
-        first = c.post("/api/downloads", json=self._payload())
-        assert first.status_code == 201, first.text
+        for _ in range(5):
+            resp = c.post("/api/downloads", json=self._payload())
+            assert resp.status_code == 201, resp.text
 
-        second = c.post("/api/downloads", json=self._payload())
-        assert second.status_code == 201, second.text
-
-        third = c.post("/api/downloads", json=self._payload())
-        assert third.status_code == 402, third.text
-        assert third.json()["code"] == "GUEST_QUOTA_EXCEEDED"
+        sixth = c.post("/api/downloads", json=self._payload())
+        assert sixth.status_code == 402, sixth.text
+        assert sixth.json()["code"] == "GUEST_QUOTA_EXCEEDED"
 
     def test_guest_quota_endpoint_reflects_remaining_count(self):
         c = TestClient(app)
         status = c.get("/api/downloads/guest-quota")
         assert status.status_code == 200
-        assert status.json() == {"remaining": 2, "limit": 2}
+        assert status.json() == {"remaining": 5, "limit": 5}
 
         c.post("/api/downloads", json=self._payload())
         status = c.get("/api/downloads/guest-quota")
-        assert status.json()["remaining"] == 1
+        assert status.json()["remaining"] == 4
 
         c.post("/api/downloads", json=self._payload())
         status = c.get("/api/downloads/guest-quota")
-        assert status.json()["remaining"] == 0
+        assert status.json()["remaining"] == 3
 
     def test_a_guest_cannot_see_or_cancel_another_guests_job(self):
         guest_a = TestClient(app)
@@ -247,9 +245,10 @@ class TestGuestDownloadHttpFlow:
         signup = c.post("/api/auth/signup", json={"email": email, "password": "correcthorse9!"})
         assert signup.status_code == 201, signup.text
 
-        # A signed-in Free-plan account has its own (much larger) daily
-        # allowance, not the 2-download guest quota - three downloads in a
-        # row must not trip GUEST_QUOTA_EXCEEDED.
+        # A signed-in Free-plan account has its own daily allowance
+        # (currently larger than the guest quota), not the guest quota
+        # itself - several downloads in a row must not trip
+        # GUEST_QUOTA_EXCEEDED.
         for _ in range(3):
             resp = c.post("/api/downloads", json=self._payload())
             assert resp.status_code == 201, resp.text
@@ -320,7 +319,7 @@ class TestGuestJobLifecycleAndStorage:
         session = get_session_factory()()
         try:
             used, limit = guest_service.get_quota_status(session, guest_id)
-            assert (used, limit) == (1, 2)  # one *completed* download, allowance intact for one more
+            assert (used, limit) == (1, 5)  # one *completed* download, allowance intact for more
         finally:
             session.close()
 
@@ -346,7 +345,7 @@ class TestGuestJobLifecycleAndStorage:
         session = get_session_factory()()
         try:
             used, limit = guest_service.get_quota_status(session, guest_id)
-            assert (used, limit) == (0, 2)  # the failed attempt must not have cost the guest anything
+            assert (used, limit) == (0, 5)  # the failed attempt must not have cost the guest anything
         finally:
             session.close()
 

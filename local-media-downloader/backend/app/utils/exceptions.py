@@ -167,3 +167,12 @@ class BillingError(AppError):
 class InvalidWebhookSignatureError(AppError):
     status_code = 400
     code = "INVALID_WEBHOOK_SIGNATURE"
+
+
+class PaidSubscriptionActiveError(AppError):
+    """A real, active Paddle subscription blocks the admin Gifted
+    Subscription controls - see gift_subscription_service.py. Never raised
+    for a gifted or free/no-subscription account."""
+
+    status_code = 409
+    code = "PAID_SUBSCRIPTION_ACTIVE"

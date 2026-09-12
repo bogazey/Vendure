@@ -38,6 +38,7 @@ function makeOverview(overrides: Partial<AdminOverviewOut> = {}): AdminOverviewO
     free_count: 30,
     pro_count: 9,
     creator_count: 3,
+    gifted_subscribers: 2,
     credits_consumed_current_period: 517,
     recent_billing_failures: [],
     recent_admin_actions: [],

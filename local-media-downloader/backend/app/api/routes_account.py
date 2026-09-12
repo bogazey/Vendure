@@ -53,6 +53,9 @@ async def get_account(user: User = Depends(get_current_user), db: Session = Depe
         current_period_start=display_subscription.current_period_start if display_subscription else None,
         current_period_end=display_subscription.current_period_end if display_subscription else None,
         cancel_at_period_end=display_subscription.cancel_at_period_end if display_subscription else False,
+        # "paddle" | "gifted" | "none" - lets the billing UI hide Paddle-only
+        # actions for a gifted subscription (see Billing.tsx/BillingManagement.tsx).
+        provider=display_subscription.provider if display_subscription else "none",
     )
 
     return AccountOut(

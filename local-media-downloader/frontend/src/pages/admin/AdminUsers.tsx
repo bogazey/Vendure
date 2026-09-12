@@ -4,13 +4,19 @@ import ConfirmDialog from "../../components/ConfirmDialog";
 import ErrorBanner from "../../components/ErrorBanner";
 import { ApiError, api } from "../../services/api";
 import { brandLink } from "../../styles/ui";
-import type { AdminActionLogOut, AdminUserOut } from "../../types/commercial";
+import type { AdminActionLogOut, AdminUserOut, Plan } from "../../types/commercial";
 import { PLAN_LABELS } from "../../types/commercial";
 import { formatDate } from "../../utils/format";
 import AdminLayout from "./AdminLayout";
 import { actionLabelKey } from "./adminShared";
 
 const PAGE_SIZE = 20;
+
+function subscriptionSourceLabelKey(user: AdminUserOut): string {
+  if (user.subscription_provider === "paddle") return "admin.users.sourcePaddle";
+  if (user.subscription_provider === "gifted") return "admin.users.sourceGifted";
+  return "admin.users.sourceFree";
+}
 
 export default function AdminUsers() {
   const { t } = useTranslation();
@@ -26,6 +32,11 @@ export default function AdminUsers() {
   const [confirmDisable, setConfirmDisable] = useState<AdminUserOut | null>(null);
   const [detailUser, setDetailUser] = useState<AdminUserOut | null>(null);
   const [detailActions, setDetailActions] = useState<AdminActionLogOut[]>([]);
+  const [subscriptionTarget, setSubscriptionTarget] = useState<AdminUserOut | null>(null);
+  const [subscriptionPlan, setSubscriptionPlan] = useState<Plan>("pro");
+  const [subscriptionReason, setSubscriptionReason] = useState("");
+  const [confirmingSubscription, setConfirmingSubscription] = useState(false);
+  const [subscriptionBusy, setSubscriptionBusy] = useState(false);
 
   const load = async (q: string, pageIndex: number) => {
     setLoading(true);
@@ -88,6 +99,32 @@ export default function AdminUsers() {
       applyUpdate(updated);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("admin.users.statusError"));
+    }
+  };
+
+  const openSubscriptionManager = (user: AdminUserOut) => {
+    setSubscriptionTarget(user);
+    setSubscriptionPlan(user.plan !== "free" ? user.plan : "pro");
+    setSubscriptionReason("");
+    setConfirmingSubscription(false);
+  };
+
+  const closeSubscriptionManager = () => {
+    setSubscriptionTarget(null);
+    setConfirmingSubscription(false);
+  };
+
+  const handleSubscriptionSubmit = async () => {
+    if (!subscriptionTarget) return;
+    setSubscriptionBusy(true);
+    try {
+      const updated = await api.adminUpdateSubscription(subscriptionTarget.id, subscriptionPlan, subscriptionReason.trim() || undefined);
+      applyUpdate(updated);
+      closeSubscriptionManager();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t("admin.users.subscriptionError"));
+    } finally {
+      setSubscriptionBusy(false);
     }
   };
 
@@ -154,7 +191,14 @@ export default function AdminUsers() {
                   </button>
                 </td>
                 <td className="px-4 py-2 text-slate-400">{PLAN_LABELS[u.plan]}</td>
-                <td className="px-4 py-2 text-slate-400">{t(`status.${u.subscription_status}`)}</td>
+                <td className="px-4 py-2 text-slate-400">
+                  {t(`status.${u.subscription_status}`)}
+                  {u.subscription_provider === "gifted" && (
+                    <span className="ms-1.5 rounded-full bg-brand-aqua/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand-aqua">
+                      {t("admin.users.sourceGiftedBadge")}
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-2 text-slate-400" dir="ltr">
                   {u.credits_used}
                   {u.credits_included !== null ? ` / ${u.credits_included}` : ""}
@@ -177,6 +221,13 @@ export default function AdminUsers() {
                       className={`text-xs ${brandLink} underline decoration-dotted underline-offset-2`}
                     >
                       {t("admin.users.grantCredits")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openSubscriptionManager(u)}
+                      className={`text-xs ${brandLink} underline decoration-dotted underline-offset-2`}
+                    >
+                      {t("admin.users.manageSubscription")}
                     </button>
                     {u.status === "disabled" ? (
                       <button
@@ -267,6 +318,105 @@ export default function AdminUsers() {
         </div>
       )}
 
+      {subscriptionTarget && (
+        <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
+          <div className="glass-panel-raised flex w-full max-w-sm flex-col gap-4 p-5">
+            <h2 className="font-display text-sm font-semibold text-slate-50" dir="ltr">
+              {t("admin.users.manageSubscriptionTitle", { email: subscriptionTarget.email })}
+            </h2>
+
+            {subscriptionTarget.subscription_provider === "paddle" ? (
+              <>
+                <p className="text-sm text-slate-400">{t("admin.users.paidManagedNotice")}</p>
+                <div className="flex justify-end">
+                  <button type="button" onClick={closeSubscriptionManager} className="btn-glass px-3 py-1.5">
+                    {t("common.close")}
+                  </button>
+                </div>
+              </>
+            ) : !confirmingSubscription ? (
+              <>
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+                  <dt className="text-slate-500">{t("admin.users.columnPlan")}</dt>
+                  <dd className="text-slate-300">{PLAN_LABELS[subscriptionTarget.plan]}</dd>
+                  <dt className="text-slate-500">{t("admin.users.detailSource")}</dt>
+                  <dd className="text-slate-300">{t(subscriptionSourceLabelKey(subscriptionTarget))}</dd>
+                </dl>
+                <label className="flex flex-col gap-1.5 text-sm">
+                  <span className="text-slate-400">{t("admin.users.newPlan")}</span>
+                  <select
+                    className="input-glass py-2"
+                    value={subscriptionPlan}
+                    onChange={(e) => setSubscriptionPlan(e.target.value as Plan)}
+                  >
+                    <option value="free">{PLAN_LABELS.free}</option>
+                    <option value="pro">{PLAN_LABELS.pro}</option>
+                    <option value="creator">{PLAN_LABELS.creator}</option>
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1.5 text-sm">
+                  <span className="text-slate-400">{t("admin.users.giftReasonOptional")}</span>
+                  <input
+                    type="text"
+                    value={subscriptionReason}
+                    onChange={(e) => setSubscriptionReason(e.target.value)}
+                    placeholder={t("admin.users.reasonPlaceholder")}
+                    className="input-glass py-2"
+                  />
+                </label>
+                <p className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                  {t("admin.users.giftWarning")}
+                </p>
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={closeSubscriptionManager} className="btn-glass px-3 py-1.5">
+                    {t("common.cancel")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingSubscription(true)}
+                    disabled={subscriptionPlan === subscriptionTarget.plan}
+                    className="btn-gradient px-3 py-1.5"
+                  >
+                    {t(
+                      subscriptionPlan === "free"
+                        ? "admin.users.revokeGift"
+                        : subscriptionTarget.subscription_provider === "gifted"
+                          ? "admin.users.updateGift"
+                          : "admin.users.grantGift"
+                    )}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-slate-300">
+                  {t(
+                    subscriptionPlan === "free"
+                      ? "admin.users.revokeConfirmBody"
+                      : "admin.users.giftConfirmBody",
+                    { plan: PLAN_LABELS[subscriptionPlan] }
+                  )}
+                </p>
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={() => setConfirmingSubscription(false)} disabled={subscriptionBusy} className="btn-glass px-3 py-1.5">
+                    {t("billingManage.back")}
+                  </button>
+                  <button type="button" onClick={handleSubscriptionSubmit} disabled={subscriptionBusy} className="btn-gradient px-3 py-1.5">
+                    {t(
+                      subscriptionPlan === "free"
+                        ? "admin.users.revokeGift"
+                        : subscriptionTarget.subscription_provider === "gifted"
+                          ? "admin.users.updateGift"
+                          : "admin.users.grantGift"
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {confirmDisable && (
         <ConfirmDialog
           title={t("admin.users.confirmDisableTitle")}
@@ -298,6 +448,22 @@ export default function AdminUsers() {
               <dd className="text-slate-300">{PLAN_LABELS[detailUser.plan]}</dd>
               <dt className="text-slate-500">{t("admin.users.columnSubscription")}</dt>
               <dd className="text-slate-300">{t(`status.${detailUser.subscription_status}`)}</dd>
+              <dt className="text-slate-500">{t("admin.users.detailSource")}</dt>
+              <dd className="text-slate-300">{t(subscriptionSourceLabelKey(detailUser))}</dd>
+              {detailUser.subscription_provider === "gifted" && (
+                <>
+                  <dt className="text-slate-500">{t("admin.users.detailGranted")}</dt>
+                  <dd className="text-slate-300" dir="ltr">{detailUser.gifted_granted_at ? formatDate(detailUser.gifted_granted_at) : "—"}</dd>
+                  <dt className="text-slate-500">{t("admin.users.detailGrantedBy")}</dt>
+                  <dd className="truncate text-slate-300" dir="ltr">{detailUser.gifted_granted_by_email ?? "—"}</dd>
+                  {detailUser.gifted_reason && (
+                    <>
+                      <dt className="text-slate-500">{t("admin.users.detailReason")}</dt>
+                      <dd className="text-slate-300">{detailUser.gifted_reason}</dd>
+                    </>
+                  )}
+                </>
+              )}
               <dt className="text-slate-500">{t("admin.users.detailIncluded")}</dt>
               <dd className="text-slate-300" dir="ltr">{detailUser.credits_included ?? "—"}</dd>
               <dt className="text-slate-500">{t("admin.users.detailBonus")}</dt>

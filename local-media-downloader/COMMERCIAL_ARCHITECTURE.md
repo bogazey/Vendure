@@ -109,7 +109,7 @@ Flow, wired into `routes_downloads.py` and `download_manager.py`:
 
 1. `DownloadGateService.authorize_and_reserve()` runs every entitlement
    check for the request, then reserves the credit cost. Raises a
-   structured error (see §3.4) if anything fails — no job is created.
+   structured error (see §3.5) if anything fails — no job is created.
 2. The reservation is committed to the DB **before** `DownloadManager.
    create_job()` is called, closing a race where a fast-failing job could
    try to settle a reservation that isn't durable yet.
@@ -127,7 +127,19 @@ promos, rewarded-ad unlocks, admin overrides) so future Creator tools can
 gate on `can_use_creator_tools` or a specific `Entitlement` row without
 touching the plan model again.
 
-### 3.4 Structured error codes
+### 3.4 Anonymous guest downloads
+
+Separate from the authenticated Free plan's 5/day allowance above: an
+anonymous visitor gets `GUEST_DOWNLOAD_LIMIT` (`commercial_settings.py`,
+default **5**, raised from 2) downloads **for the lifetime of their
+`lmd_guest` cookie**, not a daily reset — tracked by `GuestQuota`
+(`guest_service.py`) with an atomic reserve/commit/refund pattern mirroring
+the authenticated credit reservation lifecycle in §3.2. This is a distinct
+quota from the Free plan's daily allowance; signing up for a Free account
+gives the user the normal 5/day allowance independently of how much of
+their guest quota they'd already used.
+
+### 3.5 Structured error codes
 
 Every gating failure is a typed `AppError` subclass with a stable `code` the
 frontend branches on (`ApiError.code` in `services/api.ts`):
@@ -459,9 +471,11 @@ is the primary key — one row per account, see §4.1).
   `GET /api/admin/users`, `GET /api/admin/users/{id}`,
   `POST /api/admin/users/{id}/grant-credits`,
   `POST /api/admin/users/{id}/status` (disable/reactivate, with
-  self-disable rejected), `GET /api/admin/billing-events`,
-  `GET /api/admin/overview`, `GET /api/admin/audit-log`. None of them
-  return Paddle secrets, API keys, or raw webhook payloads.
+  self-disable rejected), `PATCH /api/admin/users/{id}/subscription`
+  (grant/change/revoke a **gifted** subscription — never Paddle, see §12),
+  `GET /api/admin/billing-events`, `GET /api/admin/overview`,
+  `GET /api/admin/audit-log`. None of them return Paddle secrets, API keys,
+  or raw webhook payloads.
 - **Audit log**: `AdminActionLog` (own table, not overloaded onto
   `UsageEvent`) records every grant/disable/reactivate with the acting
   admin's id, the action, the affected user, a small JSON `details` blob,
@@ -477,3 +491,208 @@ is the primary key — one row per account, see §4.1).
   `AdminUserOut`) is derived at read time as
   `max(0, credits_included - plan's own monthly_credits)` — it is never a
   stored column, so it can't drift from the real credit ledger.
+
+## 12. Gifted Subscriptions (admin-granted, non-revenue access)
+
+An admin can manually grant, change, or revoke Pro/Creator access for a
+user **without charging them** — for support, promos, partnerships, or
+internal testing. A Gifted Subscription is internal promotional/manual
+access; it is never treated as paid income, and it is never created,
+modified, or synced through Paddle in any way.
+
+### 12.1 Explicit subscription source, never inferred
+
+`Subscription.provider` (an existing `String` column that already defaulted
+to `"paddle"`) is now typed against `SubscriptionProvider` (`commercial_
+enums.py`): `PADDLE` or `GIFTED`. This is the one, explicit, queryable
+source of truth for "is this row paid or gifted" — nothing infers gifted
+status from a missing Paddle subscription id or any other absent field, and
+no unrelated column is overloaded to carry this meaning.
+
+### 12.2 Entitlements: reuse, not a parallel system
+
+A gifted `Subscription` row is a completely ordinary row — same table, same
+`plan`/`status="active"` semantics — so every existing entitlement/credit
+code path treats it identically to a paid one, with no new gating logic:
+
+- `account_service.get_active_subscription`/`get_current_plan` filter by
+  `status`, not `provider` — a gifted row is picked up automatically.
+- `EntitlementService`/`DownloadGateService` never look at `provider` at
+  all — a gifted Pro/Creator user gets pixel-identical feature access
+  (resolution cap, batch, clip range, cookies, ads-off, queue priority) to
+  a paid one.
+- Gifted subscriptions have no confirmed Paddle billing period, so
+  `UsageService.get_or_create_current_period`'s existing "no confirmed
+  billing period yet" 30-day rolling-window fallback (already used for
+  brand-new paid subscriptions before their first Paddle webhook lands)
+  is what rolls a gifted user's monthly credits over — no new credit-reset
+  mechanism was built.
+
+### 12.3 Paid Paddle subscriptions always take precedence
+
+`gift_subscription_service._reject_if_paid()` is checked before any
+grant/change: if the user has an active Paddle-provider subscription, the
+call raises `PaidSubscriptionActiveError` (`409 PAID_SUBSCRIPTION_ACTIVE`)
+and nothing is written. An admin cannot use the gifting control to
+overwrite, downgrade, cancel, or otherwise alter a real Paddle subscription
+— the admin UI disables the gifting controls for such a user up front and
+shows "Paid subscription managed through Paddle" instead of a form.
+`gift_subscription_service.py` never imports or calls `paddle_client`; it
+never creates a Paddle customer/subscription/checkout, never touches a
+Paddle price or subscription id, and never cancels billing. (A pre-existing
+safety net, `routes_billing._owned_subscription`'s `provider != "paddle"`
+check, independently blocks the Paddle-management endpoints from ever
+acting on a gifted row.)
+
+### 12.4 Admin workflow
+
+`AdminUsers.tsx`'s "Manage subscription" button opens a modal (not a raw
+dropdown):
+
+- **Active Paddle subscription** → the modal renders a non-editable notice
+  ("This user has an active paid Paddle subscription. Manage billing
+  through the normal subscription workflow.") — no form is shown.
+- **Otherwise** → a plan selector (Free / Gift Pro / Gift Creator), an
+  optional reason (validated, max 500 chars), and an explicit warning
+  ("This grants Loady access without charging the user.") before a second,
+  confirmation step. The confirm button reads "Grant/Update/Revoke Gifted
+  Subscription" depending on the transition. Choosing Free on a gifted
+  user revokes it.
+- The Users table and user-detail modal show a "Gifted" badge, the
+  subscription source, the granted date, who granted it
+  (`granted_by_admin_id` → resolved email), and the optional reason —
+  visible to admins only; end users never see the admin's note.
+
+### 12.5 Backend endpoint
+
+`PATCH /api/admin/users/{user_id}/subscription` (`require_admin`,
+`AdminUpdateSubscriptionRequest {plan, reason?}`):
+
+- Anonymous → 401, non-admin → 403 (same `require_admin` dependency as
+  every other admin route).
+- `plan` is a strict `Plan` enum (422 on anything else) — there is no way
+  to set an arbitrary/free-text subscription source from the request body;
+  `provider` itself is never client-supplied, it's always set server-side
+  to `GIFTED`.
+- `plan == Plan.FREE` → `gift_subscription_service.revoke()`; otherwise →
+  `grant_or_change()`. Both run inside the request's existing DB
+  transaction — either the subscription update **and** the audit log
+  **and** the analytics event all commit, or none do.
+- Blocked (409) whenever the target already has an active Paddle
+  subscription, per §12.3.
+
+### 12.6 Reversibility
+
+Revoking a gifted subscription sets `plan=free`, `provider` to no active
+row (the subscription's status moves to a terminal state exactly like a
+cancelled Paddle subscription would), and the user immediately gets Free
+entitlements on their very next request — no caching, no delay. Gifted
+Creator → Gifted Pro (or back) preserves `provider=gifted` and simply
+updates `plan`, writing a `gift_subscription_changed` audit row rather than
+a grant/revoke. Paid billing fields (`granted_by_admin_id` aside, which is
+gift-only) are never touched by any gifted-subscription operation.
+
+### 12.7 Audit log
+
+Reuses the existing `AdminActionLog` table and `admin_audit_service.record()`
+— no new audit mechanism. Three new `AdminActionType` values:
+`gift_subscription_granted`, `gift_subscription_changed`,
+`gift_subscription_revoked`. Each entry's `details` JSON carries the target
+user's email, previous/new plan, previous/new subscription source, and the
+optional reason; the acting admin's id and a timestamp are the log row's
+own existing columns. This is append-only, like every other admin action —
+a later revoke does not delete or rewrite the original grant's row.
+
+### 12.8 Revenue and analytics: gifted is never revenue
+
+Every query that counts "paid subscribers" now explicitly filters
+`Subscription.provider == SubscriptionProvider.PADDLE.value` — this
+changed `analytics_service.get_overview` (`paid_conversions`),
+`analytics_service.get_revenue` (`active_paid_subscribers`,
+`new_paid_subscribers`), and the admin overview's plan-breakdown query
+(`routes_admin.get_overview`). Gifted subscriptions are counted **only** in
+their own, separate, never-summed fields: `AdminOverviewOut.
+gifted_subscribers`, `RevenueOut.gifted_active_subscriptions`, `RevenueOut.
+gifted_events_this_period`. A gifted user is structurally excluded from
+`Subscription.created_at`-based "new paid subscriber" counts and from
+`plan_upgraded`/`plan_downgraded`/`subscription_cancelled` events (those
+three event types are written **only** from `paddle_service.py`'s webhook
+handler — never from `gift_subscription_service`). Three new, structurally
+separate event types exist for gifted actions
+(`gifted_subscription_granted/changed/revoked`, `AnalyticsEventType`) so a
+revenue-movement query can never accidentally mix gifted activity into paid
+movement — and, like every other analytics event, they are recorded only
+server-side after an authenticated admin action (`analytics_service.
+record_event`, called from `gift_subscription_service.py`), never
+submittable from the browser (see `docs/ANALYTICS.md`'s ingestion-endpoint
+section — `POST /api/analytics/event` only ever accepts `page_view`).
+
+### 12.9 User-facing billing UI
+
+`Billing.tsx` checks `subscription.provider === "gifted"` and, when true:
+shows a "Gifted Subscription" badge instead of the Paddle status pill, an
+explanatory notice ("This subscription was provided by Loady and does not
+require payment.") instead of exposing any admin note, and hides every
+Paddle-only action (Manage billing link, `<BillingManagement />`'s change
+plan / cancel / resume / update-payment-method controls) — a gifted user
+has no Paddle subscription to manage, so those controls would otherwise
+404. `BillingManagement.tsx` itself independently refuses to render for
+any non-`"paddle"` provider, so this is enforced in two places, not one.
+Gifted users keep full entitled feature access throughout — only the
+billing chrome changes.
+
+### 12.10 Migration
+
+`alembic/versions/7d2e9a4c1f83_add_gifted_subscription_fields.py`
+(`down_revision = "4c8a1f2e6b9d"`, the analytics-events migration) adds two
+nullable columns to `subscriptions` via `batch_alter_table` (required for
+SQLite's lack of in-place `ALTER … ADD CONSTRAINT`, matching the existing
+`224af020fc5a_add_admin_action_log_and_billing_...` migration's pattern):
+`granted_by_admin_id` (FK → `users.id`) and `granted_reason`. Both are
+purely additive and nullable — every existing row (paid or Free) is
+unaffected; no existing `Subscription.provider` value is rewritten by this
+migration, so existing paid subscriptions remain `paddle` and existing
+Free accounts (no `Subscription` row at all) remain Free. Verified with a
+clean upgrade + downgrade round-trip against a fresh SQLite database.
+
+### 12.11 Emails
+
+No new email is sent for a gifted-subscription grant/change/revoke — there
+is no existing "admin changes a user's plan" email pattern to extend
+(`grant-credits`/`status` toggles don't email either), and the mission
+explicitly said not to introduce new Resend behavior for this feature.
+
+### 12.12 Files
+
+**Backend (new):** `app/services/gift_subscription_service.py`,
+`alembic/versions/7d2e9a4c1f83_add_gifted_subscription_fields.py`,
+`tests/test_gifted_subscriptions.py`.
+
+**Backend (modified):** `app/models/commercial_enums.py`
+(`SubscriptionProvider`, 3 `AdminActionType`/`AnalyticsEventType` values),
+`app/database/commercial_models.py` (`granted_by_admin_id`,
+`granted_reason`, disambiguated `Subscription.user`/`User.subscriptions`
+relationships), `app/utils/exceptions.py`
+(`PaidSubscriptionActiveError`), `app/models/commercial_schemas.py`
+(`SubscriptionOut.provider`, gifted fields on `AdminUserOut`,
+`AdminUpdateSubscriptionRequest`, `AdminOverviewOut.gifted_subscribers`),
+`app/api/routes_admin.py` (new endpoint, gifted-aware overview counts),
+`app/api/routes_account.py` (`SubscriptionOut.provider`),
+`app/services/analytics_service.py` (paid-only filters, gifted counters),
+`app/models/analytics_schemas.py` (`RevenueOut` gifted fields).
+
+**Frontend (new):** `src/pages/Billing.test.tsx`.
+
+**Frontend (modified):** `src/types/commercial.ts`
+(`SubscriptionSource`, gifted fields/types), `src/types/analytics.ts`
+(`RevenueOut` gifted fields), `src/services/api.ts`
+(`adminUpdateSubscription`), `src/pages/admin/adminShared.tsx` (gift action
+labels), `src/pages/admin/AdminUsers.tsx` (Manage-subscription modal,
+badges, detail fields), `src/pages/admin/AdminOverview.tsx` (Gifted
+subscriptions tile), `src/components/BillingManagement.tsx` (provider
+guard), `src/pages/Billing.tsx` (gifted badge/notice, hidden Paddle
+actions), `src/i18n/locales/{en,ar}.json`, plus test-fixture updates in
+`AdminUsers.test.tsx`, `AdminOverview.test.tsx`, `AdminStatistics.test.tsx`,
+`BillingManagement.test.tsx`, `i18n.test.tsx`, and the `SubscriptionOut`
+literal in `AdSlot.test.tsx`, `Header.test.tsx`, `ProtectedRoute.test.tsx`,
+`AuthContext.test.tsx`, `Dashboard.test.tsx`, `Pricing.test.tsx`.

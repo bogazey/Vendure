@@ -251,12 +251,12 @@
     "ad": "Sponsored · Ad space reserved for Free plan — upgrade to Pro to remove ads"
   },
   "guest": {
-    "available": "2 free downloads — no account required",
+    "available": "{{count}} free downloads — no account required",
     "oneRemaining": "1 free download remaining",
     "quotaTitle": "You've used your free downloads",
     "quotaBody": "Create a free account to keep downloading — it only takes a few seconds and no card is required.",
     "createAccount": "Create free account",
-    "quotaError": "You've used both free downloads on this device. Create a free account to keep going."
+    "quotaError": "You've used all your free downloads on this device. Create a free account to keep going."
   },
   "status": {
     "queued": "Queued",
@@ -299,7 +299,9 @@
     "change": "Change plan",
     "portalUnavailable": "Billing management isn't available yet for this account.",
     "portalError": "Could not open billing management.",
-    "notice": "Manage your subscription here in Loady. Paddle securely processes payments; Loady never sees or stores your card details."
+    "notice": "Manage your subscription here in Loady. Paddle securely processes payments; Loady never sees or stores your card details.",
+    "giftedBadge": "Gifted Subscription",
+    "giftedNotice": "This subscription was provided by Loady and does not require payment."
   },
   "settingsPage": {
     "loading": "Loading settings…",
@@ -402,6 +404,7 @@
   },
   "common": {
     "cancel": "Cancel",
+    "close": "Close",
     "show": "Show",
     "hide": "Hide",
     "technical": "technical details",
@@ -440,7 +443,8 @@
       "downloadsToday": "Downloads today",
       "newUsersToday": "New users today",
       "downloadSuccessRate": "Download success rate",
-      "activeNow": "Active now"
+      "activeNow": "Active now",
+      "giftedSubscribers": "Gifted subscriptions"
     },
     "statistics": {
       "title": "Web Statistics",
@@ -525,7 +529,27 @@
       "detailIncluded": "Included credits",
       "detailBonus": "Bonus credits",
       "detailCreated": "Created",
-      "searchButton": "Search"
+      "searchButton": "Search",
+      "sourcePaddle": "Paid / Paddle",
+      "sourceGifted": "Gifted Subscription",
+      "sourceFree": "Free / None",
+      "sourceGiftedBadge": "Gifted",
+      "detailSource": "Subscription",
+      "detailGranted": "Granted",
+      "detailGrantedBy": "Granted by",
+      "detailReason": "Note",
+      "manageSubscription": "Manage subscription",
+      "manageSubscriptionTitle": "Manage subscription — {{email}}",
+      "paidManagedNotice": "This user has an active paid Paddle subscription. Manage billing through the normal subscription workflow.",
+      "newPlan": "New plan",
+      "giftReasonOptional": "Reason (optional)",
+      "giftWarning": "This grants Loady access without charging the user.",
+      "grantGift": "Grant Gifted Subscription",
+      "updateGift": "Update Gifted Subscription",
+      "revokeGift": "Revoke Gifted Subscription",
+      "giftConfirmBody": "Grant this user {{plan}} access as a Gifted Subscription? No payment is collected.",
+      "revokeConfirmBody": "Revoke this user's Gifted Subscription and move them back to Free?",
+      "subscriptionError": "Could not update this user's subscription."
     },
     "billing": {
       "loadError": "Could not load billing events.",
@@ -562,7 +586,10 @@
       "empty": "No admin actions recorded yet.",
       "grantCredits": "Granted credits",
       "disableAccount": "Disabled account",
-      "reactivateAccount": "Reactivated account"
+      "reactivateAccount": "Reactivated account",
+      "giftGranted": "Granted a Gifted Subscription",
+      "giftChanged": "Changed a Gifted Subscription",
+      "giftRevoked": "Revoked a Gifted Subscription"
     },
     "system": {
       "title": "System health",
@@ -633,7 +660,7 @@
       "audioTool": "Audio Downloader",
       "imageTool": "Image Downloader",
       "relatedTools": "Related tools",
-      "guestNote": "Your first 2 downloads are free — no account required.",
+      "guestNote": "Your first 5 downloads are free — no account required.",
       "signupCta": "Create a free account",
       "tryNowCta": "Try it now",
       "responsibleUseTitle": "Use responsibly",

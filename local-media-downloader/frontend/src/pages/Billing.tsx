@@ -10,6 +10,11 @@ export default function Billing() {
   if (!account) return null;
   const { subscription, usage } = account;
   const isFree = subscription.plan === "free";
+  // A gifted subscription was granted by an admin, never purchased through
+  // Paddle - see docs/ANALYTICS.md. No Paddle actions (change plan, cancel,
+  // update payment method) apply, so <BillingManagement /> is skipped
+  // entirely here rather than showing controls that would just 404.
+  const isGifted = subscription.provider === "gifted";
 
   const usageUsed = usage.plan === "free" ? usage.daily_free_downloads_used ?? 0 : usage.credits_used ?? 0;
   const usageTotal =
@@ -31,19 +36,25 @@ export default function Billing() {
             <span className="rounded-full bg-brand-gradient px-3 py-1 text-sm font-semibold text-white shadow-glow">
               {t(`pricing.plans.${subscription.plan}.name`)}
             </span>
-            <span
-              className={`text-sm font-medium ${
-                subscription.status === "active"
-                  ? "text-emerald-400"
-                  : subscription.status === "past_due"
-                    ? "text-red-400"
-                    : subscription.status === "trialing"
-                      ? "text-brand-aqua"
-                      : "text-slate-400"
-              }`}
-            >
-              {t(`status.${subscription.status}`, { defaultValue: subscription.status })}
-            </span>
+            {isGifted ? (
+              <span className="rounded-full bg-brand-aqua/15 px-3 py-1 text-sm font-medium text-brand-aqua">
+                {t("billingPage.giftedBadge")}
+              </span>
+            ) : (
+              <span
+                className={`text-sm font-medium ${
+                  subscription.status === "active"
+                    ? "text-emerald-400"
+                    : subscription.status === "past_due"
+                      ? "text-red-400"
+                      : subscription.status === "trialing"
+                        ? "text-brand-aqua"
+                        : "text-slate-400"
+                }`}
+              >
+                {t(`status.${subscription.status}`, { defaultValue: subscription.status })}
+              </span>
+            )}
           </div>
           {subscription.current_period_end && (
             <span className="text-sm text-slate-400">
@@ -61,6 +72,11 @@ export default function Billing() {
         {subscription.cancel_at_period_end && (
           <p className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
             {t("billingPage.cancelNotice")}
+          </p>
+        )}
+        {isGifted && (
+          <p className="rounded-xl border border-brand-aqua/25 bg-brand-aqua/10 px-3 py-2 text-xs text-brand-aqua">
+            {t("billingPage.giftedNotice")}
           </p>
         )}
       </section>
@@ -88,11 +104,11 @@ export default function Billing() {
           <Link to="/pricing" className="btn-gradient">
             {t("billingPage.upgrade")}
           </Link>
-        ) : (
+        ) : !isGifted ? (
           <a href="#billing-management" className="btn-gradient">{t("app.manageBilling")}</a>
-        )}
+        ) : null}
       </div>
-      <BillingManagement />
+      {!isGifted && <BillingManagement />}
       <p className="text-xs text-slate-600">
         {t("billingPage.notice")}
       </p>

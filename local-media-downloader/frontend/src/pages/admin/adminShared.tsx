@@ -15,6 +15,9 @@ const ACTION_LABEL_KEYS: Record<AdminActionType, string> = {
   grant_credits: "admin.activity.grantCredits",
   disable_account: "admin.activity.disableAccount",
   reactivate_account: "admin.activity.reactivateAccount",
+  gift_subscription_granted: "admin.activity.giftGranted",
+  gift_subscription_changed: "admin.activity.giftChanged",
+  gift_subscription_revoked: "admin.activity.giftRevoked",
 };
 
 export function actionLabelKey(action: AdminActionType): string {

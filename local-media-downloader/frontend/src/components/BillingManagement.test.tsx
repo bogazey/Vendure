@@ -6,7 +6,7 @@ import { api } from "../services/api";
 import { openPaymentUpdate } from "../lib/paddle";
 import i18n from "../i18n";
 
-const state = vi.hoisted(() => ({ account: { subscription: { plan: "pro", status: "active", billing_period: "monthly", cancel_at_period_end: false } }, refresh: vi.fn() }));
+const state = vi.hoisted(() => ({ account: { subscription: { plan: "pro", status: "active", billing_period: "monthly", cancel_at_period_end: false, provider: "paddle" } }, refresh: vi.fn() }));
 vi.mock("../context/AuthContext", () => ({ useAuth: () => state }));
 vi.mock("../services/api", () => ({ api: { manageSubscription: vi.fn(), updatePaymentMethod: vi.fn(), paymentHistory: vi.fn(), invoice: vi.fn() } }));
 vi.mock("../lib/paddle", () => ({ openPaymentUpdate: vi.fn() }));
@@ -46,6 +46,13 @@ describe("Billing management", () => {
     await userEvent.click(screen.getByRole("button", { name: "Get invoice" }));
     expect(screen.getByRole("link", { name: /Open invoice PDF/ })).toHaveAttribute("href", "https://example.com/invoice.pdf");
   });
+  it("renders nothing at all for a gifted subscription (no Paddle actions to offer)", () => {
+    state.account.subscription.provider = "gifted";
+    const { container } = render(<BillingManagement />);
+    expect(container).toBeEmptyDOMElement();
+    state.account.subscription.provider = "paddle";
+  });
+
   it("localizes provider failures in Arabic", async () => {
     await i18n.changeLanguage("ar");
     vi.mocked(api.updatePaymentMethod).mockRejectedValue(new Error("secret provider details"));

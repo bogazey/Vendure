@@ -70,7 +70,7 @@ function makeAnalyzeResponse(): AnalyzeResponse {
 function makeAccount(): AccountOut {
   return {
     user: { id: "u1", email: "a@example.com", email_verified: true, role: "user", status: "active", created_at: "2026-01-01T00:00:00Z" },
-    subscription: { plan: "free", status: "none", billing_period: null, current_period_start: null, current_period_end: null, cancel_at_period_end: false },
+    subscription: { plan: "free", status: "none", billing_period: null, current_period_start: null, current_period_end: null, cancel_at_period_end: false, provider: "none" },
     usage: { plan: "free", period_start: "2026-01-01T00:00:00Z", period_end: "2026-02-01T00:00:00Z", credits_included: 0, credits_used: 0, credits_remaining: 0, daily_free_downloads_used: 1, daily_free_downloads_remaining: 4 },
     features: { plan: "free", max_resolution_height: 720, can_use_4k: false, can_use_batch: false, can_use_advanced_formats: false, can_use_clip_range: false, can_use_browser_cookies: false, can_use_original_container: false, can_use_creator_tools: false, ads_enabled: true, queue_priority: 1, monthly_credits: null, daily_free_downloads: 5 },
   };
@@ -116,16 +116,16 @@ describe("Dashboard guest download flow", () => {
 
   it("shows the no-account-required banner for a signed-out guest with a full allowance", async () => {
     vi.mocked(useAuth).mockReturnValue({ account: null, loading: false, refresh: vi.fn(), login: vi.fn(), signup: vi.fn(), logout: vi.fn() });
-    vi.mocked(api.getGuestQuota).mockResolvedValue({ remaining: 2, limit: 2 });
+    vi.mocked(api.getGuestQuota).mockResolvedValue({ remaining: 5, limit: 5 });
 
     renderDashboard();
 
-    expect(await screen.findByText("2 free downloads — no account required")).toBeInTheDocument();
+    expect(await screen.findByText("5 free downloads — no account required")).toBeInTheDocument();
   });
 
   it("shows the one-remaining message after the guest's first download", async () => {
     vi.mocked(useAuth).mockReturnValue({ account: null, loading: false, refresh: vi.fn(), login: vi.fn(), signup: vi.fn(), logout: vi.fn() });
-    vi.mocked(api.getGuestQuota).mockResolvedValue({ remaining: 1, limit: 2 });
+    vi.mocked(api.getGuestQuota).mockResolvedValue({ remaining: 1, limit: 5 });
 
     renderDashboard();
 
@@ -134,7 +134,7 @@ describe("Dashboard guest download flow", () => {
 
   it("replaces the format selector with a signup CTA once the guest allowance is exhausted, without navigating away", async () => {
     vi.mocked(useAuth).mockReturnValue({ account: null, loading: false, refresh: vi.fn(), login: vi.fn(), signup: vi.fn(), logout: vi.fn() });
-    vi.mocked(api.getGuestQuota).mockResolvedValue({ remaining: 0, limit: 2 });
+    vi.mocked(api.getGuestQuota).mockResolvedValue({ remaining: 0, limit: 5 });
     vi.mocked(api.analyze).mockResolvedValue(makeAnalyzeResponse());
 
     renderDashboard();
@@ -155,7 +155,7 @@ describe("Dashboard guest download flow", () => {
 
   it("shows the format selector (not the CTA) while the guest still has downloads left", async () => {
     vi.mocked(useAuth).mockReturnValue({ account: null, loading: false, refresh: vi.fn(), login: vi.fn(), signup: vi.fn(), logout: vi.fn() });
-    vi.mocked(api.getGuestQuota).mockResolvedValue({ remaining: 1, limit: 2 });
+    vi.mocked(api.getGuestQuota).mockResolvedValue({ remaining: 1, limit: 5 });
     vi.mocked(api.analyze).mockResolvedValue(makeAnalyzeResponse());
 
     renderDashboard();
@@ -171,7 +171,7 @@ describe("Dashboard guest download flow", () => {
 
   it("shows a friendly message and the CTA if the server rejects a download as quota-exceeded", async () => {
     vi.mocked(useAuth).mockReturnValue({ account: null, loading: false, refresh: vi.fn(), login: vi.fn(), signup: vi.fn(), logout: vi.fn() });
-    vi.mocked(api.getGuestQuota).mockResolvedValueOnce({ remaining: 1, limit: 2 }).mockResolvedValueOnce({ remaining: 0, limit: 2 });
+    vi.mocked(api.getGuestQuota).mockResolvedValueOnce({ remaining: 1, limit: 5 }).mockResolvedValueOnce({ remaining: 0, limit: 5 });
     vi.mocked(api.analyze).mockResolvedValue(makeAnalyzeResponse());
     const { ApiError } = await import("../services/api");
     vi.mocked(api.createDownload).mockRejectedValue(new ApiError("Guest quota exceeded", 402, null, "GUEST_QUOTA_EXCEEDED"));
@@ -184,7 +184,7 @@ describe("Dashboard guest download flow", () => {
     await user.click(screen.getByRole("button", { name: "Analyze" }));
     await user.click(await screen.findByRole("button", { name: "Start Download" }));
 
-    expect(await screen.findByText("You've used both free downloads on this device. Create a free account to keep going.")).toBeInTheDocument();
+    expect(await screen.findByText("You've used all your free downloads on this device. Create a free account to keep going.")).toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "Create free account" })).toBeInTheDocument();
   });
 
@@ -196,18 +196,18 @@ describe("Dashboard guest download flow", () => {
     // Give any stray effects a tick, then assert the guest UI never appears.
     await new Promise((r) => setTimeout(r, 0));
     expect(api.getGuestQuota).not.toHaveBeenCalled();
-    expect(screen.queryByText("2 free downloads — no account required")).not.toBeInTheDocument();
+    expect(screen.queryByText("5 free downloads — no account required")).not.toBeInTheDocument();
     expect(screen.queryByText(/free download/)).not.toBeInTheDocument();
   });
 
   it("renders the guest banner in Arabic", async () => {
     vi.mocked(useAuth).mockReturnValue({ account: null, loading: false, refresh: vi.fn(), login: vi.fn(), signup: vi.fn(), logout: vi.fn() });
-    vi.mocked(api.getGuestQuota).mockResolvedValue({ remaining: 2, limit: 2 });
+    vi.mocked(api.getGuestQuota).mockResolvedValue({ remaining: 5, limit: 5 });
 
     await i18n.changeLanguage("ar");
     renderDashboard();
 
-    expect(await screen.findByText("تنزيلان مجانيان — بلا حاجة لحساب")).toBeInTheDocument();
+    expect(await screen.findByText("5 تنزيلات مجانية — بلا حاجة لحساب")).toBeInTheDocument();
     await i18n.changeLanguage("en");
   });
 });

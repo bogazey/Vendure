@@ -15,7 +15,7 @@ vi.mock("../services/api", () => ({
 
 const FREE_ACCOUNT: AccountOut = {
   user: { id: "u1", email: "a@example.com", email_verified: true, role: "user", status: "active", created_at: "2026-01-01T00:00:00Z" },
-  subscription: { plan: "free", status: "none", billing_period: null, current_period_start: null, current_period_end: null, cancel_at_period_end: false },
+  subscription: { plan: "free", status: "none", billing_period: null, current_period_start: null, current_period_end: null, cancel_at_period_end: false, provider: "none" },
   usage: { plan: "free", period_start: "2026-01-01T00:00:00Z", period_end: "2026-01-02T00:00:00Z", credits_included: null, credits_used: 0, credits_remaining: null, daily_free_downloads_used: 1, daily_free_downloads_remaining: 4 },
   features: { plan: "free", max_resolution_height: 720, can_use_4k: false, can_use_batch: false, can_use_advanced_formats: false, can_use_clip_range: false, can_use_browser_cookies: false, can_use_original_container: false, can_use_creator_tools: false, ads_enabled: true, queue_priority: 1, monthly_credits: null, daily_free_downloads: 5 },
 };

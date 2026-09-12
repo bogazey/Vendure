@@ -132,10 +132,14 @@ export interface PlanMovementRowOut {
 
 export interface RevenueOut {
   range: AnalyticsRange;
+  /** Paid (provider="paddle") only - never combine with the gifted fields below. */
   active_paid_subscribers: number;
   new_paid_subscribers: number;
   cancellations: number;
   movements: PlanMovementRowOut[];
+  /** Gifted (provider="gifted") - reported entirely separately, never counted as revenue. */
+  gifted_active_subscriptions: number;
+  gifted_events_this_period: number;
   mrr_available: boolean;
   mrr_note: string;
 }

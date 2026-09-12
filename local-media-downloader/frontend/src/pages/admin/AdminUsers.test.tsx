@@ -13,6 +13,7 @@ vi.mock("../../services/api", () => ({
     adminGrantCredits: vi.fn(),
     adminSetAccountStatus: vi.fn(),
     adminListAuditLog: vi.fn(),
+    adminUpdateSubscription: vi.fn(),
   },
   ApiError: class ApiError extends Error {},
 }));
@@ -29,6 +30,10 @@ function makeUser(overrides: Partial<AdminUserOut> = {}): AdminUserOut {
     credits_included: 150,
     credits_bonus: 0,
     created_at: "2026-01-01T00:00:00Z",
+    subscription_provider: "paddle",
+    gifted_granted_at: null,
+    gifted_granted_by_email: null,
+    gifted_reason: null,
     ...overrides,
   };
 }
@@ -133,5 +138,149 @@ describe("AdminUsers", () => {
     renderPage();
     await screen.findByText("target@example.com");
     expect(screen.getByRole("button", { name: "بحث" })).toBeInTheDocument();
+  });
+});
+
+describe("AdminUsers gifted subscription controls", () => {
+  it("blocks gifting controls for a user with an active paid Paddle subscription", async () => {
+    vi.mocked(api.adminListUsers).mockResolvedValue({ users: [makeUser({ subscription_provider: "paddle" })], total: 1 });
+    renderPage();
+    await screen.findByText("target@example.com");
+    const user = userEvent.setup();
+
+    await user.click(screen.getByText("Manage subscription"));
+    expect(await screen.findByText(/active paid Paddle subscription/)).toBeInTheDocument();
+    expect(screen.queryByText("New plan")).not.toBeInTheDocument();
+    expect(api.adminUpdateSubscription).not.toHaveBeenCalled();
+  });
+
+  it("shows editable gifting controls for a Free/eligible user and requires confirmation before mutating", async () => {
+    vi.mocked(api.adminListUsers).mockResolvedValue({
+      users: [makeUser({ plan: "free", subscription_status: "none", subscription_provider: "none" })],
+      total: 1,
+    });
+    vi.mocked(api.adminUpdateSubscription).mockResolvedValue(
+      makeUser({ plan: "pro", subscription_status: "active", subscription_provider: "gifted" })
+    );
+    renderPage();
+    await screen.findByText("target@example.com");
+    const user = userEvent.setup();
+
+    await user.click(screen.getByText("Manage subscription"));
+    expect(await screen.findByText("New plan")).toBeInTheDocument();
+    expect(screen.getByText("This grants Loady access without charging the user.")).toBeInTheDocument();
+
+    // The plan selector defaults to "pro" for a Free user - clicking the
+    // grant button must show a confirmation step before calling the API.
+    await user.click(screen.getByRole("button", { name: "Grant Gifted Subscription" }));
+    expect(api.adminUpdateSubscription).not.toHaveBeenCalled();
+    expect(await screen.findByText(/Grant this user/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Grant Gifted Subscription" }));
+    await waitFor(() => {
+      expect(api.adminUpdateSubscription).toHaveBeenCalledWith("user-1", "pro", undefined);
+    });
+  });
+
+  it("offers Update Gifted Subscription for a Pro-gifted user changing to Creator", async () => {
+    vi.mocked(api.adminListUsers).mockResolvedValue({
+      users: [makeUser({ plan: "pro", subscription_status: "active", subscription_provider: "gifted" })],
+      total: 1,
+    });
+    vi.mocked(api.adminUpdateSubscription).mockResolvedValue(
+      makeUser({ plan: "creator", subscription_status: "active", subscription_provider: "gifted" })
+    );
+    renderPage();
+    await screen.findByText("target@example.com");
+    const user = userEvent.setup();
+
+    await user.click(screen.getByText("Manage subscription"));
+    await user.selectOptions(screen.getByRole("combobox"), "creator");
+    await user.click(screen.getByRole("button", { name: "Update Gifted Subscription" }));
+    await user.click(screen.getByRole("button", { name: "Update Gifted Subscription" }));
+
+    await waitFor(() => {
+      expect(api.adminUpdateSubscription).toHaveBeenCalledWith("user-1", "creator", undefined);
+    });
+  });
+
+  it("offers Revoke Gifted Subscription that moves a gifted user back to Free", async () => {
+    vi.mocked(api.adminListUsers).mockResolvedValue({
+      users: [makeUser({ plan: "creator", subscription_status: "active", subscription_provider: "gifted" })],
+      total: 1,
+    });
+    vi.mocked(api.adminUpdateSubscription).mockResolvedValue(
+      makeUser({ plan: "free", subscription_status: "none", subscription_provider: "none" })
+    );
+    renderPage();
+    await screen.findByText("target@example.com");
+    const user = userEvent.setup();
+
+    await user.click(screen.getByText("Manage subscription"));
+    await user.selectOptions(screen.getByRole("combobox"), "free");
+    await user.click(screen.getByRole("button", { name: "Revoke Gifted Subscription" }));
+    expect(await screen.findByText(/back to Free/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Revoke Gifted Subscription" }));
+
+    await waitFor(() => {
+      expect(api.adminUpdateSubscription).toHaveBeenCalledWith("user-1", "free", undefined);
+    });
+  });
+
+  it("passes a trimmed optional reason through to the API", async () => {
+    vi.mocked(api.adminListUsers).mockResolvedValue({
+      users: [makeUser({ plan: "free", subscription_status: "none", subscription_provider: "none" })],
+      total: 1,
+    });
+    vi.mocked(api.adminUpdateSubscription).mockResolvedValue(makeUser({ subscription_provider: "gifted" }));
+    renderPage();
+    await screen.findByText("target@example.com");
+    const user = userEvent.setup();
+
+    await user.click(screen.getByText("Manage subscription"));
+    await user.type(screen.getByPlaceholderText(/support case/i), "  internal partnership  ");
+    await user.click(screen.getByRole("button", { name: "Grant Gifted Subscription" }));
+    await user.click(screen.getByRole("button", { name: "Grant Gifted Subscription" }));
+
+    await waitFor(() => {
+      expect(api.adminUpdateSubscription).toHaveBeenCalledWith("user-1", "pro", "internal partnership");
+    });
+  });
+
+  it("shows Gifted Subscription source and granted date in the user detail view", async () => {
+    vi.mocked(api.adminListUsers).mockResolvedValue({
+      users: [
+        makeUser({
+          plan: "creator",
+          subscription_provider: "gifted",
+          gifted_granted_at: "2026-09-13T00:00:00Z",
+          gifted_granted_by_email: "owner@loady.cc",
+        }),
+      ],
+      total: 1,
+    });
+    renderPage();
+    await screen.findByText("target@example.com");
+    const user = userEvent.setup();
+    await user.click(screen.getByText("target@example.com"));
+
+    expect(await screen.findByText("Gifted Subscription")).toBeInTheDocument();
+    expect(screen.getByText("owner@loady.cc")).toBeInTheDocument();
+  });
+
+  it("shows the gifted controls and copy in Arabic", async () => {
+    await i18n.changeLanguage("ar");
+    vi.mocked(api.adminListUsers).mockResolvedValue({
+      users: [makeUser({ plan: "free", subscription_status: "none", subscription_provider: "none" })],
+      total: 1,
+    });
+    renderPage();
+    await screen.findByText("target@example.com");
+    const user = userEvent.setup();
+
+    await user.click(screen.getByText("إدارة الاشتراك"));
+    expect(await screen.findByText("هذا يمنح المستخدم صلاحية الوصول إلى Loady دون تحصيل أي رسوم.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "منح اشتراك مُهدى" })).toBeInTheDocument();
+    await i18n.changeLanguage("en");
   });
 });

@@ -275,6 +275,16 @@ export const api = {
       body: JSON.stringify({ status }),
     }),
 
+  // Admin-managed Gifted Subscription: grant/change (plan="pro"|"creator")
+  // or revoke (plan="free"). Never a Paddle call - see docs/ANALYTICS.md.
+  // `source` is deliberately not a parameter here: it's always "gifted"
+  // server-side for this endpoint.
+  adminUpdateSubscription: (userId: string, plan: Plan, reason?: string) =>
+    request<AdminUserOut>(`/api/admin/users/${userId}/subscription`, {
+      method: "PATCH",
+      body: JSON.stringify({ plan, reason }),
+    }),
+
   adminListBillingEvents: (limit = 50) =>
     request<AdminBillingEventOut[]>(`/api/admin/billing-events?limit=${limit}`),
 

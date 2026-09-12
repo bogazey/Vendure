@@ -27,7 +27,13 @@ export default function BillingManagement() {
     const stop = window.setTimeout(() => window.clearInterval(timer), 30000);
     return () => { window.clearInterval(timer); window.clearTimeout(stop); };
   }, [pending, refresh]);
-  if (!subscription || subscription.status === "none") return null;
+  // A gifted subscription has no real Paddle subscription behind it at all
+  // (see docs/ANALYTICS.md) - none of this component's actions (change
+  // plan, cancel/resume, update payment method, payment history) apply, and
+  // the backend would reject them anyway (routes_billing._owned_subscription
+  // requires provider="paddle"). Billing.tsx already doesn't render this
+  // component for a gifted subscription; this guard is defense in depth.
+  if (!subscription || subscription.status === "none" || subscription.provider !== "paddle") return null;
   const manageable = ["active", "trialing"].includes(subscription.status);
   const run = async (action: () => Promise<void>) => {
     setBusy(true); setError(false); setMessage(""); setInvoiceUrl(null);

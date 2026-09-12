@@ -42,7 +42,7 @@ from app.models.analytics_schemas import (
     TrafficOut,
     TrafficPointOut,
 )
-from app.models.commercial_enums import AnalyticsEventType
+from app.models.commercial_enums import AnalyticsEventType, SubscriptionProvider
 from app.models.schemas import CreateDownloadRequest
 from app.utils.bot_detect import is_probable_bot
 from app.utils.exceptions import (
@@ -301,13 +301,18 @@ def get_overview(db: Session, range_key: AnalyticsRange) -> AnalyticsOverviewOut
     new_users = db.execute(
         select(func.count()).select_from(User).where(User.created_at >= start, User.created_at < end)
     ).scalar_one() or 0
-    # Authoritative: a Subscription row is only ever created when a Paddle
-    # subscription is first created for that user (see paddle_service.
-    # _upsert_subscription_from_event) - Free has no row at all - so
-    # `created_at` within the window IS the moment that user first paid.
+    # Authoritative and paid-only: a provider="paddle" Subscription row is
+    # only ever created when a real Paddle subscription is first created
+    # for that user (see paddle_service._upsert_subscription_from_event) -
+    # Free has no row at all - so `created_at` within the window IS the
+    # moment that user first paid. Explicitly excludes provider="gifted"
+    # rows (see gift_subscription_service.py) - a gifted grant is never a
+    # paid conversion (see docs/ANALYTICS.md "Gifted subscriptions are not
+    # revenue").
     paid_conversions = db.execute(
         select(func.count()).select_from(Subscription).where(
-            Subscription.created_at >= start, Subscription.created_at < end
+            Subscription.created_at >= start, Subscription.created_at < end,
+            Subscription.provider == SubscriptionProvider.PADDLE.value,
         )
     ).scalar_one() or 0
     active_now_start = datetime.now(timezone.utc) - timedelta(minutes=ACTIVE_NOW_WINDOW_MINUTES)
@@ -552,11 +557,22 @@ def get_revenue(db: Session, range_key: AnalyticsRange) -> RevenueOut:
 
     start, end = resolve_range(range_key)
     in_range = (AnalyticsEvent.timestamp >= start, AnalyticsEvent.timestamp < end)
+    # Every count below is restricted to provider="paddle" - these are
+    # revenue/paid-conversion figures and must never include a gifted
+    # subscription (see gift_subscription_service.py and
+    # docs/ANALYTICS.md "Gifted subscriptions are not revenue"). Gifted
+    # activity is reported entirely separately below, never summed in.
     active_paid = db.execute(
-        select(func.count()).select_from(Subscription).where(Subscription.status.in_(ACTIVE_SUBSCRIPTION_STATUSES))
+        select(func.count()).select_from(Subscription).where(
+            Subscription.status.in_(ACTIVE_SUBSCRIPTION_STATUSES),
+            Subscription.provider == SubscriptionProvider.PADDLE.value,
+        )
     ).scalar_one() or 0
     new_paid = db.execute(
-        select(func.count()).select_from(Subscription).where(Subscription.created_at >= start, Subscription.created_at < end)
+        select(func.count()).select_from(Subscription).where(
+            Subscription.created_at >= start, Subscription.created_at < end,
+            Subscription.provider == SubscriptionProvider.PADDLE.value,
+        )
     ).scalar_one() or 0
     cancellations = _count(db, AnalyticsEvent.event_type == AnalyticsEventType.SUBSCRIPTION_CANCELLED.value, *in_range)
     movement_rows = db.execute(
@@ -570,12 +586,34 @@ def get_revenue(db: Session, range_key: AnalyticsRange) -> RevenueOut:
         .group_by(AnalyticsEvent.from_plan, AnalyticsEvent.plan)
     ).all()
     movements = [PlanMovementRowOut(kind=f"{frm}_to_{to}", count=c) for frm, to, c in movement_rows]
+
+    # Gifted Subscriptions: counted and reported entirely separately - see
+    # AdminOverviewOut.gifted_subscribers for the same rule applied to the
+    # admin Overview page. Never combined with active_paid/new_paid above.
+    gifted_active = db.execute(
+        select(func.count(func.distinct(Subscription.user_id))).where(
+            Subscription.status.in_(ACTIVE_SUBSCRIPTION_STATUSES),
+            Subscription.provider == SubscriptionProvider.GIFTED.value,
+        )
+    ).scalar_one() or 0
+    gifted_events_this_period = _count(
+        db,
+        AnalyticsEvent.event_type.in_([
+            AnalyticsEventType.GIFTED_SUBSCRIPTION_GRANTED.value,
+            AnalyticsEventType.GIFTED_SUBSCRIPTION_CHANGED.value,
+            AnalyticsEventType.GIFTED_SUBSCRIPTION_REVOKED.value,
+        ]),
+        *in_range,
+    )
+
     return RevenueOut(
         range=range_key,
         active_paid_subscribers=active_paid,
         new_paid_subscribers=new_paid,
         cancellations=cancellations,
         movements=movements,
+        gifted_active_subscriptions=gifted_active,
+        gifted_events_this_period=gifted_events_this_period,
         mrr_available=False,
         mrr_note=(
             "MRR is not shown because Loady does not persist each subscription's billing period "

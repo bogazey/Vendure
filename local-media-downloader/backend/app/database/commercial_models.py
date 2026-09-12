@@ -48,7 +48,9 @@ class User(Base):
     status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
     role: Mapped[str] = mapped_column(String(20), default="user", nullable=False)
 
-    subscriptions: Mapped[list["Subscription"]] = relationship(back_populates="user")
+    subscriptions: Mapped[list["Subscription"]] = relationship(
+        back_populates="user", foreign_keys="Subscription.user_id"
+    )
     usage_periods: Mapped[list["UsagePeriod"]] = relationship(back_populates="user")
 
 
@@ -57,6 +59,11 @@ class Subscription(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True, nullable=False)
+    # "paddle" (real paid customer subscription) or "gifted" (manually
+    # granted by an admin, see gift_subscription_service.py) - see
+    # SubscriptionProvider. This is the ONLY field revenue/analytics queries
+    # trust to distinguish real income from internal promotional access;
+    # never inferred from provider_subscription_id being null.
     provider: Mapped[str] = mapped_column(String(30), default="paddle", nullable=False)
     provider_customer_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     provider_subscription_id: Mapped[str | None] = mapped_column(String(120), index=True, nullable=True)
@@ -65,12 +72,20 @@ class Subscription(Base):
     current_period_start: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     current_period_end: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Gifted subscriptions only (both null for provider="paddle"): which
+    # admin most recently granted/changed this row, and their optional
+    # note. Never the sole record of a change - see AdminActionLog via
+    # gift_subscription_service.py for the append-only history; these two
+    # fields just reflect current state, the same way Paddle's own fields
+    # above reflect only the subscription's current state.
+    granted_by_admin_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    granted_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=_now, onupdate=_now, nullable=False
     )
 
-    user: Mapped["User"] = relationship(back_populates="subscriptions")
+    user: Mapped["User"] = relationship(back_populates="subscriptions", foreign_keys=[user_id])
 
 
 class UsagePeriod(Base):

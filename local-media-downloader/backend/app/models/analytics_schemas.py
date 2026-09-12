@@ -157,10 +157,17 @@ class PlanMovementRowOut(BaseModel):
 
 class RevenueOut(BaseModel):
     range: AnalyticsRange
+    # Paid (provider="paddle") only - see gift_subscription_service.py and
+    # docs/ANALYTICS.md "Gifted subscriptions are not revenue". Never
+    # combine these with gifted_active_subscriptions below.
     active_paid_subscribers: int
     new_paid_subscribers: int
     cancellations: int
     movements: list[PlanMovementRowOut]
+    # Gifted (provider="gifted") - reported entirely separately, never
+    # counted as paid subscribers/revenue/conversions.
+    gifted_active_subscriptions: int
+    gifted_events_this_period: int
     # Loady does not persist each subscription's billing period (monthly vs
     # annual - see Subscription in commercial_models.py), so a true MRR
     # figure can't be computed without guessing which price applies. Per the

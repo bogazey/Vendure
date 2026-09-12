@@ -207,7 +207,7 @@ export default function Dashboard() {
             ? t("guest.quotaTitle")
             : guestQuota.remaining === 1
               ? t("guest.oneRemaining")
-              : t("guest.available")}
+              : t("guest.available", { count: guestQuota.remaining })}
         </p>
       )}
 

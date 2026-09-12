@@ -46,6 +46,17 @@ is recorded server-side, at the moment the real action happens:
 | `signup_completed` | `routes_auth.py` | `POST /api/auth/signup` |
 | `plan_upgraded` / `plan_downgraded` | `paddle_service.py` | Paddle webhook changes a subscription's plan (includes the initial `free -> pro`/`free -> creator` conversion) |
 | `subscription_cancelled` | `paddle_service.py` | Paddle webhook cancels a subscription |
+| `gifted_subscription_granted` / `_changed` / `_revoked` | `gift_subscription_service.py` | An admin grants/changes/revokes a **gifted** (non-Paddle) subscription via `PATCH /api/admin/users/{id}/subscription` |
+
+The three gifted-subscription event types are deliberately **never** mixed
+into the `plan_upgraded`/`plan_downgraded`/`subscription_cancelled` set
+above - those three remain exclusively Paddle-webhook events, so a
+revenue-movement query can never accidentally count a gifted grant as a
+paid conversion. Like every other server-recorded event, they are written
+only after an authenticated `require_admin` action ever reaches
+`gift_subscription_service.py` - never accepted from the browser (see
+"Ingestion endpoint security" below, which restricts the one browser-facing
+endpoint to `page_view` only).
 
 Business/entitlement facts that already have an authoritative source are
 **never** recomputed from analytics events:
@@ -176,7 +187,7 @@ of what the client sends.
 - **Download Started**: the server accepted a download job (credit/quota reservation succeeded, job queued) - see `routes_downloads.create_download`.
 - **Download Completed**: the job reached `DownloadStage.COMPLETED` (file fully written and validated).
 - **Download Failed**: the job reached `DownloadStage.FAILED`. A user-initiated cancellation is **not** counted as failed (it's an intentional stop, not an error) and is excluded from the success-rate denominator, though it still counts toward "started".
-- **Paid User / New Paid Subscriber**: a `Subscription` row exists (authoritative - Free plan has no row at all).
+- **Paid User / New Paid Subscriber**: a `Subscription` row exists **with `provider == "paddle"`** (authoritative - Free plan has no row at all, and a gifted subscription's row is explicitly excluded so it can never be counted as a paid conversion; see "Gifted subscriptions" below).
 - **Conversion Funnel**: an aggregate **period** count at each stage (distinct visitors doing X within the selected range), explicitly **not** a per-visitor cohort funnel - a visitor counted at one stage is not guaranteed to be the same person counted at the next. The admin UI and API both carry this disclaimer verbatim (`FunnelOut.methodology_note`).
 - **"Today"**: a UTC calendar day (`00:00:00 UTC` to now), matching every other timestamp in this app (`UTCDateTime`) - there is no separate "admin timezone" convention elsewhere to follow instead.
 
@@ -191,14 +202,34 @@ active subscription. Per the "accuracy over visual completeness" principle,
 `mrr_note`) rather than estimated. What *is* shown, because it comes
 directly from authoritative data with no guessing:
 
-- Active paid subscribers (live `Subscription` count).
-- New paid subscribers this period (`Subscription.created_at` in range).
-- Cancellations this period (`subscription_cancelled` events, recorded synchronously with the real webhook state change).
+- Active paid subscribers (live `Subscription` count, filtered to `provider == "paddle"`).
+- New paid subscribers this period (`Subscription.created_at` in range, same paddle-only filter).
+- Cancellations this period (`subscription_cancelled` events, recorded synchronously with the real webhook state change - gifted subscriptions never emit this event, see below).
 - Plan movements this period (`plan_upgraded`/`plan_downgraded` events, each carrying both `from_plan` and `plan` so direction is never guessed).
 
 To add real MRR later: persist `billing_period` (and the price actually
 charged) on `Subscription` at webhook-write time, then sum
 `monthly-equivalent price` over active subscriptions.
+
+### Gifted subscriptions are never revenue
+
+An admin can grant a Pro/Creator subscription without payment (see
+`COMMERCIAL_ARCHITECTURE.md` §12) by setting `Subscription.provider =
+"gifted"` instead of `"paddle"`. Every "paid" query above filters on
+`provider == "paddle"` explicitly, so a gifted subscription:
+
+- Contributes **0** to `active_paid_subscribers`, `new_paid_subscribers`,
+  and `paid_conversions` - never combined with real paid counts.
+- Is counted **only** in its own, separate fields:
+  `RevenueOut.gifted_active_subscriptions` and `RevenueOut.
+  gifted_events_this_period` (`AdminOverviewOut.gifted_subscribers` on the
+  main Overview page, similarly separate from `pro_count`/`creator_count`).
+- Never emits `plan_upgraded`/`plan_downgraded`/`subscription_cancelled` -
+  those three remain exclusively Paddle-webhook events. It emits its own
+  `gifted_subscription_granted`/`_changed`/`_revoked` events instead
+  (`gift_subscription_service.py`), which no revenue-movement query reads.
+
+There is no code path anywhere that sums gifted and paid counts together.
 
 ## Admin API
 

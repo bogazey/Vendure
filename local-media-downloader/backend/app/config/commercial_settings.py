@@ -71,7 +71,7 @@ class CommercialSettings(BaseSettings):
     # guest_storage_service.py. Guest files/quota rows older than this are
     # swept on startup (same one-shot pattern as
     # history_repo.mark_interrupted_as_failed, not a recurring scheduler).
-    guest_download_limit: int = Field(default=2, alias="GUEST_DOWNLOAD_LIMIT")
+    guest_download_limit: int = Field(default=5, alias="GUEST_DOWNLOAD_LIMIT")
     guest_data_ttl_hours: int = Field(default=48, alias="GUEST_DATA_TTL_HOURS")
     authenticated_media_ttl_hours: int = Field(default=24, alias="AUTHENTICATED_MEDIA_TTL_HOURS")
     partial_media_ttl_hours: int = Field(default=6, alias="PARTIAL_MEDIA_TTL_HOURS")

@@ -39,6 +39,11 @@ export interface UsageOut {
   daily_free_downloads_remaining: number | null;
 }
 
+/** "paddle" = a real paid customer subscription; "gifted" = manually
+ * granted by an admin, no payment involved (see docs/ANALYTICS.md); "none"
+ * = no subscription row at all (a Free account that never upgraded). */
+export type SubscriptionSource = "paddle" | "gifted" | "none";
+
 export interface SubscriptionOut {
   plan: Plan;
   status: SubscriptionStatus;
@@ -46,6 +51,7 @@ export interface SubscriptionOut {
   current_period_start: string | null;
   current_period_end: string | null;
   cancel_at_period_end: boolean;
+  provider: SubscriptionSource;
 }
 
 export interface AccountOut {
@@ -101,6 +107,11 @@ export interface AdminUserOut {
    * credits_included itself is null (Free plan). */
   credits_bonus: number | null;
   created_at: string;
+  subscription_provider: SubscriptionSource;
+  /** Populated only while subscription_provider === "gifted". */
+  gifted_granted_at: string | null;
+  gifted_granted_by_email: string | null;
+  gifted_reason: string | null;
 }
 
 export interface AdminUserListOut {
@@ -108,7 +119,18 @@ export interface AdminUserListOut {
   total: number;
 }
 
-export type AdminActionType = "grant_credits" | "disable_account" | "reactivate_account";
+export interface AdminUpdateSubscriptionRequest {
+  plan: Plan;
+  reason?: string;
+}
+
+export type AdminActionType =
+  | "grant_credits"
+  | "disable_account"
+  | "reactivate_account"
+  | "gift_subscription_granted"
+  | "gift_subscription_changed"
+  | "gift_subscription_revoked";
 
 export interface AdminBillingEventOut {
   provider_event_id: string;
@@ -145,10 +167,13 @@ export interface AdminOverviewOut {
   total_users: number;
   active_users: number;
   disabled_users: number;
+  /** Paid (provider="paddle") only - never includes gifted subscriptions. */
   paid_subscribers: number;
   free_count: number;
   pro_count: number;
   creator_count: number;
+  /** Reported separately - never add this into paid_subscribers. */
+  gifted_subscribers: number;
   credits_consumed_current_period: number;
   recent_billing_failures: AdminBillingEventOut[];
   recent_admin_actions: AdminActionLogOut[];

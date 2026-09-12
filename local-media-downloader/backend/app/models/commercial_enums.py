@@ -9,6 +9,18 @@ class Plan(str, Enum):
     CREATOR = "creator"
 
 
+class SubscriptionProvider(str, Enum):
+    """Explicit, canonical distinction between real paid income and internal
+    promotional access - see Subscription.provider in commercial_models.py.
+    Never inferred from the presence/absence of a Paddle subscription id;
+    always set explicitly at write time (webhook processing for PADDLE,
+    gift_subscription_service for GIFTED) so revenue/analytics queries can
+    filter on it directly instead of guessing."""
+
+    PADDLE = "paddle"
+    GIFTED = "gifted"
+
+
 class BillingPeriod(str, Enum):
     MONTHLY = "monthly"
     ANNUAL = "annual"
@@ -68,6 +80,9 @@ class AdminActionType(str, Enum):
     AD_PLACEMENT_ENABLED = "ad_placement_enabled"
     AD_PLACEMENT_DISABLED = "ad_placement_disabled"
     AD_PLACEMENT_UPDATED = "ad_placement_updated"
+    GIFT_SUBSCRIPTION_GRANTED = "gift_subscription_granted"
+    GIFT_SUBSCRIPTION_CHANGED = "gift_subscription_changed"
+    GIFT_SUBSCRIPTION_REVOKED = "gift_subscription_revoked"
 
 
 class AnalyticsEventType(str, Enum):
@@ -86,6 +101,14 @@ class AnalyticsEventType(str, Enum):
     PLAN_UPGRADED = "plan_upgraded"
     PLAN_DOWNGRADED = "plan_downgraded"
     SUBSCRIPTION_CANCELLED = "subscription_cancelled"
+    # Admin-granted gifted subscriptions - deliberately separate event types
+    # from PLAN_UPGRADED/PLAN_DOWNGRADED/SUBSCRIPTION_CANCELLED (which are
+    # only ever recorded from real Paddle webhook processing - see
+    # paddle_service.py) so gifted activity can never be mixed into paid
+    # plan-movement/revenue reporting (see analytics_service.get_revenue).
+    GIFTED_SUBSCRIPTION_GRANTED = "gifted_subscription_granted"
+    GIFTED_SUBSCRIPTION_CHANGED = "gifted_subscription_changed"
+    GIFTED_SUBSCRIPTION_REVOKED = "gifted_subscription_revoked"
 
 
 class AnalyticsFailureCategory(str, Enum):

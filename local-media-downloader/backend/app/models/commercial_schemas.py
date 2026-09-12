@@ -92,6 +92,11 @@ class SubscriptionOut(BaseModel):
     current_period_start: Optional[datetime]
     current_period_end: Optional[datetime]
     cancel_at_period_end: bool
+    # "paddle" | "gifted" | "none" (no subscription row at all, e.g. a
+    # never-upgraded Free account) - lets the billing UI hide Paddle-only
+    # actions (change plan, cancel, update payment method) for a gifted
+    # subscription, which has no real Paddle subscription behind it.
+    provider: str = "none"
 
 
 class AccountOut(BaseModel):
@@ -176,6 +181,15 @@ class AdminUserOut(BaseModel):
     # credits_included itself is None (Free plan, which doesn't use credits).
     credits_bonus: Optional[int]
     created_at: datetime
+    # "paddle" | "gifted" | "none" - see SubscriptionOut.provider. Lets the
+    # admin panel show "Paid / Paddle" vs "Gifted Subscription" vs "Free"
+    # and decide whether gifting controls are safe to offer at all.
+    subscription_provider: str
+    # Populated only while provider == "gifted" (the row's *current* grant -
+    # see AdminActionLog via /api/admin/audit-log for the full history).
+    gifted_granted_at: Optional[datetime] = None
+    gifted_granted_by_email: Optional[str] = None
+    gifted_reason: Optional[str] = None
 
 
 class AdminUserListOut(BaseModel):
@@ -190,6 +204,17 @@ class AdminGrantCreditsRequest(BaseModel):
 
 class AdminSetAccountStatusRequest(BaseModel):
     status: str = Field(pattern="^(active|disabled)$")
+
+
+class AdminUpdateSubscriptionRequest(BaseModel):
+    """Admin-managed Gifted Subscription: grant, change (Pro<->Creator), or
+    revoke (plan=free) - never a Paddle call, see gift_subscription_service.py.
+    `source` is deliberately NOT part of this request: it is always
+    "gifted" server-side for this endpoint (see routes_admin.py) - a client
+    can never claim/forge a subscription source."""
+
+    plan: Plan
+    reason: Optional[str] = Field(default=None, max_length=500)
 
 
 class AdminBillingEventOut(BaseModel):
@@ -218,10 +243,15 @@ class AdminOverviewOut(BaseModel):
     total_users: int
     active_users: int
     disabled_users: int
+    # Authoritative paid-only count (provider="paddle") - see
+    # routes_admin.get_overview. Never includes gifted subscriptions.
     paid_subscribers: int
     free_count: int
     pro_count: int
     creator_count: int
+    # Counted and surfaced separately from paid_subscribers - never summed
+    # together (see docs/ANALYTICS.md "Gifted subscriptions are not revenue").
+    gifted_subscribers: int
     credits_consumed_current_period: int
     recent_billing_failures: list[AdminBillingEventOut]
     recent_admin_actions: list[AdminActionLogOut]

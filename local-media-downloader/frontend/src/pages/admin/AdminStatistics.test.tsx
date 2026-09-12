@@ -67,7 +67,8 @@ function emptyFunnel(): FunnelOut {
 function emptyRevenue(): RevenueOut {
   return {
     range: "30d", active_paid_subscribers: 0, new_paid_subscribers: 0, cancellations: 0,
-    movements: [], mrr_available: false, mrr_note: "MRR is not shown because...",
+    movements: [], gifted_active_subscriptions: 0, gifted_events_this_period: 0,
+    mrr_available: false, mrr_note: "MRR is not shown because...",
   };
 }
 

@@ -69,6 +69,10 @@ export default function AdminOverview() {
               <span className={statLabel}>{t("admin.overview.creatorCount")}</span>
               <span className={statValue}>{overview.creator_count}</span>
             </div>
+            <div className={statTile}>
+              <span className={statLabel}>{t("admin.overview.giftedSubscribers")}</span>
+              <span className={statValue}>{overview.gifted_subscribers}</span>
+            </div>
           </div>
 
           {analytics && (
