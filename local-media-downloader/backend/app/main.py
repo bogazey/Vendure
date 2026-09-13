@@ -113,6 +113,36 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
 
+_MAINTENANCE_EXEMPT_METHODS = {"GET", "HEAD", "OPTIONS"}
+_MAINTENANCE_EXEMPT_PATHS = {"/api/health"}
+
+
+@app.middleware("http")
+async def maintenance_mode_middleware(request: Request, call_next):
+    """Mission 5, phase 6: a short, operator-toggled maintenance window for
+    the production migration cutover (docs/platform/
+    PRODUCTION_REHEARSAL_PLAN.md) - re-checked per request (not cached at
+    startup) so an operator can flip MAINTENANCE_MODE and have it take
+    effect without a restart, matching the "5-15 minute window" the
+    rehearsal plan recommends rather than a full redeploy cycle. Read-only
+    traffic and health checks are never blocked, so uptime monitoring and
+    already-loaded pages keep working during the window."""
+    if (
+        get_commercial_settings().maintenance_mode
+        and request.method not in _MAINTENANCE_EXEMPT_METHODS
+        and request.url.path not in _MAINTENANCE_EXEMPT_PATHS
+    ):
+        return JSONResponse(
+            status_code=503,
+            content={
+                "message": "Loady is temporarily unavailable for scheduled maintenance. Please try again shortly.",
+                "technical": None,
+                "code": "MAINTENANCE_MODE",
+            },
+            headers={"Retry-After": "300"},
+        )
+    return await call_next(request)
+
 
 @app.exception_handler(AppError)
 async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:

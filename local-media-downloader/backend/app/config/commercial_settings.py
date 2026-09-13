@@ -34,6 +34,14 @@ class CommercialSettings(BaseSettings):
     # --- Auth / sessions ---
     secret_key: str = Field(default=_GENERATED_SECRET, alias="SECRET_KEY")
     app_env: str = Field(default="development", alias="APP_ENV")
+    # Mission 5, phase 6: a short (5-15 minute), operator-toggled window for
+    # the production migration cutover - see docs/platform/
+    # PRODUCTION_REHEARSAL_PLAN.md. Deliberately just a boolean flip (no
+    # scheduling, no per-route allowlist config): every mutating request is
+    # rejected with a clear, consistent response while it's on; read-only
+    # traffic (browsing, viewing existing history, health checks) is
+    # unaffected. Never true by default in any environment.
+    maintenance_mode: bool = Field(default=False, alias="MAINTENANCE_MODE")
     email_backend: str = Field(default="log", alias="EMAIL_BACKEND")
     resend_api_key: SecretStr = Field(default=SecretStr(""), alias="RESEND_API_KEY")
     email_from: str = Field(default="", alias="EMAIL_FROM")
