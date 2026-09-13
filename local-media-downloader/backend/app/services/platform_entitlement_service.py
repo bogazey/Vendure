@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 from app.config.commercial_settings import get_commercial_settings
 from app.config.logging_config import get_logger
 from app.database.commercial_models import PlatformEntitlementCache, PlatformOidcToken, User
-from app.models.commercial_enums import UserStatus
+from app.models.commercial_enums import Plan, UserStatus
 from app.services import token_encryption_service
 
 logger = get_logger("platform_entitlement")
@@ -328,3 +328,56 @@ def get_entitlement_hybrid(session: Session, user: User) -> dict:
         "entitled": cache.entitled, "entitlement": entitlement, "source": "cached",
         "stale": True, "checked_at": cache.checked_at.isoformat(),
     }
+
+
+def resolve_effective_plan(session: Session, user: User, local_plan: Plan) -> tuple[Plan, dict]:
+    """The one call site `download_gate_service` uses to decide *which*
+    plan actually gates this request (mission 5, phase 3 —
+    docs/platform/ENTITLEMENT_AVAILABILITY.md's hybrid model, now wired
+    into the real download gate instead of only being a proven,
+    unconnected capability).
+
+    For an account never linked to Platform Core (`global_user_id is
+    None`) or when the integration isn't configured at all, this is a
+    no-op: `local_plan` — Loady's own `Subscription`-derived plan — passes
+    straight through unchanged, exactly as before this mission. Existing,
+    non-migrated users are completely unaffected.
+
+    For a migrated user, Platform Core becomes authoritative for *which
+    plan applies*, per `get_entitlement_hybrid`:
+
+    - `entitled=True` (source `"live"` or `"cached"`): the plan named by
+      the entitlement's `plan_slug` gates the request. An unrecognized or
+      missing `plan_slug` (e.g. a future plan this Loady deployment
+      doesn't know about, or a malformed cache row) fails closed to
+      `Plan.FREE` rather than raising — the same fail-closed choice as an
+      absent entitlement, never an error that could be mistaken for "let
+      it through."
+    - `entitled=False` (source `"unknown"`: Platform Core unreachable AND
+      either no cache row or the cache has aged out of
+      `ENTITLEMENT_CACHE_TTL_MINUTES`): falls closed to `Plan.FREE`. Free
+      capabilities remain available (same policy every Free user gets);
+      every paid/gifted capability is denied until Platform Core is
+      reachable again. This can never escalate a plan — only ever
+      resolves to FREE or the exact plan Platform Core most recently
+      confirmed.
+
+    The second return value is the raw hybrid result (`source`, `stale`,
+    `checked_at`, ...) purely for callers that want to log/expose it
+    (e.g. an audit trail of which source gated a given download); the
+    download gate itself only needs the resolved `Plan`.
+    """
+    settings = get_commercial_settings()
+    if user.global_user_id is None or not settings.platform_client_id:
+        return local_plan, {"source": "local", "stale": False, "checked_at": None}
+
+    result = get_entitlement_hybrid(session, user)
+    if not result.get("entitled"):
+        return Plan.FREE, result
+
+    plan_slug = (result.get("entitlement") or {}).get("plan_slug")
+    try:
+        return Plan(plan_slug), result
+    except (ValueError, TypeError):
+        logger.warning("Platform Core returned an unrecognized plan_slug %r for user %s; failing closed to FREE.", plan_slug, user.id)
+        return Plan.FREE, result

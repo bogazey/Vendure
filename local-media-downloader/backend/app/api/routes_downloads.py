@@ -36,7 +36,7 @@ from app.database.commercial_models import User
 from app.models.commercial_enums import AnalyticsEventType
 from app.models.commercial_schemas import GuestQuotaOut
 from app.models.schemas import CreateDownloadRequest, DownloadJobOut
-from app.services import analytics_service, guest_service
+from app.services import analytics_service, guest_service, platform_entitlement_service
 from app.services.account_service import account_service
 from app.services.download_gate_service import download_gate_service
 from app.services.download_manager import manager
@@ -120,6 +120,12 @@ def _gate_and_create(
 ) -> DownloadJobOut:
     _validate_url(request)
     plan, subscription = account_service.get_current_plan(db, user.id)
+    # Mission 5, phase 3: for a user linked to Platform Core, its
+    # authoritative/cached entitlement (never the browser) decides which
+    # plan gates this request - see
+    # platform_entitlement_service.resolve_effective_plan. A no-op for
+    # every account that has never migrated.
+    plan, _entitlement_source = platform_entitlement_service.resolve_effective_plan(db, user, plan)
 
     reservation_id, max_resolution_height = download_gate_service.authorize_and_reserve(
         db, user, plan, subscription, request, job_id
