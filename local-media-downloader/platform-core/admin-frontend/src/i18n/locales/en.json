@@ -1,0 +1,119 @@
+{
+  "app": {
+    "title": "Grand Admin",
+    "subtitle": "Platform Core"
+  },
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "confirm": "Confirm",
+    "revoke": "Revoke",
+    "grant": "Grant",
+    "change": "Change",
+    "email": "Email",
+    "password": "Password",
+    "status": "Status",
+    "active": "Active",
+    "disabled": "Disabled",
+    "reason": "Reason (optional)",
+    "language": "العربية",
+    "signOut": "Sign out",
+    "error": "Something went wrong.",
+    "none": "None"
+  },
+  "nav": {
+    "overview": "Overview",
+    "users": "Users",
+    "products": "Products",
+    "entitlements": "Entitlements",
+    "giftedAccess": "Gifted Access",
+    "auditLog": "Audit Logs"
+  },
+  "login": {
+    "heading": "Grand Admin",
+    "subheading": "Sign in with your central identity account.",
+    "submit": "Sign in",
+    "error": "Sign-in failed. Check your credentials."
+  },
+  "forbidden": {
+    "heading": "Access denied",
+    "body": "Your account does not have Grand Admin access."
+  },
+  "overview": {
+    "totalUsers": "Total Users",
+    "activeUsers": "Active Users",
+    "totalProducts": "Products",
+    "paidEntitlements": "Paid Subscribers",
+    "giftedEntitlements": "Gifted Accounts",
+    "revenueNote": "No real payment processor is wired into Platform Core in V1 — revenue is intentionally not fabricated."
+  },
+  "users": {
+    "searchPlaceholder": "Search by email…",
+    "email": "Email",
+    "status": "Status",
+    "roles": "Roles",
+    "entitlements": "Entitlements",
+    "gifted": "Gifted",
+    "joined": "Joined",
+    "viewDetail": "View",
+    "detailTitle": "User",
+    "globalId": "Global ID",
+    "memberships": "Product memberships",
+    "noMemberships": "No product memberships yet.",
+    "assignRole": "Assign role",
+    "revokeRole": "Revoke",
+    "disableAccount": "Disable account",
+    "enableAccount": "Re-enable account",
+    "cannotDisableSelf": "You cannot disable your own account.",
+    "roleAssigned": "Role assigned.",
+    "roleRevoked": "Role revoked."
+  },
+  "products": {
+    "id": "ID",
+    "name": "Name",
+    "domain": "Domain",
+    "status": "Status",
+    "createProduct": "Create product",
+    "live": "Live",
+    "building": "Building",
+    "planned": "Planned"
+  },
+  "entitlements": {
+    "grantTitle": "Grant / change entitlement",
+    "product": "Product",
+    "plan": "Plan",
+    "source": "Source",
+    "paidBlocked": "This user has an active paid entitlement in this product. It cannot be silently replaced by a gifted one through this control.",
+    "warning": "This grants product access without charging the user.",
+    "sourceFree": "Free",
+    "sourcePaddle": "Paddle (paid)",
+    "sourceGifted": "Gifted",
+    "sourcePromotion": "Promotion",
+    "sourceTrial": "Trial",
+    "sourceInternal": "Internal",
+    "sourceLifetime": "Lifetime",
+    "sourceBundle": "Bundle"
+  },
+  "giftedAccess": {
+    "heading": "Gifted Access",
+    "subheading": "Every currently active gifted, promotional, or internal entitlement across the ecosystem — none of this is counted as revenue.",
+    "user": "User",
+    "product": "Product",
+    "plan": "Plan",
+    "grantedBy": "Granted by",
+    "reason": "Reason",
+    "empty": "No gifted access currently active."
+  },
+  "audit": {
+    "heading": "Audit Log",
+    "actor": "Actor",
+    "action": "Action",
+    "target": "Target",
+    "product": "Product",
+    "reason": "Reason",
+    "when": "When",
+    "empty": "No audit entries yet."
+  }
+}

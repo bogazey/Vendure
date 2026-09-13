@@ -1,0 +1,119 @@
+{
+  "app": {
+    "title": "الإدارة الكبرى",
+    "subtitle": "النواة المركزية"
+  },
+  "common": {
+    "loading": "جارٍ التحميل...",
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "close": "إغلاق",
+    "confirm": "تأكيد",
+    "revoke": "إلغاء المنح",
+    "grant": "منح",
+    "change": "تغيير",
+    "email": "البريد الإلكتروني",
+    "password": "كلمة المرور",
+    "status": "الحالة",
+    "active": "نشط",
+    "disabled": "معطّل",
+    "reason": "السبب (اختياري)",
+    "language": "English",
+    "signOut": "تسجيل الخروج",
+    "error": "حدث خطأ ما.",
+    "none": "لا شيء"
+  },
+  "nav": {
+    "overview": "نظرة عامة",
+    "users": "المستخدمون",
+    "products": "المنتجات",
+    "entitlements": "الاستحقاقات",
+    "giftedAccess": "الوصول المُهدى",
+    "auditLog": "سجلّ التدقيق"
+  },
+  "login": {
+    "heading": "الإدارة الكبرى",
+    "subheading": "سجّل الدخول باستخدام حساب هويتك المركزية.",
+    "submit": "تسجيل الدخول",
+    "error": "فشل تسجيل الدخول. تحقق من بياناتك."
+  },
+  "forbidden": {
+    "heading": "الوصول مرفوض",
+    "body": "حسابك لا يملك صلاحية الوصول إلى الإدارة الكبرى."
+  },
+  "overview": {
+    "totalUsers": "إجمالي المستخدمين",
+    "activeUsers": "المستخدمون النشطون",
+    "totalProducts": "المنتجات",
+    "paidEntitlements": "المشتركون المدفوعون",
+    "giftedEntitlements": "الحسابات المُهداة",
+    "revenueNote": "لا يوجد معالج دفع حقيقي متصل بالنواة المركزية في الإصدار الأول — لا يتم اختلاق الإيرادات."
+  },
+  "users": {
+    "searchPlaceholder": "ابحث بالبريد الإلكتروني…",
+    "email": "البريد الإلكتروني",
+    "status": "الحالة",
+    "roles": "الأدوار",
+    "entitlements": "الاستحقاقات",
+    "gifted": "مُهدى",
+    "joined": "تاريخ الانضمام",
+    "viewDetail": "عرض",
+    "detailTitle": "المستخدم",
+    "globalId": "المعرّف العالمي",
+    "memberships": "عضويات المنتجات",
+    "noMemberships": "لا توجد عضويات منتجات بعد.",
+    "assignRole": "تعيين دور",
+    "revokeRole": "إلغاء",
+    "disableAccount": "تعطيل الحساب",
+    "enableAccount": "إعادة تفعيل الحساب",
+    "cannotDisableSelf": "لا يمكنك تعطيل حسابك الخاص.",
+    "roleAssigned": "تم تعيين الدور.",
+    "roleRevoked": "تم إلغاء الدور."
+  },
+  "products": {
+    "id": "المعرّف",
+    "name": "الاسم",
+    "domain": "النطاق",
+    "status": "الحالة",
+    "createProduct": "إنشاء منتج",
+    "live": "مباشر",
+    "building": "قيد البناء",
+    "planned": "مخطط له"
+  },
+  "entitlements": {
+    "grantTitle": "منح / تغيير الاستحقاق",
+    "product": "المنتج",
+    "plan": "الخطة",
+    "source": "المصدر",
+    "paidBlocked": "لدى هذا المستخدم استحقاق مدفوع نشط في هذا المنتج. لا يمكن استبداله بصمت باستحقاق مُهدى عبر هذا التحكم.",
+    "warning": "هذا يمنح الوصول إلى المنتج دون تحصيل رسوم من المستخدم.",
+    "sourceFree": "مجاني",
+    "sourcePaddle": "Paddle (مدفوع)",
+    "sourceGifted": "مُهدى",
+    "sourcePromotion": "ترويجي",
+    "sourceTrial": "تجريبي",
+    "sourceInternal": "داخلي",
+    "sourceLifetime": "مدى الحياة",
+    "sourceBundle": "حزمة"
+  },
+  "giftedAccess": {
+    "heading": "الوصول المُهدى",
+    "subheading": "كل استحقاق مُهدى أو ترويجي أو داخلي نشط حاليًا عبر المنظومة — لا شيء من هذا يُحتسب كإيراد.",
+    "user": "المستخدم",
+    "product": "المنتج",
+    "plan": "الخطة",
+    "grantedBy": "مُنِح بواسطة",
+    "reason": "السبب",
+    "empty": "لا يوجد وصول مُهدى نشط حاليًا."
+  },
+  "audit": {
+    "heading": "سجلّ التدقيق",
+    "actor": "الفاعل",
+    "action": "الإجراء",
+    "target": "الهدف",
+    "product": "المنتج",
+    "reason": "السبب",
+    "when": "الوقت",
+    "empty": "لا توجد إدخالات تدقيق بعد."
+  }
+}

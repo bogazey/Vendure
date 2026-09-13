@@ -16,3 +16,20 @@ downloads/*
 .env
 .env.production
 secrets/
+
+# unified-platform-v1 (Platform Core + Grand Admin + demo products) - same
+# conventions as above, repeated per sub-project since none of these are
+# nested under backend/ or frontend/.
+platform-core/backend/.venv/
+platform-core/backend/__pycache__/
+platform-core/backend/**/__pycache__/
+platform-core/backend/.pytest_cache/
+platform-core/backend/data/*.db
+platform-core/backend/data/*.pem
+platform-core/admin-frontend/node_modules/
+platform-core/admin-frontend/dist/
+platform-core/admin-frontend/*.tsbuildinfo
+platform-core/demo-product-a/backend/.venv/
+platform-core/demo-product-a/backend/__pycache__/
+platform-core/demo-product-b/backend/.venv/
+platform-core/demo-product-b/backend/__pycache__/
