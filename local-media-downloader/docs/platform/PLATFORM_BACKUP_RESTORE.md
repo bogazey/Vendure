@@ -85,3 +85,57 @@ itself (not any one table) was what needed proving.
   secrets, hashed; audit history in full). Production access to the
   backup storage location must be as restricted as production database
   access itself.
+
+## Mission 5 additions: checksums, restore-testing, secret separation, permissions
+
+The requirements above (encryption, off-site storage, automation) remain
+unimplemented — this section adds what Mission 5 actually built and
+verified, and states the remaining requirements explicitly per the
+mission brief.
+
+- ✅ **Checksums** — `scripts/platform/backup-before-platform-migration.sh`
+  writes a `CHECKSUMS.sha256` alongside every backup artifact.
+  `scripts/platform/verify-backup-restorable.sh` checks it **before**
+  attempting any restore, and this was proven to actually catch
+  corruption: a deliberately-corrupted **copy** of a real backup (40
+  bytes overwritten mid-file) was correctly rejected
+  (`loady_postgres.dump: FAILED`, exit 1, `NO-GO`) without ever
+  attempting to restore it, while the original, untouched backup
+  verified and restored cleanly immediately after (Mission 5, phase 24).
+- ✅ **Restore testing** — not a one-time manual check: both Postgres
+  dumps (Loady's and Platform Core's) and the Loady SQLite history file
+  were independently restored/integrity-checked in throwaway,
+  network-isolated Docker resources multiple times across this mission
+  (phases 5 and 24), and a **live production-style rollback** actually
+  restored a real backup into the running staging database and verified
+  the application worked correctly against it end-to-end (phase 21) —
+  the strongest form of "restore testing" available short of production
+  itself.
+- **File permissions** — not yet enforced by tooling. The backup
+  directory and every file in it should be `chmod 600`/`700` (owner-only)
+  at minimum; this mission's scripts do not currently set permissions
+  explicitly (they inherit the umask of whoever runs them) — a
+  MEDIUM-severity gap to close before production, tracked in
+  `PRODUCTION_READINESS_CHECKLIST.md`.
+- **Secret separation** — confirmed by design and re-verified this
+  mission: `backup-before-platform-migration.sh`'s configuration
+  inventory captures environment variable **names only**
+  (`cut -d= -f1`), never values — spot-checked live in phase 5 (the
+  inventory correctly lists `PADDLE_API_KEY` as a name with no value
+  anywhere in the file). Database dumps themselves necessarily contain
+  password **hashes** (Argon2id) and OAuth client secret **hashes**, never
+  plaintext credentials — this is the existing, unchanged security
+  property of both databases' own schemas, not something backup tooling
+  adds or could remove.
+- **Retention** — still entirely unautomated (per the pre-existing gap
+  above). Recommendation for an initial production policy, absent any
+  automation: keep the last 7 daily backups plus the last backup taken
+  immediately before any migration/cutover event, until off-site
+  automated backups exist.
+- **Off-server recommendation** — unchanged, still a BLOCKER for
+  production (see above). For the local rehearsal specifically, every
+  backup produced by this mission is gitignored
+  (`docs/platform/rehearsal-artifacts/`) and never leaves this machine —
+  correct for a rehearsal, but a reminder that "committed to git" is
+  never an acceptable substitute for real off-site backup storage even
+  if it were not explicitly forbidden here.
