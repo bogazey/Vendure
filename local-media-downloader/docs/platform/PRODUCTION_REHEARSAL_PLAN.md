@@ -184,3 +184,118 @@ Full detail and results: `PRODUCTION_ROLLBACK_REHEARSAL.md`.
 10. Final recommendation: one of `NOT READY` / `READY FOR CONTROLLED
     PRODUCTION MIGRATION` / `READY FOR PRODUCTION CUTOVER`, made
     conservatively per the Mission 5 definitions.
+
+## Execution log (real runs against `loady-staging` + `platform-core-staging`)
+
+Everything below was actually executed against the live staging stacks on
+this machine, not simulated or written from assumption. Raw evidence
+(dumps, manifests, reconciliation JSON) lives in
+`docs/platform/rehearsal-artifacts/` (gitignored, local only, per this
+mission's own git-safety rule against committing database dumps/backups).
+
+**Environment**: `platform-staging-net` recreated; `platform-core-staging`
+and `loady-staging` rebuilt (to pick up this mission's code changes) and
+brought up healthy. Both are fully separate from, and never affected,
+the pre-existing local `loady` production-parity stack on port 80 (its
+`StartedAt` timestamp was checked before and after every operation in
+this log and never changed).
+
+**Phase 4/5 (synthetic dataset + backup)**: 51 synthetic users generated
+directly into `loady-staging`'s Postgres via
+`generate_synthetic_staging_snapshot`. Full backup taken
+(`backup-before-platform-migration.sh`) and independently verified
+restorable in throwaway, network-isolated containers
+(`verify-backup-restorable.sh`) — both Postgres dumps restored cleanly
+(17 and 16 tables respectively) and the SQLite history file passed
+`PRAGMA integrity_check`. Found and worked around a locally-corrupted
+`postgres:16-alpine` image layer on this machine (empty `/etc/passwd`) by
+using `postgres:16` instead — an environment issue, not a script bug; the
+running production-parity Postgres container using the same tag was
+unaffected throughout.
+
+**Phase 7 (dry run)**: `loady_migration_dry_run.py` run without
+`--commit` against the full 51-user dataset. Verified zero writes to
+either database by direct row-count check before/after. Result: 49 would
+be created, 1 skipped (a pre-existing Mission 4 fixture account still
+present in the persisted staging volume - correctly recognized as already
+migrated), 1 conflicted (the deliberate already-linked-orphan edge case),
+1 failed (the deliberate malformed-plan edge case, failing with a clear
+`InvalidPlanError` rather than guessing).
+
+**Phase 8 (commit + idempotency)**: `--commit` run produced the same
+created/conflicted/failed shape and real writes (verified via direct SQL
+count, not just the tool's own report). **Found a real idempotency bug
+while proving idempotency**: running commit mode a second time against an
+unchanged dataset left the top-level report correctly showing everyone as
+"skipped," but silently duplicated `Entitlement` rows underneath for
+every user whose migrated subscription's `current_period_end` had already
+passed relative to "now" (a real, reachable production scenario, not just
+a fixture artifact — e.g. a `past_due` Paddle subscription mid-retry,
+which Loady's own `ACTIVE_SUBSCRIPTION_STATUSES` deliberately still
+counts as entitled). Root cause and fix are in
+`platform-core/backend/app/services/entitlement_service.py` (see the git
+history for the full writeup and the added regression test). After the
+fix, three consecutive commit runs produced byte-identical counts: 52
+Platform Core users / 49 entitlements / 51 linked Loady accounts.
+
+**Phase 9 (reconciliation)**: full reconciliation against the
+pre-migration manifest — user count, disabled/verified counts, and
+history row count all unchanged (51 / 4 / 45 / 72 exactly); entitlement
+source breakdown (28 free, 5 gifted, 16 paddle) matches the synthetic
+persona counts exactly; zero `PaymentRecord` rows created (gifted/free
+produce zero revenue); admin role assignments correct (2). Full
+machine-readable report: `rehearsal-artifacts/reconciliation_report.json`
+(local only). Result: **PASS**, with the phase-8 bug now fixed and two LOW
+findings documented (see that file) that don't block readiness.
+
+**Phase 10 (login rehearsal, partial)**: a fresh real account (real
+Argon2id hash via Loady's own signup) was migrated, then authenticated
+**directly against Platform Core** (`POST /api/v1/auth/login`) using its
+original Loady password — HTTP 200 with a valid RS256 session token,
+live proof the Argon2id hash migrates verbatim and the original password
+keeps working. The full Authorization Code + PKCE flow was also driven
+end-to-end via curl (Loady `/api/auth/platform/login` → Platform Core
+`/oauth/authorize` with a Platform Core session cookie → Loady
+`/api/auth/platform/callback`), correctly resolving to the same local
+Loady account by `global_user_id` and issuing a normal Loady session.
+Not yet independently re-run for every persona (Pro/Creator/gifted
+variants/admin/unverified/disabled) - the mechanism is proven, not every
+enumerated persona.
+
+**Phase 12 (Grand Admin, partial)**: user search, single-user detail, and
+a live gift grant (`PATCH /api/v1/admin/users/{id}/entitlements`,
+Gifted Creator) were all exercised via the real API with a bootstrapped
+super-admin session. Verified zero Paddle interaction and zero
+`PaymentRecord` rows from the grant. Revoke, audit-log viewing, and
+product-scoped-administrator restrictions were not yet exercised in this
+pass.
+
+**Phase 13 (download gate) - the mission's core new code, fully live-verified**:
+using the account gifted Creator above (a Platform-Core-only entitlement
+with **no local Loady `Subscription` row at all**), a real `POST
+/api/downloads` request for 2160p succeeded (HTTP 201) - proof the phase-3
+wiring correctly authorizes a migrated user from Platform Core alone. A
+Free-plan migrated user was correctly blocked at 1080p (402) and allowed
+at 720p (201) in the same pass, confirming no regression to existing
+behavior.
+
+**Phase 14 (Platform Core outage, fully verified)**: with
+`platform-core-staging` stopped entirely, the same 2160p request still
+succeeded (bounded cache, fetched moments earlier, well inside the
+15-minute TTL). The cache row was then directly backdated past the TTL
+while Platform Core remained stopped: the 2160p request correctly failed
+closed (402) while a 720p (Free-tier) request continued to succeed -
+proving the documented hybrid-availability model exactly, live, under a
+real simulated outage. Platform Core was restarted, came back healthy
+automatically, and the very next request re-authorized 2160p immediately
+via a fresh live check.
+
+**Not yet executed in this pass** (tracked for the next session/tick):
+Phases 6, 11, 15-24 (maintenance mode, cross-product SSO, PostgreSQL
+outage, signing-key/token-encryption failure injection, measured
+central-disable SLA, full-stack restart, disaster-scenario matrix, the
+actual rollback rehearsal, second-migration-after-rollback, backup
+corruption test) and phases 25-38 (remaining operator scripts, go/no-go
+preflight, secret inventory, key-rotation runbook, cutover runbook,
+capacity plan, load test, final security review, full multi-suite test
+run, limitation classification, final documentation set).
