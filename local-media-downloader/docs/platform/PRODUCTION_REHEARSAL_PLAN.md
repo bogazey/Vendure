@@ -290,12 +290,90 @@ real simulated outage. Platform Core was restarted, came back healthy
 automatically, and the very next request re-authorized 2160p immediately
 via a fresh live check.
 
+**Phase 15 (PostgreSQL outage, fully verified)**: stopped
+`platform-core-staging-postgres` only (backend process left running).
+`/health` stayed `ok` (liveness, correctly independent of the DB);
+`/ready` correctly returned `503` with `database: false, signing_key:
+true` (readiness, correctly DB-dependent) - proving the documented
+liveness/readiness split is real, not just written down. An auth attempt
+against the dead DB failed safely (generic 500, no stack trace or SQL
+leaked to the client - see finding below) rather than corrupting
+anything. Loady's hybrid gate behaved identically to the phase-14
+Platform-Core-process-down case: a fresh cache authorized a 2160p
+download while the DB was down. Postgres restarted, readiness recovered
+automatically, and Loady's gate re-authorized on live data immediately.
+
+**Phase 16 (signing key failure, fully verified)**: removing the signing
+key file entirely and restarting the container caused a **hard container
+start failure** at the Docker level (not just an in-app fail-closed
+response) - Docker Desktop's bind-mount handling silently materialized
+an empty directory at the missing path, which then had to be manually
+cleaned up (`rmdir`) after the real key file was restored underneath it,
+since a plain restore-and-restart wasn't enough - a real operational
+gotcha worth calling out in the key-rotation runbook for anyone running
+this same drill. A syntactically-valid **wrong** key let the container
+start (expected - the app can't know a key is "wrong," only malformed),
+but a token it issued was correctly and completely rejected once the
+original correct key was restored - no algorithm confusion, no silent
+acceptance. The original key file was verified byte-identical
+(`diff`) before and after every step - no accidental regeneration.
+
+**Phase 17 (token encryption failure, fully verified)**: with a
+different-but-valid `PLATFORM_TOKEN_ENCRYPTION_KEY`, an unset key, and a
+directly-tampered ciphertext in `platform_oidc_tokens` (all three tested
+live against the real gifted-Creator account), every case failed the
+same safe way: the stored token became undecryptable, `httpx`/decrypt
+errors were caught and logged by exception TYPE ONLY (never plaintext,
+ciphertext, or key material - confirmed by reading the actual container
+logs), and the gate fell back to the same bounded-cache/fail-closed path
+already proven in phases 14-15. The tampered row was never auto-deleted
+or silently overwritten by the app - confirmed by re-reading it
+unchanged from the database afterward.
+
+**Phase 18 (central-disable SLA, measured, not mocked)**: real wall-clock
+polling (15-second intervals) against `GET /api/auth/me` (a
+hard-authentication endpoint - `get_current_user`) measured **302
+seconds** from the Grand Admin disable call to Loady denying access,
+matching the documented `SESSION_REVALIDATION_INTERVAL_MINUTES=5`
+(300s) almost exactly (the 2-second overshoot is fully explained by
+15-second poll granularity and a few seconds of setup time between
+resetting the baseline check and issuing the disable call). **Two real
+findings surfaced along the way**, both behavioral, neither a security
+escalation:
+1. `POST /api/downloads` takes an *optional* user
+   (`get_optional_user`) with an anonymous-guest fallback by design - so
+   polling that specific endpoint after a disable measures nothing
+   useful, since a rejected session silently degrades to guest-tier
+   access (same as any anonymous visitor gets) rather than a 401. This
+   is not a privilege escalation (guest tier is the lowest tier, no paid
+   capability leaks through it), but it does mean a centrally-disabled
+   account is not fully locked out of downloading entirely, only out of
+   its own paid/gifted tier - worth stating explicitly in the security
+   review (phase 34) so it isn't assumed to mean "zero access."
+2. Local disable is **sticky**: `get_optional_user` returns early on an
+   already-locally-disabled user without ever calling
+   `revalidate_central_status_if_due` again, so re-enabling the account
+   centrally is never automatically detected - the local `active` state
+   is only restored by some other path (e.g. a fresh login), not by the
+   next request. Confirmed live: re-enabling via Grand Admin alone did
+   not restore access until the local row was corrected.
+
+**Phase 19 (full-stack restart, fully verified)**: `docker compose
+restart` on both stacks (all containers, not just backend). Verified
+identical before/after: linked-user count (54), Platform Core user count
+(56), entitlement count (52), audit log count (506), and the Loady
+history SQLite file **byte-for-byte identical** (`diff`). Re-established
+a fresh session afterward and re-confirmed the gifted-Creator entitlement
+still authorizes a live 2160p download end-to-end - not just that rows
+exist, but that the whole authorization path still functions correctly
+post-restart.
+
 **Not yet executed in this pass** (tracked for the next session/tick):
-Phases 6, 11, 15-24 (maintenance mode, cross-product SSO, PostgreSQL
-outage, signing-key/token-encryption failure injection, measured
-central-disable SLA, full-stack restart, disaster-scenario matrix, the
-actual rollback rehearsal, second-migration-after-rollback, backup
-corruption test) and phases 25-38 (remaining operator scripts, go/no-go
-preflight, secret inventory, key-rotation runbook, cutover runbook,
-capacity plan, load test, final security review, full multi-suite test
-run, limitation classification, final documentation set).
+Phases 6, 11 (maintenance mode, cross-product SSO - demo-product-a/b run
+as plain uncontainerized dev processes and were not started this pass),
+20-24 (disaster-scenario matrix, the actual rollback rehearsal,
+second-migration-after-rollback, backup corruption test) and phases
+25-38 (remaining operator scripts, go/no-go preflight, secret inventory,
+key-rotation runbook, cutover runbook, capacity plan, load test, final
+security review, full multi-suite test run, limitation classification,
+final documentation set).
