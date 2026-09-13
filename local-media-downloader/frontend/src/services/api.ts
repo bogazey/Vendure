@@ -47,6 +47,12 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? "ht
 
 export const downloadFileUrl = (id: string) => `${API_BASE}/api/downloads/${encodeURIComponent(id)}/file`;
 
+// A real top-level navigation, not a fetch: the backend's redirect sets
+// short-lived PKCE/state cookies and then 302s the browser on to Platform
+// Core, so this can never go through the JSON `request()` helper above.
+export const platformAuthLoginUrl = (next: string) =>
+  `${API_BASE}/api/auth/platform/login?next=${encodeURIComponent(next)}`;
+
 // A temporary, invisible same-origin-navigating <a> - not window.open() (which
 // popup blockers can kill) and not a fetch-into-Blob (which would pull large
 // media files fully into JS memory first). The endpoint already responds
@@ -152,6 +158,10 @@ async function request<T>(path: string, init?: RequestInit, _isRetry = false): P
 
 export const api = {
   health: () => request<HealthResponse>("/api/health"),
+  // Never sensitive - just tells the UI whether a central-identity sign-in
+  // option should be shown at all (dormant by default in every environment
+  // until PLATFORM_CLIENT_ID/SECRET are deliberately configured).
+  platformAuthStatus: () => request<{ enabled: boolean }>("/api/auth/platform/status"),
 
   analyze: (url: string) =>
     request<AnalyzeResponse>("/api/analyze", { method: "POST", body: JSON.stringify({ url }) }),

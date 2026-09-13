@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import ErrorBanner from "../../components/ErrorBanner";
 import LoadyLogo from "../../components/LoadyLogo";
 import { useAuth } from "../../context/AuthContext";
-import { ApiError } from "../../services/api";
+import { api, ApiError, platformAuthLoginUrl } from "../../services/api";
 import { useNoindex } from "../../seo/useNoindex";
 import { inputClass, authCardClass, primaryButtonClass } from "./formStyles";
+import { secondaryButton } from "../../styles/ui";
 
 export default function Login() {
   const { t } = useTranslation();
@@ -20,10 +21,31 @@ export default function Login() {
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [platformEnabled, setPlatformEnabled] = useState(false);
 
   const state = location.state as { from?: { pathname: string; search: string }; initialUrl?: string } | null;
   const from = state?.from;
   const initialUrl = state?.initialUrl;
+
+  useEffect(() => {
+    let cancelled = false;
+    // Dormant in every environment until Platform Core is deliberately
+    // configured server-side - failing this check just means the button
+    // below never renders, never a broken link.
+    api
+      .platformAuthStatus()
+      .then((res) => {
+        if (!cancelled) setPlatformEnabled(res.enabled);
+      })
+      .catch(() => {
+        if (!cancelled) setPlatformEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const platformNext = from ? `${from.pathname}${from.search}` : "/dashboard";
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -52,6 +74,19 @@ export default function Login() {
 
       <form onSubmit={handleSubmit} className={authCardClass}>
         {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
+
+        {platformEnabled && (
+          <>
+            <a href={platformAuthLoginUrl(platformNext)} className={`${secondaryButton} w-full text-center`}>
+              {t("auth.platformSignIn")}
+            </a>
+            <div className="flex items-center gap-3 text-xs text-slate-500">
+              <span className="h-px flex-1 bg-white/10" />
+              {t("auth.platformOr")}
+              <span className="h-px flex-1 bg-white/10" />
+            </div>
+          </>
+        )}
 
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="text-slate-400">{t("auth.email")}</span>

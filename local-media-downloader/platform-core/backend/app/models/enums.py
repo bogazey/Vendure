@@ -79,6 +79,7 @@ class AuditAction(str, Enum):
     ROLE_REVOKED = "role_revoked"
     CLIENT_REGISTERED = "client_registered"
     PRODUCT_CREATED = "product_created"
+    LOADY_MIGRATION_IMPORT = "loady_migration_import"
 
 
 class PaymentStatus(str, Enum):

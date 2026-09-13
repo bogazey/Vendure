@@ -172,6 +172,8 @@
     "loginError": "Could not sign in.",
     "noAccount": "Don't have an account?",
     "createOne": "Create one",
+    "platformSignIn": "Sign in with Central Identity",
+    "platformOr": "or",
     "signupTitle": "Create your account",
     "signupBody": "Free plan · 5 downloads a day · no card required.",
     "passwordHelp": "At least 8 characters, with a mix of letters and numbers/symbols.",

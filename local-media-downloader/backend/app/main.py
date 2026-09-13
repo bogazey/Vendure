@@ -28,6 +28,7 @@ from app.api import (
     routes_filesystem,
     routes_health,
     routes_history,
+    routes_platform_auth,
     routes_progress,
     routes_settings,
 )
@@ -136,6 +137,7 @@ async def unhandled_error_handler(request: Request, exc: Exception) -> JSONRespo
 
 app.include_router(routes_health.router)
 app.include_router(routes_auth.router)
+app.include_router(routes_platform_auth.router)
 app.include_router(routes_account.router)
 app.include_router(routes_billing.router)
 app.include_router(routes_admin.router)

@@ -49,6 +49,20 @@ class CommercialSettings(BaseSettings):
         default=f"sqlite:///{DATA_DIR / 'commercial.db'}", alias="DATABASE_URL"
     )
 
+    # --- Platform Core central identity (see docs/platform/LOADY_IDENTITY_INTEGRATION.md) ---
+    # Unset (empty PLATFORM_CLIENT_ID) means the integration is dormant -
+    # routes_platform_auth.py's endpoints 404 rather than half-configure
+    # themselves, so this is safe to leave unset in any environment that
+    # hasn't opted in yet (including production, until a deliberate,
+    # separate decision is made to do so - see LOADY_PRODUCTION_MIGRATION_PLAN.md).
+    platform_auth_base_url: str = Field(default="http://localhost:8100", alias="PLATFORM_AUTH_BASE_URL")
+    platform_api_base_url: str = Field(default="http://localhost:8100", alias="PLATFORM_API_BASE_URL")
+    platform_client_id: str = Field(default="", alias="PLATFORM_CLIENT_ID")
+    platform_client_secret: SecretStr = Field(default=SecretStr(""), alias="PLATFORM_CLIENT_SECRET")
+    platform_redirect_uri: str = Field(
+        default="http://localhost:8000/api/auth/platform/callback", alias="PLATFORM_REDIRECT_URI"
+    )
+
     # --- Paddle ---
     paddle_env: str = Field(default="sandbox", alias="PADDLE_ENV")
     paddle_api_key: str = Field(default="", alias="PADDLE_API_KEY")

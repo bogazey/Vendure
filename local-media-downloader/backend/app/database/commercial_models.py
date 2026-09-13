@@ -47,6 +47,13 @@ class User(Base):
     )
     status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
     role: Mapped[str] = mapped_column(String(20), default="user", nullable=False)
+    # Platform Core's global identity (`usr_<uuid4hex>`), once this account
+    # has been linked/migrated - see docs/platform/LOADY_MIGRATION_DRY_RUN.md.
+    # NULL means "not yet migrated," never an error. Loady's own `id` above
+    # remains the authoritative key for every existing foreign key
+    # (history, usage_periods, usage_events, analytics_events,
+    # subscriptions) - this column is purely additive, never a replacement.
+    global_user_id: Mapped[str | None] = mapped_column(String(48), unique=True, index=True, nullable=True)
 
     subscriptions: Mapped[list["Subscription"]] = relationship(
         back_populates="user", foreign_keys="Subscription.user_id"
@@ -334,3 +341,31 @@ class EmailVerificationToken(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+
+
+class PlatformOidcToken(Base):
+    """The OIDC refresh/access token pair Loady's backend received when a
+    user signed in through Platform Core central identity - lets Loady's
+    backend later call Platform Core's `/api/v1/entitlements/me`
+    server-side, without the user re-authenticating (see
+    app/services/platform_entitlement_service.py). One row per user, kept
+    up to date on every central sign-in.
+
+    SECURITY NOTE (see docs/platform/LOADY_MIGRATION_SECURITY_REVIEW.md):
+    unlike every other token in this schema, `refresh_token` here is
+    stored in a form Loady's backend can actually present back to
+    Platform Core - it cannot be a one-way hash like
+    RefreshToken.token_hash. A production deployment of this integration
+    MUST encrypt this column at rest (e.g. envelope encryption via a KMS)
+    before going live - this is called out explicitly as a remaining
+    blocker in LOADY_PRODUCTION_MIGRATION_PLAN.md, not silently assumed
+    safe.
+    """
+
+    __tablename__ = "platform_oidc_tokens"
+
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), primary_key=True)
+    refresh_token: Mapped[str] = mapped_column(String(500), nullable=False)
+    access_token: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    access_token_expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, onupdate=_now, nullable=False)
