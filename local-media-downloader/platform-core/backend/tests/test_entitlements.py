@@ -65,6 +65,49 @@ def test_expired_entitlement_denied(db_session):
     assert entitlement_service.get_active_entitlement(db_session, target.id, product.id) is None
 
 
+def test_regranting_after_expiry_reactivates_the_same_row_not_a_duplicate(db_session):
+    """Mission 5 regression test: found via the migration-idempotency
+    rehearsal, where re-running loady_migration_service against an
+    unchanged Loady snapshot silently accumulated a new Entitlement row on
+    every run for any user whose migrated subscription's current_period_end
+    had already passed - because grant_or_change's "update in place vs.
+    insert" decision used get_active_entitlement (status AND not-expired),
+    so an already-expired row was invisible to it and a fresh one got
+    inserted every time. Same failure mode applies outside migration too:
+    an admin revoking then re-granting the same user+product, or any
+    caller re-granting an entitlement whose expires_at has quietly passed."""
+    admin = _make_user(db_session, "admin-ent-regrant@example.com")
+    target = _make_user(db_session, "user-ent-regrant@example.com")
+    product = _make_product(db_session, "ent-product-regrant")
+
+    past = datetime.now(timezone.utc) - timedelta(days=1)
+    first = entitlement_service.grant_or_change(
+        db_session, admin, target, product.id, "pro", EntitlementSource.PADDLE, past, None
+    )
+    db_session.commit()
+    assert entitlement_service.get_active_entitlement(db_session, target.id, product.id) is None  # already expired
+
+    second = entitlement_service.grant_or_change(
+        db_session, admin, target, product.id, "pro", EntitlementSource.PADDLE, None, "renewed"
+    )
+    db_session.commit()
+
+    assert second.id == first.id  # same row reactivated, not a second one
+    all_rows = entitlement_service.list_entitlements_for_user(db_session, target.id)
+    assert len([r for r in all_rows if r.product_id == product.id]) == 1
+    assert entitlement_service.get_active_entitlement(db_session, target.id, product.id) is not None
+
+    # Running the exact same grant a third time (simulating a second
+    # migration commit run) must still not create a duplicate.
+    third = entitlement_service.grant_or_change(
+        db_session, admin, target, product.id, "pro", EntitlementSource.PADDLE, None, "renewed again"
+    )
+    db_session.commit()
+    assert third.id == first.id
+    all_rows_again = entitlement_service.list_entitlements_for_user(db_session, target.id)
+    assert len([r for r in all_rows_again if r.product_id == product.id]) == 1
+
+
 def test_future_expiry_still_active(db_session):
     admin = _make_user(db_session, "admin-ent4@example.com")
     target = _make_user(db_session, "user-ent4@example.com")

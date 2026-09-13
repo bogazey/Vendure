@@ -77,6 +77,23 @@ def get_active_entitlement(session: Session, user_id: str, product_id: str) -> E
     return None
 
 
+def _get_latest_entitlement(session: Session, user_id: str, product_id: str) -> Entitlement | None:
+    """The most recent entitlement row for this user+product REGARDLESS of
+    whether it's currently active - i.e. "the one living record for this
+    (user, product) pair," which is what `grant_or_change` needs to decide
+    update-in-place vs. insert (see its own docstring). Deliberately
+    separate from `get_active_entitlement`, whose only job is the
+    authorization question "is this user entitled right now" and which
+    every other caller in this codebase relies on staying that way -
+    this helper has exactly one caller."""
+    return session.execute(
+        select(Entitlement)
+        .where(Entitlement.user_id == user_id, Entitlement.product_id == product_id)
+        .order_by(Entitlement.updated_at.desc())
+        .limit(1)
+    ).scalars().first()
+
+
 def list_entitlements_for_user(session: Session, user_id: str) -> list[Entitlement]:
     return list(
         session.execute(select(Entitlement).where(Entitlement.user_id == user_id).order_by(Entitlement.created_at.desc()))
@@ -97,7 +114,20 @@ def grant_or_change(
 ) -> Entitlement:
     plan = get_plan(session, product_id, plan_slug)
     now = datetime.now(timezone.utc)
-    existing = get_active_entitlement(session, target.id, product_id)
+    # Deliberately the LATEST row for this (user, product) pair, not just
+    # the currently-active one: a grant against a user whose previous
+    # entitlement here has already expired or been revoked must reactivate
+    # that same row in place, never insert a second one - otherwise
+    # granting/re-granting the same user+product repeatedly (e.g. Loady
+    # migration re-processing a subscription whose current_period_end
+    # already passed, or an admin re-gifting after a revoke) silently
+    # accumulates duplicate Entitlement rows for a single logical grant.
+    # Found via the mission 5 migration-idempotency rehearsal: re-running
+    # loady_migration_service against an unchanged Loady snapshot created
+    # a new row every time for any user whose migrated subscription period
+    # had already lapsed, while `get_active_entitlement`-based deduping
+    # silently masked it for still-active ones.
+    existing = _get_latest_entitlement(session, target.id, product_id)
 
     if source.value in _GIFTED_SOURCES:
         action_granted, action_changed = AuditAction.GIFTED_ACCESS_GRANTED, AuditAction.GIFTED_ACCESS_CHANGED
