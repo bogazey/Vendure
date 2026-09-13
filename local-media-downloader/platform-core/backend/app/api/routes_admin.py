@@ -7,6 +7,8 @@ no path by which a product-scoped admin can escalate to global admin
 """
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy import func, select
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -14,13 +16,18 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db, rate_limit_admin_mutation, require_global_admin, require_super_admin
 from app.database.models import (
     AuditLog,
+    BillingWebhookEvent,
+    Bundle,
     Entitlement,
+    GiftedAccess,
     OAuthClient,
+    PaymentRecord,
     Plan,
     Product,
+    Subscription,
     User,
 )
-from app.models.enums import AuditAction, EntitlementSource, EntitlementStatus, RoleSlug
+from app.models.enums import AuditAction, CapabilityValueType, EntitlementSource, EntitlementStatus, RoleSlug
 from app.models.schemas import (
     AdminCreateProductRequest,
     AdminOverviewOut,
@@ -36,7 +43,19 @@ from app.models.schemas import (
     RevokeEntitlementRequest,
     RoleAssignmentOut,
 )
-from app.services import audit_service, entitlement_service, oidc_service, product_service, rbac_service
+from app.services import (
+    audit_service,
+    billing,
+    bundle_service,
+    capability_service,
+    entitlement_service,
+    gift_service,
+    oidc_service,
+    product_service,
+    rbac_service,
+    service_auth,
+    webhook_service,
+)
 from app.utils.exceptions import ForbiddenError, InvalidPlanError, NotFoundError
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
@@ -335,3 +354,265 @@ def _to_audit_out(db: Session, entry: AuditLog) -> AuditLogOut:
 async def audit_log(db: Session = Depends(get_db), limit: int = Query(default=100, le=500)) -> list[AuditLogOut]:
     entries = audit_service.list_recent(db, limit=limit)
     return [_to_audit_out(db, e) for e in entries]
+
+
+# =============================================================================
+# Mission 6 (Phase 31): capabilities / plan entitlements
+# =============================================================================
+
+
+@router.get("/products/{product_id}/capabilities", dependencies=[Depends(require_global_admin)])
+async def list_capabilities(product_id: str, db: Session = Depends(get_db)) -> list[dict]:
+    defs = capability_service.list_capabilities(db, product_id)
+    return [
+        {"id": d.id, "key": d.key, "value_type": d.value_type, "description": d.description, "allowed_values": d.allowed_values}
+        for d in defs
+    ]
+
+
+@router.post("/products/{product_id}/capabilities", dependencies=[Depends(require_global_admin), Depends(rate_limit_admin_mutation)])
+async def define_capability(product_id: str, payload: dict, db: Session = Depends(get_db), admin: User = Depends(require_global_admin)) -> dict:
+    product_service.get_product(db, product_id)
+    try:
+        value_type = CapabilityValueType(payload["value_type"])
+    except (KeyError, ValueError):
+        raise InvalidPlanError("value_type must be one of: boolean, integer, string, enum.")
+    definition = capability_service.define_capability(
+        db, product_id, payload["key"], value_type, payload.get("description"), payload.get("allowed_values"),
+    )
+    audit_service.record(db, admin.id, AuditAction.CAPABILITY_DEFINED, "entitlement_definition", definition.id, product_id, after_state={"key": definition.key})
+    return {"id": definition.id, "key": definition.key, "value_type": definition.value_type}
+
+
+@router.get("/plans/{plan_id}/capabilities", dependencies=[Depends(require_global_admin)])
+async def get_plan_capabilities(plan_id: str, db: Session = Depends(get_db)) -> dict:
+    if db.get(Plan, plan_id) is None:
+        raise NotFoundError("Plan not found.")
+    return capability_service.get_plan_capabilities(db, plan_id)
+
+
+@router.put("/plans/{plan_id}/capabilities/{key}", dependencies=[Depends(require_global_admin), Depends(rate_limit_admin_mutation)])
+async def set_plan_capability(plan_id: str, key: str, payload: dict, db: Session = Depends(get_db), admin: User = Depends(require_global_admin)) -> dict:
+    plan = db.get(Plan, plan_id)
+    if plan is None:
+        raise NotFoundError("Plan not found.")
+    row = capability_service.set_plan_entitlement(db, plan, key, payload["value"])
+    audit_service.record(db, admin.id, AuditAction.PLAN_ENTITLEMENT_SET, "plan_entitlement", row.id, plan.product_id, after_state={"key": key, "value": payload["value"]})
+    return {"plan_id": plan_id, "key": key, "value": payload["value"]}
+
+
+@router.get("/users/{user_id}/effective-entitlements", dependencies=[Depends(require_global_admin)])
+async def effective_entitlements(user_id: str, product_id: str = Query(...), db: Session = Depends(get_db)) -> dict:
+    _require_target(db, user_id)
+    result = capability_service.resolve_effective_entitlements(db, user_id, product_id)
+    return {
+        "product_id": result.product_id,
+        "capabilities": result.capabilities,
+        "sources": [
+            {"kind": s.kind, "plan_id": s.plan_id, "plan_slug": s.plan_slug, "status": s.status,
+             "expires_at": s.expires_at.isoformat() if s.expires_at else None}
+            for s in result.sources
+        ],
+    }
+
+
+# =============================================================================
+# Mission 6 (Phase 13): gifted access v2
+# =============================================================================
+
+
+@router.get("/users/{user_id}/gifts", dependencies=[Depends(require_global_admin)])
+async def list_user_gifts(user_id: str, db: Session = Depends(get_db)) -> list[dict]:
+    _require_target(db, user_id)
+    return [_gift_out(db, g) for g in gift_service.list_gift_history(db, user_id)]
+
+
+def _gift_out(db: Session, gift: GiftedAccess) -> dict:
+    plan = db.get(Plan, gift.plan_id)
+    return {
+        "id": gift.id, "product_id": gift.product_id, "plan_slug": plan.slug if plan else None,
+        "status": gift.status, "reason": gift.reason, "granted_at": gift.granted_at.isoformat(),
+        "starts_at": gift.starts_at.isoformat(), "expires_at": gift.expires_at.isoformat() if gift.expires_at else None,
+        "revoked_at": gift.revoked_at.isoformat() if gift.revoked_at else None, "revoke_reason": gift.revoke_reason,
+    }
+
+
+@router.post("/users/{user_id}/gifts", dependencies=[Depends(require_global_admin), Depends(rate_limit_admin_mutation)])
+async def grant_gift(user_id: str, payload: dict, db: Session = Depends(get_db), admin: User = Depends(require_global_admin)) -> dict:
+    target = _require_target(db, user_id)
+    plan = entitlement_service.get_plan(db, payload["product_id"], payload["plan_slug"])
+    expires_at = datetime.fromisoformat(payload["expires_at"]) if payload.get("expires_at") else None
+    gift = gift_service.grant_gift(db, admin, target, plan, payload.get("reason"), expires_at)
+    return _gift_out(db, gift)
+
+
+@router.delete("/gifts/{gift_id}", dependencies=[Depends(require_global_admin), Depends(rate_limit_admin_mutation)])
+async def revoke_gift(gift_id: str, payload: dict | None = None, db: Session = Depends(get_db), admin: User = Depends(require_global_admin)) -> dict:
+    reason = (payload or {}).get("reason")
+    gift = gift_service.revoke_gift(db, admin, gift_id, reason)
+    return _gift_out(db, gift)
+
+
+# =============================================================================
+# Mission 6 (Phase 15): bundles
+# =============================================================================
+
+
+@router.get("/bundles", dependencies=[Depends(require_global_admin)])
+async def list_bundles(db: Session = Depends(get_db)) -> list[dict]:
+    bundles = db.execute(select(Bundle).order_by(Bundle.created_at.desc())).scalars().all()
+    return [{"id": b.id, "slug": b.slug, "name": b.name, "status": b.status} for b in bundles]
+
+
+@router.post("/bundles", dependencies=[Depends(require_global_admin), Depends(rate_limit_admin_mutation)])
+async def create_bundle(payload: dict, db: Session = Depends(get_db), admin: User = Depends(require_global_admin)) -> dict:
+    bundle = bundle_service.create_bundle(db, admin, payload["slug"], payload["name"])
+    return {"id": bundle.id, "slug": bundle.slug, "name": bundle.name}
+
+
+@router.post("/bundles/{bundle_id}/products", dependencies=[Depends(require_global_admin), Depends(rate_limit_admin_mutation)])
+async def add_bundle_product(bundle_id: str, payload: dict, db: Session = Depends(get_db)) -> dict:
+    bundle = bundle_service.get_bundle(db, bundle_id)
+    plan = entitlement_service.get_plan(db, payload["product_id"], payload["plan_slug"])
+    row = bundle_service.add_product_plan(db, bundle, plan)
+    return {"bundle_id": bundle.id, "product_id": row.product_id, "plan_id": row.plan_id}
+
+
+@router.get("/bundles/{bundle_id}", dependencies=[Depends(require_global_admin)])
+async def get_bundle_detail(bundle_id: str, db: Session = Depends(get_db)) -> dict:
+    bundle = bundle_service.get_bundle(db, bundle_id)
+    products = bundle_service.list_bundle_products(db, bundle_id)
+    return {
+        "id": bundle.id, "slug": bundle.slug, "name": bundle.name, "status": bundle.status,
+        "products": [{"product_id": p.product_id, "plan_id": p.plan_id} for p in products],
+    }
+
+
+@router.post("/users/{user_id}/bundles/{bundle_id}/access", dependencies=[Depends(require_global_admin), Depends(rate_limit_admin_mutation)])
+async def grant_bundle_access(user_id: str, bundle_id: str, payload: dict, db: Session = Depends(get_db), admin: User = Depends(require_global_admin)) -> dict:
+    target = _require_target(db, user_id)
+    bundle = bundle_service.get_bundle(db, bundle_id)
+    expires_at = datetime.fromisoformat(payload["expires_at"]) if payload.get("expires_at") else None
+    access = bundle_service.grant_bundle_access(db, admin, target, bundle, payload.get("source", "internal"), expires_at)
+    return {"id": access.id, "bundle_id": access.bundle_id, "status": access.status}
+
+
+@router.delete("/bundle-access/{access_id}", dependencies=[Depends(require_global_admin), Depends(rate_limit_admin_mutation)])
+async def revoke_bundle_access(access_id: str, payload: dict | None = None, db: Session = Depends(get_db), admin: User = Depends(require_global_admin)) -> dict:
+    access = bundle_service.revoke_bundle_access(db, admin, access_id, (payload or {}).get("reason"))
+    return {"id": access.id, "status": access.status}
+
+
+@router.get("/users/{user_id}/bundle-access", dependencies=[Depends(require_global_admin)])
+async def list_user_bundle_access(user_id: str, db: Session = Depends(get_db)) -> list[dict]:
+    _require_target(db, user_id)
+    return [
+        {"id": a.id, "bundle_id": a.bundle_id, "status": a.status, "source": a.source,
+         "expires_at": a.expires_at.isoformat() if a.expires_at else None}
+        for a in bundle_service.list_user_bundle_access(db, user_id)
+    ]
+
+
+# =============================================================================
+# Mission 6 (Phase 31): subscriptions / payments / billing webhooks (read)
+# =============================================================================
+
+
+@router.get("/subscriptions", dependencies=[Depends(require_global_admin)])
+async def list_subscriptions(db: Session = Depends(get_db), user_id: str | None = Query(default=None), limit: int = Query(default=100, le=500)) -> list[dict]:
+    query = select(Subscription).order_by(Subscription.created_at.desc()).limit(limit)
+    if user_id:
+        query = query.where(Subscription.user_id == user_id)
+    rows = db.execute(query).scalars().all()
+    return [
+        {"id": s.id, "user_id": s.user_id, "product_id": s.product_id, "provider": s.provider,
+         "status": s.status, "current_period_end": s.current_period_end.isoformat() if s.current_period_end else None,
+         "cancel_at_period_end": s.cancel_at_period_end}
+        for s in rows
+    ]
+
+
+@router.get("/payments", dependencies=[Depends(require_global_admin)])
+async def list_payments(db: Session = Depends(get_db), user_id: str | None = Query(default=None), limit: int = Query(default=100, le=500)) -> list[dict]:
+    """Every row here is real (mission-brief Phase 12/36): only
+    `webhook_service._apply_transaction_event` ever inserts a
+    `PaymentRecord`, and only from a signature-verified
+    `transaction.completed` provider event - nothing in this listing is
+    ever estimated or fabricated."""
+    query = select(PaymentRecord).order_by(PaymentRecord.created_at.desc()).limit(limit)
+    if user_id:
+        query = query.where(PaymentRecord.user_id == user_id)
+    rows = db.execute(query).scalars().all()
+    return [
+        {"id": p.id, "user_id": p.user_id, "product_id": p.product_id, "provider": p.provider,
+         "amount_cents": p.amount_cents, "currency": p.currency, "status": p.status,
+         "refunded_amount_cents": p.refunded_amount_cents, "created_at": p.created_at.isoformat()}
+        for p in rows
+    ]
+
+
+@router.get("/billing/webhooks", dependencies=[Depends(require_global_admin)])
+async def list_billing_webhooks(db: Session = Depends(get_db), status_filter: str | None = Query(default=None, alias="status"), limit: int = Query(default=100, le=500)) -> list[dict]:
+    query = select(BillingWebhookEvent).order_by(BillingWebhookEvent.received_at.desc()).limit(limit)
+    if status_filter:
+        query = query.where(BillingWebhookEvent.status == status_filter)
+    rows = db.execute(query).scalars().all()
+    return [
+        {"id": w.id, "provider": w.provider, "event_type": w.event_type, "status": w.status,
+         "failure_reason": w.failure_reason, "retry_count": w.retry_count, "received_at": w.received_at.isoformat()}
+        for w in rows
+    ]
+
+
+@router.post("/billing/webhooks/{webhook_event_id}/replay", dependencies=[Depends(require_super_admin), Depends(rate_limit_admin_mutation)])
+async def replay_billing_webhook(webhook_event_id: str, db: Session = Depends(get_db)) -> dict:
+    journal = db.get(BillingWebhookEvent, webhook_event_id)
+    if journal is None:
+        raise NotFoundError("Webhook event not found.")
+    provider = billing.get_billing_provider(journal.provider)
+    result = webhook_service.replay_failed_event(db, provider, webhook_event_id)
+    return {"id": result.id, "status": result.status}
+
+
+# =============================================================================
+# Mission 6 (Phase 36): service clients (super_admin only, matches existing
+# OAuth client registration's own privilege level)
+# =============================================================================
+
+
+@router.post("/clients/{client_id}/service-grants", dependencies=[Depends(require_super_admin), Depends(rate_limit_admin_mutation)])
+async def grant_service_scope(client_id: str, payload: dict, db: Session = Depends(get_db), admin: User = Depends(require_super_admin)) -> dict:
+    client = db.get(OAuthClient, client_id)
+    if client is None:
+        raise NotFoundError("Client not found.")
+    grant = service_auth.grant_scope(db, admin, client, payload["scope"])
+    return {"client_id": client_id, "scope": grant.scope}
+
+
+@router.get("/clients/{client_id}/service-grants", dependencies=[Depends(require_super_admin)])
+async def list_service_scopes(client_id: str, db: Session = Depends(get_db)) -> list[str]:
+    return service_auth.list_scopes(db, client_id)
+
+
+@router.post("/clients/{client_id}/rotate-secret", dependencies=[Depends(require_super_admin), Depends(rate_limit_admin_mutation)])
+async def rotate_client_secret(client_id: str, db: Session = Depends(get_db), admin: User = Depends(require_super_admin)) -> dict:
+    client = db.get(OAuthClient, client_id)
+    if client is None:
+        raise NotFoundError("Client not found.")
+    raw_secret = service_auth.rotate_client_secret(db, admin, client)
+    return {"client_id": client_id, "client_secret": raw_secret}
+
+
+@router.get("/outbox", dependencies=[Depends(require_global_admin)])
+async def list_outbox_events(db: Session = Depends(get_db), status_filter: str | None = Query(default=None, alias="status"), limit: int = Query(default=100, le=500)) -> list[dict]:
+    from app.database.models import OutboxEvent
+
+    query = select(OutboxEvent).order_by(OutboxEvent.created_at.desc()).limit(limit)
+    if status_filter:
+        query = query.where(OutboxEvent.status == status_filter)
+    rows = db.execute(query).scalars().all()
+    return [
+        {"id": e.id, "event_type": e.event_type, "product_id": e.product_id, "status": e.status,
+         "attempts": e.attempts, "last_error": e.last_error, "created_at": e.created_at.isoformat()}
+        for e in rows
+    ]

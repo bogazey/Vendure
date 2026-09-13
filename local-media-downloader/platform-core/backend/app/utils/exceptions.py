@@ -72,3 +72,23 @@ class InvalidGrantError(AppError):
 class InvalidPlanError(AppError):
     status_code = 422
     code = "INVALID_PLAN"
+
+
+class InvalidWebhookSignatureError(AppError):
+    status_code = 401
+    code = "INVALID_WEBHOOK_SIGNATURE"
+
+
+class ConflictError(AppError):
+    status_code = 409
+    code = "CONFLICT"
+
+
+class InsufficientScopeError(AppError):
+    status_code = 403
+    code = "INSUFFICIENT_SCOPE"
+
+
+class ProviderNotConfiguredError(AppError):
+    status_code = 501
+    code = "PROVIDER_NOT_CONFIGURED"

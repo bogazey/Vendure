@@ -81,6 +81,25 @@ class AuditAction(str, Enum):
     PRODUCT_CREATED = "product_created"
     LOADY_MIGRATION_IMPORT = "loady_migration_import"
 
+    # Mission 6
+    CAPABILITY_DEFINED = "capability_defined"
+    PLAN_ENTITLEMENT_SET = "plan_entitlement_set"
+    SUBSCRIPTION_CREATED = "subscription_created"
+    SUBSCRIPTION_CHANGED = "subscription_changed"
+    SUBSCRIPTION_CANCELED = "subscription_canceled"
+    WEBHOOK_RECEIVED = "webhook_received"
+    WEBHOOK_PROCESSED = "webhook_processed"
+    WEBHOOK_REPLAYED = "webhook_replayed"
+    GIFT_V2_GRANTED = "gift_v2_granted"
+    GIFT_V2_REVOKED = "gift_v2_revoked"
+    BUNDLE_CREATED = "bundle_created"
+    BUNDLE_ACCESS_GRANTED = "bundle_access_granted"
+    BUNDLE_ACCESS_REVOKED = "bundle_access_revoked"
+    SERVICE_CLIENT_REGISTERED = "service_client_registered"
+    SERVICE_CLIENT_SECRET_ROTATED = "service_client_secret_rotated"
+    OUTBOX_EVENT_DELIVERED = "outbox_event_delivered"
+    OUTBOX_EVENT_FAILED = "outbox_event_failed"
+
 
 class PaymentStatus(str, Enum):
     """A PaymentRecord is the ONLY thing that may ever be counted as
@@ -89,4 +108,81 @@ class PaymentStatus(str, Enum):
 
     COMPLETED = "completed"
     REFUNDED = "refunded"
+    PARTIALLY_REFUNDED = "partially_refunded"
     FAILED = "failed"
+
+
+# --- Mission 6: capability / entitlement-definition registry ---------------
+
+
+class CapabilityValueType(str, Enum):
+    """How a `PlanEntitlement.value_*` column should be read. Deliberately
+    a closed, small set (mission-brief Phase 6: "avoid arbitrary
+    unvalidated JSON whenever a typed model is practical") rather than a
+    generic JSON blob."""
+
+    BOOLEAN = "boolean"
+    INTEGER = "integer"
+    STRING = "string"
+    ENUM = "enum"
+
+
+# --- Mission 6: subscriptions / billing -------------------------------------
+
+
+class SubscriptionStatus(str, Enum):
+    TRIALING = "trialing"
+    ACTIVE = "active"
+    PAST_DUE = "past_due"
+    PAUSED = "paused"
+    CANCELED = "canceled"
+    EXPIRED = "expired"
+
+
+class WebhookProcessingStatus(str, Enum):
+    PENDING = "pending"
+    PROCESSED = "processed"
+    FAILED = "failed"
+
+
+# --- Mission 6: gifted access v2 --------------------------------------------
+
+
+class GiftStatus(str, Enum):
+    ACTIVE = "active"
+    EXPIRED = "expired"
+    REVOKED = "revoked"
+
+
+# --- Mission 6: bundles ------------------------------------------------------
+
+
+class BundleStatus(str, Enum):
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+
+
+class BundleAccessStatus(str, Enum):
+    ACTIVE = "active"
+    EXPIRED = "expired"
+    REVOKED = "revoked"
+
+
+# --- Mission 6: outbox (product webhooks) -----------------------------------
+
+
+class OutboxStatus(str, Enum):
+    PENDING = "pending"
+    DELIVERED = "delivered"
+    FAILED = "failed"
+
+
+class EffectiveSourceKind(str, Enum):
+    """What kind of row contributed to an effective-entitlement resolution
+    (mission-brief Phase 7) — used only in the read-side result object,
+    never persisted."""
+
+    LEGACY_ENTITLEMENT = "legacy_entitlement"
+    SUBSCRIPTION = "subscription"
+    GIFTED = "gifted"
+    BUNDLE = "bundle"

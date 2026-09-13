@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, select, text
 
 from app.database.models import Entitlement, ProductMembership, RoleAssignment, User
 from app.security.passwords import hash_password
@@ -238,7 +238,17 @@ def test_migration_never_creates_a_payment_record_for_gifted_users(db_session, l
     run_migration(db_session, loady_engine, actor=migration_actor, reason="no-revenue check", dry_run=False)
     db_session.flush()
 
-    assert db_session.query(PaymentRecord).count() == 0
+    # Scoped to the migrated global user id, not a global table count -
+    # Mission 6 added real (signature-verified, transaction.completed-
+    # driven) PaymentRecord writes elsewhere in this same test database,
+    # so "zero PaymentRecord rows anywhere" is no longer a meaningful
+    # invariant; "the migration created none for this gifted-only user"
+    # still is, and is what this test actually checks.
+    migrated_user = db_session.execute(
+        select(User).where(User.email == "gifted-only@example.com")
+    ).scalars().first()
+    assert migrated_user is not None
+    assert db_session.query(PaymentRecord).filter(PaymentRecord.user_id == migrated_user.id).count() == 0
 
 
 def test_running_migration_twice_is_idempotent(db_session, loady_engine, migration_actor):

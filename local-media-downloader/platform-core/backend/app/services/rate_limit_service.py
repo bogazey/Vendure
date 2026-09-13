@@ -41,3 +41,8 @@ oauth_token_limiter = RateLimiter()
 # never to block normal interactive admin use, keyed per-admin so one
 # admin's activity never throttles another's.
 admin_mutation_limiter = RateLimiter()
+# Mission 6 (Phase 10): a legitimate provider will retry a webhook delivery
+# several times if Platform Core is briefly unavailable - this must not be
+# tripped by normal retry behavior, so it is deliberately far more generous
+# than the interactive limiters above and keyed per-provider, not per-event.
+billing_webhook_limiter = RateLimiter()

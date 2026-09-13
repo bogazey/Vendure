@@ -11,10 +11,14 @@ from sqlalchemy.orm import Session
 from app.database.db import get_session_factory
 from app.database.models import OAuthClient, User
 from app.models.enums import RoleSlug
-from app.security.jwt_tokens import decode_session_access_token, introspect_oidc_access_token
+from app.security.jwt_tokens import (
+    decode_session_access_token,
+    introspect_oidc_access_token,
+    introspect_service_access_token,
+)
 from app.services import rbac_service
 from app.services.rate_limit_service import admin_mutation_limiter
-from app.utils.exceptions import AuthError, ForbiddenError, RateLimitedError
+from app.utils.exceptions import AuthError, ForbiddenError, InsufficientScopeError, RateLimitedError
 
 SESSION_ACCESS_COOKIE = "plat_session_access"
 SESSION_REFRESH_COOKIE = "plat_session_refresh"
@@ -111,3 +115,42 @@ def get_bearer_principal(
     if client is None or not client.is_active:
         raise AuthError("Unknown or inactive client.")
     return BearerPrincipal(user=user, client=client)
+
+
+class ServicePrincipal:
+    """The verified identity behind a client-credentials service token
+    (mission-brief Phase 36) — a product's *backend*, never a user. Every
+    `/api/v1/service/*` route scopes its query to `client.product_id`
+    (mission-brief Phase 37) — there is no parameter by which a service
+    caller can ask about a different product."""
+
+    def __init__(self, client: OAuthClient, scopes: list[str]) -> None:
+        self.client = client
+        self.scopes = scopes
+
+
+def get_service_principal(
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
+) -> ServicePrincipal:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise AuthError("Missing bearer token.")
+    token = authorization[len("bearer "):].strip()
+    payload = introspect_service_access_token(token)
+    if payload is None:
+        raise AuthError("Invalid or expired service token.")
+    client = db.get(OAuthClient, payload.get("client_id"))
+    if client is None or not client.is_active:
+        raise AuthError("Unknown or inactive client.")
+    scope_claim = payload.get("scope", "")
+    scopes = scope_claim.split(" ") if scope_claim else []
+    return ServicePrincipal(client=client, scopes=scopes)
+
+
+def require_service_scope(scope: str):
+    def _dependency(principal: ServicePrincipal = Depends(get_service_principal)) -> ServicePrincipal:
+        if scope not in principal.scopes:
+            raise InsufficientScopeError(f"This service token is missing required scope '{scope}'.")
+        return principal
+
+    return _dependency

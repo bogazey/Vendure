@@ -15,7 +15,7 @@ from app.api.deps import BearerPrincipal, get_bearer_principal, get_db, get_opti
 from app.config.settings import get_settings
 from app.database.models import User
 from app.security.jwt_keys import get_jwks
-from app.services import oidc_service
+from app.services import oidc_service, service_auth
 from app.services.rate_limit_service import oauth_token_limiter
 from app.utils.exceptions import AppError, InvalidClientError, InvalidGrantError, InvalidRedirectUriError, RateLimitedError
 
@@ -112,6 +112,20 @@ async def token(request: Request, db: Session = Depends(get_db)) -> dict:
             "token_type": "Bearer",
             "expires_in": get_settings().oidc_access_token_ttl_minutes * 60,
         }
+    if grant_type == "client_credentials":
+        # Mission 6 (Phase 36): service-to-service auth - no end user, no
+        # cookie, no PKCE. Only issues a token for a client that already
+        # holds at least one explicit `ServiceGrant` (fails closed - see
+        # service_auth.py).
+        access_token, scopes = service_auth.issue_service_token(
+            db, client_id=client_id, client_secret=str(form.get("client_secret", ""))
+        )
+        return {
+            "access_token": access_token,
+            "token_type": "Bearer",
+            "scope": " ".join(sorted(scopes)),
+            "expires_in": get_settings().service_access_token_ttl_minutes * 60,
+        }
     raise InvalidGrantError("Unsupported grant_type.")
 
 
@@ -140,7 +154,7 @@ async def openid_configuration() -> dict:
         "userinfo_endpoint": f"{base}/oauth/userinfo",
         "jwks_uri": f"{base}/.well-known/jwks.json",
         "response_types_supported": ["code"],
-        "grant_types_supported": ["authorization_code", "refresh_token"],
+        "grant_types_supported": ["authorization_code", "refresh_token", "client_credentials"],
         "code_challenge_methods_supported": ["S256"],
         "subject_types_supported": ["public"],
         "id_token_signing_alg_values_supported": ["RS256"],

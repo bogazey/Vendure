@@ -114,6 +114,45 @@ def decode_oidc_access_token(token: str, expected_audience: str) -> dict[str, An
     return payload
 
 
+def create_service_access_token(client_id: str, scopes: list[str]) -> str:
+    """Mission 6 (Phase 36): a client-credentials token for a product's
+    *backend*, not any user — there is no `sub` user, no session cookie
+    involved, and its `scope` is exactly the `ServiceGrant` rows an admin
+    explicitly created for this client (`service_auth.py`), never
+    self-escalatable by the client itself (mission-brief Phase 37)."""
+    settings = get_settings()
+    now = datetime.now(timezone.utc)
+    payload = {
+        "iss": settings.platform_auth_base_url,
+        "aud": client_id,
+        "sub": client_id,
+        "client_id": client_id,
+        "type": "service_access",
+        "scope": " ".join(sorted(scopes)),
+        "iat": now,
+        "exp": now + timedelta(minutes=settings.service_access_token_ttl_minutes),
+        "jti": uuid.uuid4().hex,
+    }
+    return jwt.encode(payload, get_private_key_pem(), algorithm="RS256", headers={"kid": settings.jwt_key_id})
+
+
+def introspect_service_access_token(token: str) -> dict[str, Any] | None:
+    settings = get_settings()
+    try:
+        payload = jwt.decode(
+            token,
+            get_public_key_pem(),
+            algorithms=["RS256"],
+            issuer=settings.platform_auth_base_url,
+            options={"verify_aud": False},
+        )
+    except jwt.PyJWTError:
+        return None
+    if payload.get("type") != "service_access":
+        return None
+    return payload
+
+
 def introspect_oidc_access_token(token: str) -> dict[str, Any] | None:
     """Platform Core's own resource endpoints (`/api/v1/entitlements`,
     `/oauth/userinfo`) verify a bearer token with this function instead of

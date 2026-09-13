@@ -65,6 +65,21 @@ class PlatformSettings(BaseSettings):
     # section 21: do not configure production Resend here) ---
     email_backend: str = Field(default="log", alias="EMAIL_BACKEND")
 
+    # --- Mission 6: billing (Phases 9-11). No live processor is ever
+    # called from this service (mission-brief Phase 9/56) - these exist
+    # so webhook signature verification and (future, out-of-mission) live
+    # checkout can be configured without code changes. Never a real
+    # production secret checked into git. ---
+    billing_default_provider: str = Field(default="paddle", alias="BILLING_DEFAULT_PROVIDER")
+    paddle_webhook_secret: str | None = Field(default=None, alias="PADDLE_WEBHOOK_SECRET")
+
+    # --- Mission 6: service-to-service auth (Phases 36-37) ---
+    service_access_token_ttl_minutes: int = Field(default=15, alias="SERVICE_ACCESS_TOKEN_TTL_MINUTES")
+
+    # --- Mission 6: outbound product webhooks (Phases 41-43) ---
+    outbox_delivery_timeout_seconds: float = Field(default=5.0, alias="OUTBOX_DELIVERY_TIMEOUT_SECONDS")
+    outbox_max_attempts: int = Field(default=5, alias="OUTBOX_MAX_ATTEMPTS")
+
 
 _settings: PlatformSettings | None = None
 
