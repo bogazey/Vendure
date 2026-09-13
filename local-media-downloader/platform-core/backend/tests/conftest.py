@@ -50,6 +50,7 @@ def _reset_rate_limiters():
         rate_limit_service.signup_limiter,
         rate_limit_service.password_reset_limiter,
         rate_limit_service.oauth_token_limiter,
+        rate_limit_service.admin_mutation_limiter,
     ):
         limiter.clear()
     yield

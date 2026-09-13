@@ -36,3 +36,8 @@ login_limiter = RateLimiter()
 signup_limiter = RateLimiter()
 password_reset_limiter = RateLimiter()
 oauth_token_limiter = RateLimiter()
+# Grand Admin mutations (mission 4, phase 10): bounds the blast radius of a
+# compromised/leaked admin session or a runaway script — generous enough
+# never to block normal interactive admin use, keyed per-admin so one
+# admin's activity never throttles another's.
+admin_mutation_limiter = RateLimiter()

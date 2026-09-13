@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.database.commercial_db import get_session_factory
 from app.database.commercial_models import User
 from app.models.commercial_enums import UserRole, UserStatus
-from app.services import guest_service, security_service
+from app.services import guest_service, platform_entitlement_service, security_service
 from app.utils.exceptions import AuthError, ForbiddenError
 
 ACCESS_COOKIE_NAME = "lmd_access"
@@ -43,6 +43,15 @@ def get_optional_user(
         return None
     user = db.get(User, payload.get("sub"))
     if user is None or user.status != UserStatus.ACTIVE.value:
+        return None
+
+    # Mission 4, phase 12 (docs/platform/SESSION_REVOCATION.md): a
+    # centrally-linked user's standing is bounded-periodically re-checked
+    # against Platform Core so a central disable can't be indefinitely
+    # outlived by an already-open local session. A no-op for every
+    # non-linked user and whenever the check isn't due yet.
+    platform_entitlement_service.revalidate_central_status_if_due(db, user)
+    if user.status != UserStatus.ACTIVE.value:
         return None
     return user
 

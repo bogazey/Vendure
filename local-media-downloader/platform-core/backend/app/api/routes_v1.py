@@ -11,13 +11,17 @@
 """
 from __future__ import annotations
 
+from typing import Optional
+
 from sqlalchemy import select
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 from sqlalchemy.orm import Session
 
 from app.api.deps import BearerPrincipal, get_bearer_principal, get_current_user, get_db
 from app.database.models import Plan, User
+from app.security.jwt_tokens import introspect_oidc_access_token
 from app.services import entitlement_service, product_service
+from app.utils.exceptions import AuthError
 
 router = APIRouter(prefix="/api/v1", tags=["v1"])
 
@@ -48,6 +52,31 @@ async def my_entitlement_for_calling_product(
     if entitlement is None:
         return {"entitled": False, "entitlement": None}
     return {"entitled": True, "entitlement": _entitlement_view(db, entitlement)}
+
+
+@router.get("/me/status")
+async def my_status(db: Session = Depends(get_db), authorization: Optional[str] = Header(default=None)) -> dict:
+    """Bearer-authenticated account-status introspection (mission 4, phase
+    12 — see docs/platform/SESSION_REVOCATION.md). Deliberately does NOT
+    gate on `user.status` the way `get_bearer_principal` does for every
+    other `/api/v1` route: a disabled account still gets a normal 200 here
+    with `"status": "disabled"` in the body, so a product's backend can
+    positively distinguish "this account is centrally disabled" from "this
+    bearer token itself is invalid/expired" (both would otherwise collapse
+    into the same generic 401, which is exactly right for every other
+    endpoint but wrong for the one endpoint whose entire purpose is to let
+    a product periodically re-validate an already-authenticated user's
+    standing without forcing a fresh login)."""
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise AuthError("Missing bearer token.")
+    token = authorization[len("bearer "):].strip()
+    payload = introspect_oidc_access_token(token)
+    if payload is None:
+        raise AuthError("Invalid or expired access token.")
+    user = db.get(User, payload.get("sub"))
+    if user is None:
+        raise AuthError("Invalid or expired access token.")
+    return {"sub": user.id, "status": user.status}
 
 
 @router.get("/me/memberships")

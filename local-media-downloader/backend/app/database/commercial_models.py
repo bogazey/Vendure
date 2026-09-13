@@ -369,3 +369,38 @@ class PlatformOidcToken(Base):
     access_token: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     access_token_expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, onupdate=_now, nullable=False)
+    # Mission 4, phase 12 (docs/platform/SESSION_REVOCATION.md): when this
+    # user's standing was last re-checked against Platform Core, bounding
+    # how often `platform_entitlement_service.revalidate_central_status_if_due`
+    # calls out at all - NULL means "never checked since this row existed."
+    last_status_check_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+
+
+class PlatformEntitlementCache(Base):
+    """The hybrid entitlement-availability cache (mission 4, phase 11 -
+    see docs/platform/ENTITLEMENT_AVAILABILITY.md for the full decision).
+
+    Holds only the most recent value Platform Core itself returned for
+    this user+product - never anything client-supplied - along with when
+    it was fetched. `platform_entitlement_service.get_entitlement_hybrid`
+    is the only code that reads or writes this table: on a successful live
+    call it overwrites this row; on a failed one it serves this row back
+    ONLY while `checked_at` is within the bounded TTL
+    (`ENTITLEMENT_CACHE_TTL_MINUTES`), and refuses (falls back to
+    "not entitled") once that window has passed - never indefinite stale
+    access. This table is never consulted for security-sensitive account
+    mutations (status changes, role/entitlement grants themselves), only
+    for read-only "is this product capability available" checks - the
+    hybrid model's central distinction.
+    """
+
+    __tablename__ = "platform_entitlement_cache"
+
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), primary_key=True)
+    product_id: Mapped[str] = mapped_column(String(40), primary_key=True, default="loady")
+    entitled: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    plan_slug: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    entitlement_expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    checked_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)

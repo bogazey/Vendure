@@ -34,6 +34,16 @@ def is_configured() -> bool:
     return bool(settings.platform_client_id and settings.platform_client_secret.get_secret_value())
 
 
+def _server_base_url() -> str:
+    """The base URL Loady's own backend actually connects to for a
+    server-to-server call (token exchange, JWKS fetch) - PLATFORM_INTERNAL_BASE_URL
+    when set (e.g. a private docker-network address in staging), otherwise
+    the same externally reachable platform_auth_base_url used for the
+    browser redirect and the id_token issuer check."""
+    settings = get_commercial_settings()
+    return settings.platform_internal_base_url or settings.platform_auth_base_url
+
+
 def generate_pkce_pair() -> tuple[str, str]:
     verifier = secrets.token_urlsafe(64)[:64]
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
@@ -67,7 +77,7 @@ def exchange_code_for_tokens(code: str, code_verifier: str) -> dict:
     settings = get_commercial_settings()
     try:
         response = httpx.post(
-            f"{settings.platform_auth_base_url}/oauth/token",
+            f"{_server_base_url()}/oauth/token",
             data={
                 "grant_type": "authorization_code",
                 "client_id": settings.platform_client_id,
@@ -91,8 +101,7 @@ def exchange_code_for_tokens(code: str, code_verifier: str) -> dict:
 def _get_jwks() -> dict:
     global _jwks_cache
     if _jwks_cache is None:
-        settings = get_commercial_settings()
-        response = httpx.get(f"{settings.platform_auth_base_url}/.well-known/jwks.json", timeout=10)
+        response = httpx.get(f"{_server_base_url()}/.well-known/jwks.json", timeout=10)
         response.raise_for_status()
         _jwks_cache = response.json()
     return _jwks_cache

@@ -1,4 +1,9 @@
-const API_BASE = import.meta.env.VITE_PLATFORM_API_BASE_URL || "http://localhost:8100";
+// `??` (not `||`): an explicitly empty VITE_PLATFORM_API_BASE_URL means
+// "same-origin" (e.g. staging/production behind a reverse proxy that
+// routes /api/* to the backend on this same host) and must NOT fall
+// through to the localhost dev default - only a genuinely unset
+// (`undefined`) build-time value should do that.
+const API_BASE = import.meta.env.VITE_PLATFORM_API_BASE_URL ?? "http://localhost:8100";
 
 export class ApiError extends Error {
   code: string;

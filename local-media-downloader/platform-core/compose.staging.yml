@@ -1,0 +1,125 @@
+name: platform-core-staging
+
+# Platform Core staging stack (mission 4). Entirely separate from Loady's
+# own `loady-*` containers/network/volumes — never touches them. Bring up
+# with:
+#   cp .env.staging.example .env.staging
+#   # fill in real values, then:
+#   ./reverse-proxy/generate-staging-cert.sh
+#   docker compose -f compose.staging.yml --env-file .env.staging up -d --build
+#
+# See docs/platform/STAGING_DEPLOYMENT.md for the full runbook.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    # Alpine's postgres image expects uid/gid 70 for its data directory -
+    # same requirement Loady's own compose.production.yml documents.
+    user: "70:70"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    expose:
+      - "5432"
+    volumes:
+      - platform-postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    env_file: ${PLATFORM_ENV_FILE:-.env.staging}
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:?set POSTGRES_DB}
+    expose:
+      - "8000"
+    volumes:
+      # Mounted secret (mission 4, phase 3): the RS256 signing key is
+      # provisioned out of band (./backend/generate-staging-signing-key.sh)
+      # and bind-mounted read-only - the backend container itself never
+      # writes or generates this file. JWT_PRIVATE_KEY_PATH in
+      # .env.staging must point at this same in-container path.
+      - ./secrets/platform-signing-key.pem:/run/secrets/platform-signing-key.pem:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      default:
+      platform-staging-net:
+        aliases:
+          - platform-core-backend
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  admin-frontend:
+    build:
+      context: ./admin-frontend
+      args:
+        VITE_PLATFORM_API_BASE_URL: ${VITE_PLATFORM_API_BASE_URL:-}
+    expose:
+      - "80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=16m
+      - /var/run:size=4m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID, NET_BIND_SERVICE]
+
+  reverse-proxy:
+    build:
+      context: ./reverse-proxy
+    ports:
+      - "${PLATFORM_STAGING_HTTPS_PORT:-8443}:443"
+      - "${PLATFORM_STAGING_HTTP_PORT:-8080}:80"
+    volumes:
+      - ./secrets/tls:/etc/nginx/tls:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      admin-frontend:
+        condition: service_started
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=16m
+      - /var/run:size=4m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID, NET_BIND_SERVICE]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "--no-check-certificate", "https://127.0.0.1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  platform-staging-net:
+    external: true
+
+volumes:
+  platform-postgres-data:

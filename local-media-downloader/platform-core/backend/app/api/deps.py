@@ -13,7 +13,8 @@ from app.database.models import OAuthClient, User
 from app.models.enums import RoleSlug
 from app.security.jwt_tokens import decode_session_access_token, introspect_oidc_access_token
 from app.services import rbac_service
-from app.utils.exceptions import AuthError, ForbiddenError
+from app.services.rate_limit_service import admin_mutation_limiter
+from app.utils.exceptions import AuthError, ForbiddenError, RateLimitedError
 
 SESSION_ACCESS_COOKIE = "plat_session_access"
 SESSION_REFRESH_COOKIE = "plat_session_refresh"
@@ -66,6 +67,19 @@ def require_super_admin(
     if not rbac_service.is_super_admin(db, user.id):
         raise ForbiddenError("Super admin access required.")
     return user
+
+
+def rate_limit_admin_mutation(user: User = Depends(get_current_user)) -> None:
+    """Applied to Grand Admin mutation routes (mission 4, phase 10) —
+    bounds how fast any single admin identity can perform status changes,
+    role grants, entitlement grants, or client registration, regardless of
+    how the request was made (UI, script, or a stolen session). Keyed by
+    admin user id, not IP, since a legitimate admin may operate from a
+    shared/rotating office IP. Deliberately generous (60/min): this exists
+    to catch a compromised session or a runaway script, not to slow down
+    normal interactive admin work."""
+    if not admin_mutation_limiter.allow(user.id, max_events=60, window_seconds=60):
+        raise RateLimitedError("Too many admin actions in a short period. Please slow down.")
 
 
 class BearerPrincipal:

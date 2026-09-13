@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, require_global_admin, require_super_admin
+from app.api.deps import get_db, rate_limit_admin_mutation, require_global_admin, require_super_admin
 from app.database.models import (
     AuditLog,
     Entitlement,
@@ -151,7 +151,7 @@ async def get_user_audit_log(user_id: str, db: Session = Depends(get_db)) -> lis
     return [_to_audit_out(db, e) for e in entries]
 
 
-@router.patch("/users/{user_id}/status", response_model=AdminUserOut)
+@router.patch("/users/{user_id}/status", response_model=AdminUserOut, dependencies=[Depends(rate_limit_admin_mutation)])
 async def set_user_status(
     user_id: str, payload: AdminSetStatusRequest, db: Session = Depends(get_db), admin: User = Depends(require_global_admin)
 ) -> AdminUserOut:
@@ -171,7 +171,7 @@ async def set_user_status(
 
 # --- Roles (super_admin only) ------------------------------------------------
 
-@router.post("/users/{user_id}/roles", response_model=AdminUserOut, dependencies=[Depends(require_super_admin)])
+@router.post("/users/{user_id}/roles", response_model=AdminUserOut, dependencies=[Depends(require_super_admin), Depends(rate_limit_admin_mutation)])
 async def assign_role(
     user_id: str, payload: AssignRoleRequest, db: Session = Depends(get_db), admin: User = Depends(require_super_admin)
 ) -> AdminUserOut:
@@ -188,7 +188,7 @@ async def assign_role(
     return _to_admin_user_out(db, target)
 
 
-@router.delete("/users/{user_id}/roles", response_model=AdminUserOut, dependencies=[Depends(require_super_admin)])
+@router.delete("/users/{user_id}/roles", response_model=AdminUserOut, dependencies=[Depends(require_super_admin), Depends(rate_limit_admin_mutation)])
 async def revoke_role(
     user_id: str, payload: AssignRoleRequest, db: Session = Depends(get_db), admin: User = Depends(require_super_admin)
 ) -> AdminUserOut:
@@ -212,7 +212,7 @@ async def list_products(db: Session = Depends(get_db)) -> list[ProductOut]:
     return [ProductOut.model_validate(p, from_attributes=True) for p in product_service.list_products(db)]
 
 
-@router.post("/products", response_model=ProductOut, dependencies=[Depends(require_global_admin)])
+@router.post("/products", response_model=ProductOut, dependencies=[Depends(require_global_admin), Depends(rate_limit_admin_mutation)])
 async def create_product(payload: AdminCreateProductRequest, db: Session = Depends(get_db), admin: User = Depends(require_global_admin)) -> ProductOut:
     if db.get(Product, payload.id) is not None:
         raise InvalidPlanError(f"Product '{payload.id}' already exists.")
@@ -259,7 +259,7 @@ async def list_gifted_access(db: Session = Depends(get_db)) -> list[dict]:
     return out
 
 
-@router.patch("/users/{user_id}/entitlements", dependencies=[Depends(require_global_admin)])
+@router.patch("/users/{user_id}/entitlements", dependencies=[Depends(require_global_admin), Depends(rate_limit_admin_mutation)])
 async def grant_or_change_entitlement(
     user_id: str, payload: GrantEntitlementRequest, db: Session = Depends(get_db), admin: User = Depends(require_global_admin)
 ) -> dict:
@@ -283,7 +283,7 @@ async def grant_or_change_entitlement(
     return {"id": entitlement.id, "status": entitlement.status, "source": entitlement.source}
 
 
-@router.delete("/users/{user_id}/entitlements/{product_id}", dependencies=[Depends(require_global_admin)])
+@router.delete("/users/{user_id}/entitlements/{product_id}", dependencies=[Depends(require_global_admin), Depends(rate_limit_admin_mutation)])
 async def revoke_entitlement(
     user_id: str, product_id: str, payload: RevokeEntitlementRequest, db: Session = Depends(get_db), admin: User = Depends(require_global_admin)
 ) -> dict:
@@ -300,7 +300,7 @@ async def revoke_entitlement(
 
 # --- OAuth client registration (super_admin only) ----------------------------
 
-@router.post("/clients", response_model=RegisterClientResponse, dependencies=[Depends(require_super_admin)])
+@router.post("/clients", response_model=RegisterClientResponse, dependencies=[Depends(require_super_admin), Depends(rate_limit_admin_mutation)])
 async def register_client(
     payload: RegisterClientRequest, db: Session = Depends(get_db), admin: User = Depends(require_super_admin)
 ) -> RegisterClientResponse:

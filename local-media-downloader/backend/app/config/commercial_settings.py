@@ -62,6 +62,35 @@ class CommercialSettings(BaseSettings):
     platform_redirect_uri: str = Field(
         default="http://localhost:8000/api/auth/platform/callback", alias="PLATFORM_REDIRECT_URI"
     )
+    # Optional override for every server-to-server call to Platform Core
+    # (token exchange, JWKS fetch, entitlement/status lookups) - staging
+    # deployments (mission 4) commonly reach Platform Core over a private
+    # docker network address while the BROWSER must still be redirected to
+    # (and the id_token `iss` claim still verified against) the externally
+    # reachable `platform_auth_base_url`/`platform_api_base_url`, which
+    # those two values keep meaning exactly as before. Empty (the default)
+    # means "no override" - every existing single-URL deployment/test is
+    # unaffected.
+    platform_internal_base_url: str = Field(default="", alias="PLATFORM_INTERNAL_BASE_URL")
+    # AES-256-GCM key (32 raw bytes, base64-encoded) protecting
+    # PlatformOidcToken.refresh_token/access_token at rest - see
+    # app/services/token_encryption_service.py and mission 4 phase 4.
+    # Empty in development generates an ephemeral per-process key (mirrors
+    # SECRET_KEY); staging/production MUST set a real value or the service
+    # fails closed rather than storing plaintext.
+    platform_token_encryption_key: SecretStr = Field(default=SecretStr(""), alias="PLATFORM_TOKEN_ENCRYPTION_KEY")
+    # Hybrid entitlement-availability fallback (mission 4, phase 11; see
+    # docs/platform/ENTITLEMENT_AVAILABILITY.md): how long a last-known
+    # entitlement may be served after Platform Core becomes unreachable,
+    # before this account is treated as unentitled again. Bounded and
+    # short by design - never an indefinite grace period.
+    entitlement_cache_ttl_minutes: int = Field(default=15, alias="ENTITLEMENT_CACHE_TTL_MINUTES")
+    # Central disable propagation SLA (mission 4, phase 12; see
+    # docs/platform/SESSION_REVOCATION.md): the maximum time a centrally-
+    # linked Loady session can keep working after an admin disables that
+    # user in Grand Admin, before the next authenticated request re-checks
+    # Platform Core and locally disables the account too.
+    session_revalidation_interval_minutes: int = Field(default=5, alias="SESSION_REVALIDATION_INTERVAL_MINUTES")
 
     # --- Paddle ---
     paddle_env: str = Field(default="sandbox", alias="PADDLE_ENV")

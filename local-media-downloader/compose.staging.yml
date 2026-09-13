@@ -1,0 +1,108 @@
+name: loady-staging
+
+# Loady STAGING stack (mission 4, phase 13) — entirely separate from the
+# real `loady-*` production-parity containers (compose.production.yml):
+# different compose project name, different network, different named
+# volumes, different host ports, and it is never started with
+# compose.production.yml's env file. Synthetic data only — never copy
+# production user data or password hashes into this stack.
+#
+# Talks to Platform Core staging (../platform-core/compose.staging.yml)
+# over a shared external docker network for server-to-server calls
+# (token exchange, JWKS, entitlement/status lookups) — see
+# PLATFORM_INTERNAL_BASE_URL in .env.staging.example — while the browser
+# is still redirected to, and the id_token issuer is still verified
+# against, Platform Core's externally reachable HTTPS staging host.
+#
+# Usage:
+#   docker network create platform-staging-net   # once, shared with platform-core's stack
+#   cp .env.staging.example .env.staging          # fill in real values
+#   docker compose -f compose.staging.yml --env-file .env.staging up -d --build
+#
+# See docs/platform/STAGING_DEPLOYMENT.md for the full runbook.
+
+services:
+  reverse-proxy:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+        VITE_SITE_URL: ${VITE_SITE_URL:-http://localhost:8090}
+    ports:
+      - "${LOADY_STAGING_HTTP_PORT:-8090}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=32m
+      - /var/run:size=4m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID, NET_BIND_SERVICE]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/robots.txt"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  backend:
+    build:
+      context: ./backend
+    env_file: ${LOADY_ENV_FILE:-.env.staging}
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:?set POSTGRES_DB}
+    expose:
+      - "8000"
+    volumes:
+      - loady-staging-app-data:/var/lib/loady/data
+      - loady-staging-media-data:/var/lib/loady/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - default
+      - platform-staging-net
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  postgres:
+    image: postgres:16-alpine
+    user: "70:70"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    expose:
+      - "5432"
+    volumes:
+      - loady-staging-postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+networks:
+  platform-staging-net:
+    external: true
+
+volumes:
+  loady-staging-app-data:
+  loady-staging-media-data:
+  loady-staging-postgres-data:

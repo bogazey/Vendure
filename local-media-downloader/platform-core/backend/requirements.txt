@@ -6,6 +6,11 @@ pydantic-settings==2.5.2
 python-multipart==0.0.32
 sqlalchemy==2.0.35
 alembic==1.13.3
+# PostgreSQL driver (mission 4, phase 2) — psycopg3, binary wheel so no
+# build toolchain is needed in the runtime image. SQLite (the default)
+# needs no driver; this is only imported when DATABASE_URL uses
+# postgresql+psycopg://.
+psycopg[binary]>=3.2,<4
 argon2-cffi==23.1.0
 pyjwt==2.13.0
 cryptography>=42,<46
