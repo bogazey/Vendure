@@ -46,3 +46,10 @@ admin_mutation_limiter = RateLimiter()
 # tripped by normal retry behavior, so it is deliberately far more generous
 # than the interactive limiters above and keyed per-provider, not per-event.
 billing_webhook_limiter = RateLimiter()
+# Mission 6 continuation (webhook hardening): a SEPARATE, much stricter
+# budget for deliveries that fail signature verification - previously an
+# attacker sending garbage consumed the same bucket legitimate retries
+# needed. Deliberately keyed per-provider (not per-IP): the fix is
+# structural (garbage can no longer starve real traffic's budget), not an
+# IP-reputation system the mission brief explicitly said not to rely on.
+billing_webhook_invalid_signature_limiter = RateLimiter()

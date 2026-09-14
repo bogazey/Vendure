@@ -70,6 +70,7 @@ from app.services import (
     oidc_service,
     product_service,
     rbac_service,
+    revenue_service,
     service_auth,
     webhook_service,
 )
@@ -694,6 +695,35 @@ async def system_health(db: Session = Depends(get_db)) -> dict:
         "signing_key_configured": signing_key_is_available(),
         "outbox": {"pending": outbox_pending, "failed": outbox_failed},
         "billing_webhooks": {"pending": webhook_pending, "failed": webhook_failed},
+    }
+
+
+@router.get("/revenue/metrics", dependencies=[Depends(require_global_admin_or_any_product_admin)])
+async def revenue_metrics(
+    db: Session = Depends(get_db), admin: User = Depends(get_current_user),
+    product_id: str | None = Query(default=None), plan_id: str | None = Query(default=None),
+    start: str | None = Query(default=None), end: str | None = Query(default=None),
+) -> dict:
+    """Mission-brief Phase 12. A product-scoped admin MUST pass their own
+    product_id - a global-metrics query (no product_id) is global-admin
+    only, since it would otherwise aggregate every product's revenue,
+    including ones the caller has no access to."""
+    if product_id is not None:
+        if not rbac_service.is_global_or_product_admin(db, admin.id, product_id):
+            raise ForbiddenError(f"You do not have admin access to product '{product_id}'.")
+    elif not rbac_service.is_global_admin(db, admin.id):
+        raise ForbiddenError("An ecosystem-wide (no product_id) metrics query requires global admin.")
+
+    metrics = revenue_service.compute_metrics(
+        db, product_id=product_id, plan_id=plan_id,
+        start=datetime.fromisoformat(start) if start else None,
+        end=datetime.fromisoformat(end) if end else None,
+    )
+    return {
+        "scope": metrics.scope, "revenue_cents": metrics.revenue_cents, "refunded_cents": metrics.refunded_cents,
+        "net_revenue_cents": metrics.net_revenue_cents, "paid_subscribers": metrics.paid_subscribers,
+        "mrr_cents": metrics.mrr_cents, "arr_cents": metrics.arr_cents, "arpu_cents": metrics.arpu_cents,
+        "churn_rate": metrics.churn_rate, "notes": metrics.notes,
     }
 
 

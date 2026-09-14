@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.api import (
+    routes_account,
     routes_admin,
     routes_auth,
     routes_billing,
@@ -81,6 +82,7 @@ app.include_router(routes_admin.router)
 app.include_router(routes_billing.router)
 app.include_router(routes_service.router)
 app.include_router(routes_catalog.router)
+app.include_router(routes_account.router)
 
 
 @app.get("/health")

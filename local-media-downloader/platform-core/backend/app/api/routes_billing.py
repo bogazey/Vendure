@@ -23,16 +23,27 @@ from app.api.deps import get_current_user, get_db
 from app.database.models import Subscription, User
 from app.services import billing, entitlement_service, webhook_service
 from app.services.billing.base import BillingProviderNotConfiguredError
-from app.services.rate_limit_service import billing_webhook_limiter
-from app.utils.exceptions import NotFoundError, ProviderNotConfiguredError, RateLimitedError
+from app.services.rate_limit_service import billing_webhook_invalid_signature_limiter, billing_webhook_limiter
+from app.utils.exceptions import InvalidWebhookSignatureError, NotFoundError, ProviderNotConfiguredError, RateLimitedError
 
 router = APIRouter(prefix="/api/v1/billing", tags=["billing"])
 
 
 @router.post("/webhooks/{provider_name}")
 async def receive_webhook(provider_name: str, request: Request, db: Session = Depends(get_db)) -> dict:
-    if not billing_webhook_limiter.allow(provider_name, max_events=120, window_seconds=60):
-        raise RateLimitedError("Too many webhook deliveries for this provider in a short period.")
+    """Mission 6 continuation (webhook hardening - previous security
+    review finding): signature verification happens BEFORE any rate-limit
+    decision, and an invalid signature consumes a separate, much
+    stricter, provider-keyed budget (`billing_webhook_invalid_signature_
+    limiter`) than a legitimately-signed delivery
+    (`billing_webhook_limiter`). Previously, both consumed the SAME
+    generous 120/min bucket - meaning an attacker sending garbage could
+    exhaust the budget a real Paddle retry burst needs, purely by
+    flooding with invalid signatures. Now, garbage requests hit their own
+    tight ceiling and cannot starve legitimate retries. Not IP-based
+    (mission brief: "do not rely on source IP alone") - the two-bucket
+    split is what actually neutralizes the abuse case, regardless of
+    whether the attacker rotates source IPs."""
     try:
         provider = billing.get_billing_provider(provider_name)
     except ValueError:
@@ -40,6 +51,15 @@ async def receive_webhook(provider_name: str, request: Request, db: Session = De
 
     raw_body = await request.body()
     headers = {key.lower(): value for key, value in request.headers.items()}
+
+    if not provider.verify_webhook(raw_body, headers):
+        if not billing_webhook_invalid_signature_limiter.allow(provider_name, max_events=20, window_seconds=60):
+            raise RateLimitedError("Too many invalid webhook deliveries for this provider in a short period.")
+        raise InvalidWebhookSignatureError("Webhook signature verification failed.")
+
+    if not billing_webhook_limiter.allow(provider_name, max_events=120, window_seconds=60):
+        raise RateLimitedError("Too many webhook deliveries for this provider in a short period.")
+
     journal = webhook_service.receive_webhook(db, provider, raw_body, headers)
     return {"id": journal.id, "status": journal.status, "event_type": journal.event_type}
 
