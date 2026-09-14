@@ -26,11 +26,13 @@ export default function Overview() {
 
   if (error) return <ErrorState error={error} />;
 
-  // Only ever show a product the user actually has a membership OR
-  // entitlement in - a product that merely exists in the registry is
-  // never rendered as if the user were "using" it (mission brief: "never
-  // show fake active memberships").
-  const touchedProductIds = new Set([...memberships.map((m) => m.product_id), ...entitlements.map((e) => e.product_id)]);
+  // Only ever show a product the user actually has a membership OR an
+  // ACTIVE entitlement in - /me/entitlements returns full history
+  // (revoked/expired included, since admin views need it), so a revoked
+  // gift or expired trial must not keep showing as if still granted
+  // (mission brief: "never show fake active memberships").
+  const activeEntitlements = entitlements.filter((e) => e.status === "active");
+  const touchedProductIds = new Set([...memberships.map((m) => m.product_id), ...activeEntitlements.map((e) => e.product_id)]);
   const cards = products.filter((p) => touchedProductIds.has(p.id));
 
   return (
@@ -47,7 +49,7 @@ export default function Overview() {
         <h2 className="mb-3 font-display text-lg font-semibold text-slate-50">{t("overview.productsHeading")}</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {cards.map((product) => {
-            const ent = entitlements.find((e) => e.product_id === product.id);
+            const ent = activeEntitlements.find((e) => e.product_id === product.id);
             return (
               <div key={product.id} className="glass-panel p-4">
                 <p className="font-display font-semibold text-slate-50">{product.name}</p>

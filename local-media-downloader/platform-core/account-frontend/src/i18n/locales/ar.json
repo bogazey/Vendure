@@ -84,7 +84,7 @@
     "changePassword": "تغيير كلمة المرور",
     "passwordChanged": "تم تغيير كلمة المرور.",
     "signOutEverywhereHeading": "تسجيل الخروج من كل مكان",
-    "signOutEverywhereHint": "ينهي فورًا كل جلسة أخرى ويمنع أي منتج من تجديد وصولك بصمت.",
+    "signOutEverywhereHint": "ينهي فورًا كل الجلسات، بما في ذلك هذه الجلسة، ويمنع أي منتج من تجديد وصولك بصمت. ستحتاج إلى تسجيل الدخول مرة أخرى.",
     "signOutEverywhere": "تسجيل الخروج من جميع الأجهزة",
     "recentActivity": "النشاط الأمني الأخير",
     "closureHeading": "إغلاق الحساب",

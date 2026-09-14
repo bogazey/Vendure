@@ -1,0 +1,12 @@
+{
+  "name": "platform-core-e2e",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Mission 6 continuation: real-browser ecosystem E2E against a local Platform Core stack.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}

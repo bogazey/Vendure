@@ -47,4 +47,31 @@ describe("Overview", () => {
     expect(screen.queryByText("Gamey")).not.toBeInTheDocument();
     expect(screen.getByText("Pro")).toBeInTheDocument();
   });
+
+  it("does not show a product whose only entitlement has been revoked", async () => {
+    // Regression: /me/entitlements returns full history (revoked/expired
+    // included, since admin views need it) - a revoked gift must not keep
+    // showing on Overview as if the user still has product access.
+    vi.mocked(useAuth).mockReturnValue({
+      user: { id: "usr_1", email: "a@example.com", email_verified: true, status: "active", created_at: "2026-01-01T00:00:00Z", pending_new_email: null },
+      loading: false,
+      signup: vi.fn(),
+      login: vi.fn(),
+      logout: vi.fn(),
+      refresh: vi.fn(),
+    });
+    vi.mocked(api.myMemberships).mockResolvedValue([]);
+    vi.mocked(api.myEntitlements).mockResolvedValue([
+      { product_id: "gamey", plan_slug: "gamer-plus", plan_name: "Gamer+", source: "gifted", status: "revoked", starts_at: "2026-01-01T00:00:00Z", expires_at: null },
+    ]);
+    vi.mocked(api.listProducts).mockResolvedValue([
+      { id: "gamey", name: "Gamey", domain: "gamey.cc", status: "live", icon_ref: null },
+    ]);
+    vi.mocked(api.mySecurityEvents).mockResolvedValue([]);
+
+    render(<Overview />);
+
+    expect(await screen.findByText("You haven't used any ecosystem products yet.")).toBeInTheDocument();
+    expect(screen.queryByText("Gamey")).not.toBeInTheDocument();
+  });
 });

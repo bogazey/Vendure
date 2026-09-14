@@ -244,9 +244,18 @@ async def revoke_role(
 
 # --- Products / plans ---------------------------------------------------------
 
-@router.get("/products", response_model=list[ProductOut], dependencies=[Depends(require_global_admin)])
-async def list_products(db: Session = Depends(get_db)) -> list[ProductOut]:
-    return [ProductOut.model_validate(p, from_attributes=True) for p in product_service.list_products(db)]
+@router.get("/products", response_model=list[ProductOut], dependencies=[Depends(require_global_admin_or_any_product_admin)])
+async def list_products(db: Session = Depends(get_db), admin: User = Depends(get_current_user)) -> list[ProductOut]:
+    # A product-scoped-only admin (e.g. a Loady admin with no global role)
+    # has no other route into Grand Admin's product management UI - the
+    # per-product page (Plans/Prices/Capabilities) they're authorized to
+    # use is reached by first listing products, so this must show at
+    # least their own product rather than 403 the whole page.
+    visible = rbac_service.admin_visible_product_ids(db, admin.id)
+    products = product_service.list_products(db)
+    if visible is not None:
+        products = [p for p in products if p.id in visible]
+    return [ProductOut.model_validate(p, from_attributes=True) for p in products]
 
 
 @router.post("/products", response_model=ProductOut, dependencies=[Depends(require_global_admin), Depends(rate_limit_admin_mutation)])

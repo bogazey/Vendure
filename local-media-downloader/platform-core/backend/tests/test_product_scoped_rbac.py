@@ -250,6 +250,21 @@ def test_loady_admin_sees_only_loady_payments_in_cross_product_listing(client, d
     assert GAMEY not in products_seen
 
 
+def test_loady_admin_sees_only_loady_in_products_listing(client, db_session):
+    """Regression: a product-scoped-only admin (no global role) has no
+    other route into Grand Admin's product management UI than this
+    listing endpoint - it must return their own product, filtered down
+    from the full cross-product list, rather than 403 or leak Gamey."""
+    _setup_two_products(db_session)
+    _make_product_admin(client, db_session, "loady-admin-list@example.com", LOADY)
+
+    resp = client.get("/api/v1/admin/products")
+    assert resp.status_code == 200, resp.text
+    ids = {p["id"] for p in resp.json()}
+    assert LOADY in ids
+    assert GAMEY not in ids
+
+
 def test_super_admin_can_do_everything_across_both_products(client, db_session):
     """Sanity check the other direction: a global super_admin is not
     blocked by any of the product-scoping added above."""

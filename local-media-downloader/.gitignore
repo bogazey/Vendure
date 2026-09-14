@@ -35,6 +35,10 @@ platform-core/account-frontend/dist/
 platform-core/account-frontend/*.tsbuildinfo
 platform-core/sdk/python/**/__pycache__/
 platform-core/sdk/python/**/*.egg-info/
+platform-core/e2e/node_modules/
+platform-core/e2e/.last_data_dir
+platform-core/e2e/test-results/
+platform-core/e2e/playwright-report/
 platform-core/demo-product-a/backend/.venv/
 platform-core/demo-product-a/backend/__pycache__/
 platform-core/demo-product-b/backend/.venv/

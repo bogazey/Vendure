@@ -84,7 +84,7 @@
     "changePassword": "Change password",
     "passwordChanged": "Password changed.",
     "signOutEverywhereHeading": "Sign out everywhere",
-    "signOutEverywhereHint": "Immediately ends every other session and prevents any product from silently renewing your access.",
+    "signOutEverywhereHint": "Immediately ends every session, including this one, and prevents any product from silently renewing your access. You'll need to sign in again.",
     "signOutEverywhere": "Sign out of all devices",
     "recentActivity": "Recent security activity",
     "closureHeading": "Close account",
