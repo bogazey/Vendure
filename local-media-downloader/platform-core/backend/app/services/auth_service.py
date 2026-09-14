@@ -6,6 +6,7 @@ password hashes").
 """
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -33,10 +34,11 @@ def _normalize_email(email: str) -> str:
 
 
 class AuthResult:
-    def __init__(self, user: User, refresh_raw: str, remember_me: bool) -> None:
+    def __init__(self, user: User, refresh_raw: str, remember_me: bool, session_id: str | None = None) -> None:
         self.user = user
         self.refresh_raw = refresh_raw
         self.remember_me = remember_me
+        self.session_id = session_id
 
 
 class AuthService:
@@ -56,10 +58,10 @@ class AuthService:
         session.flush()
 
         self._issue_verification_email(session, user)
-        refresh_raw = self._issue_session(session, user, remember_me=True)
+        refresh_raw, session_id = self._issue_session(session, user, remember_me=True)
         audit_service.record(session, user.id, AuditAction.USER_SIGNUP, "user", user.id)
         logger.info("Signup: new global user %s", user.id)
-        return AuthResult(user, refresh_raw, remember_me=True)
+        return AuthResult(user, refresh_raw, remember_me=True, session_id=session_id)
 
     def login(self, session: Session, email: str, password: str, remember_me: bool = False) -> AuthResult:
         email = _normalize_email(email)
@@ -78,10 +80,10 @@ class AuthService:
         if passwords.needs_rehash(user.password_hash):
             user.password_hash = passwords.hash_password(password)
 
-        refresh_raw = self._issue_session(session, user, remember_me=remember_me)
+        refresh_raw, session_id = self._issue_session(session, user, remember_me=remember_me)
         audit_service.record(session, user.id, AuditAction.USER_LOGIN, "user", user.id)
         logger.info("Login: global user %s", user.id)
-        return AuthResult(user, refresh_raw, remember_me=remember_me)
+        return AuthResult(user, refresh_raw, remember_me=remember_me, session_id=session_id)
 
     def refresh(self, session: Session, raw_refresh_token: str) -> AuthResult:
         token_hash = hash_token(raw_refresh_token)
@@ -99,8 +101,8 @@ class AuthService:
         # a leaked-and-reused refresh token is detectable/limited.
         remember_me = record.remember_me
         record.revoked_at = now
-        refresh_raw = self._issue_session(session, user, remember_me=remember_me)
-        return AuthResult(user, refresh_raw, remember_me=remember_me)
+        refresh_raw, session_id = self._issue_session(session, user, remember_me=remember_me)
+        return AuthResult(user, refresh_raw, remember_me=remember_me, session_id=session_id)
 
     def logout(self, session: Session, raw_refresh_token: str | None) -> None:
         if not raw_refresh_token:
@@ -184,14 +186,14 @@ class AuthService:
             ).scalars().all()
         )
 
-    def reissue_session(self, session: Session, user: User, remember_me: bool = True) -> str:
+    def reissue_session(self, session: Session, user: User, remember_me: bool = True) -> tuple[str, str]:
         """Public wrapper around `_issue_session` for a caller that has
         already independently authenticated the user by some other means
         this request (e.g. `routes_auth.change_password` re-authenticating
         the caller's own current session after `revoke_other_sessions`
         just revoked it out from under them) - never used to issue a
         session for anyone whose password/credentials weren't just
-        verified in this same request."""
+        verified in this same request. Returns (refresh_raw, session_id)."""
         return self._issue_session(session, user, remember_me=remember_me)
 
     def request_password_reset(self, session: Session, email: str) -> None:
@@ -302,18 +304,23 @@ class AuthService:
         verify_url = f"{settings.platform_auth_base_url}/verify-email?token={raw}"
         email_service.send_verification_email(user.email, verify_url)
 
-    def _issue_session(self, session: Session, user: User, remember_me: bool = True) -> str:
+    def _issue_session(self, session: Session, user: User, remember_me: bool = True) -> tuple[str, str]:
         settings = get_settings()
         raw, token_hash, expires_at = generate_hashed_token(timedelta(days=settings.refresh_token_ttl_days))
+        # id generated here (not left to the model's column default) so it
+        # is known immediately, without a flush, for embedding in the
+        # session_access JWT's "sid" claim below.
+        session_id = f"rtk_{uuid.uuid4().hex}"
         session.add(
             RefreshToken(
+                id=session_id,
                 user_id=user.id,
                 token_hash=token_hash,
                 expires_at=expires_at,
                 remember_me=remember_me,
             )
         )
-        return raw
+        return raw, session_id
 
 
 auth_service = AuthService()

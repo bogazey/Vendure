@@ -112,17 +112,23 @@ test.describe.serial("Mission 6 ecosystem E2E", () => {
 
   test("7. Create a product plan through the Grand Admin UI", async () => {
     await adminPage.goto(`${ADMIN}/products/${PRODUCT_ID}`);
-    await adminPage.getByPlaceholder("creator").fill("pro");
-    await adminPage.getByPlaceholder("Creator").fill("Pro");
+    // getByPlaceholder does case-insensitive substring matching by default,
+    // so plain "creator" also matches the "Creator" (Name) field - exact:
+    // true is required to disambiguate the two real, distinct inputs.
+    await adminPage.getByPlaceholder("creator", { exact: true }).fill("pro");
+    await adminPage.getByPlaceholder("Creator", { exact: true }).fill("Pro");
     await adminPage.getByRole("button", { name: /create plan/i }).click();
-    await expect(adminPage.getByText("Pro").first()).toBeVisible();
-    await expect(adminPage.getByText("pro").first()).toBeVisible();
+    // getByText also substring-matches by default, and the nav bar's
+    // "Products" link contains "Pro" - scope to <main> and match exactly
+    // so the click below lands on the plan row, not the nav link.
+    await expect(adminPage.locator("main").getByText("Pro", { exact: true }).first()).toBeVisible();
+    await expect(adminPage.locator("main").getByText("pro", { exact: true }).first()).toBeVisible();
   });
 
   test("7b. Edit the plan (description + sort order) through the UI", async () => {
     await adminPage.goto(`${ADMIN}/products/${PRODUCT_ID}`);
-    await adminPage.getByText("Pro").first().click();
-    const textarea = adminPage.locator("textarea");
+    await adminPage.locator("main").getByText("Pro", { exact: true }).first().click();
+    const textarea = adminPage.locator("main").locator("textarea");
     await textarea.fill("The E2E test plan.");
     await adminPage.getByRole("button", { name: /^save$/i }).click();
     await expect(adminPage.getByText(/saved\./i)).toBeVisible();
@@ -130,7 +136,7 @@ test.describe.serial("Mission 6 ecosystem E2E", () => {
 
   test("8. Create a price through the Grand Admin UI", async () => {
     await adminPage.goto(`${ADMIN}/products/${PRODUCT_ID}`);
-    await adminPage.getByText("Pro").first().click();
+    await adminPage.locator("main").getByText("Pro", { exact: true }).first().click();
     await adminPage.getByPlaceholder("9.99").fill("4.99");
     await adminPage.getByRole("button", { name: /add price/i }).click();
     await expect(adminPage.getByText(/4\.99 USD \/ month/i)).toBeVisible();
@@ -157,21 +163,29 @@ test.describe.serial("Mission 6 ecosystem E2E", () => {
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await expect(page).toHaveURL(`${ACCOUNT}/`);
     await expect(page.getByText("E2E Browser Product")).toBeVisible();
-    await expect(page.getByText("Pro")).toBeVisible();
+    // getByText substring-matches by default - the nav's "Products" and
+    // "Profile" links both contain "Pro", so exact match is required.
+    await expect(page.getByText("Pro", { exact: true })).toBeVisible();
 
     await page.goto(`${ACCOUNT}/billing`);
     await expect(page.getByText("Gifted Access")).toBeVisible();
   });
 
-  test("10. Revoke the gift through the Users UI and confirm it disappears", async () => {
+  test("10. Revoke the gift through the Users UI and confirm its status flips", async () => {
     await adminPage.goto(`${ADMIN}/users`);
     await adminPage.getByPlaceholder(/search by email/i).fill(TARGET_EMAIL);
     await adminPage.waitForTimeout(300);
     await adminPage.getByRole("row", { name: new RegExp(TARGET_EMAIL) }).getByRole("button", { name: /^view$/i }).click();
-    await expect(adminPage.getByText(PRODUCT_ID).first()).toBeVisible();
+    const entitlementRow = adminPage.getByText(new RegExp(`${PRODUCT_ID} · pro`));
+    await expect(entitlementRow).toBeVisible();
     // The existing entitlement list item has its own revoke control.
     await adminPage.getByRole("button", { name: /^revoke$/i }).first().click();
-    await expect(adminPage.getByText(PRODUCT_ID)).toHaveCount(0);
+    // The Users page intentionally keeps a full entitlement history (Users.tsx
+    // renders every entitlement, revoked or not, and only shows the Revoke
+    // button while status === "active") - so the row itself stays, its
+    // status label flips to "revoked", and the Revoke button disappears.
+    await expect(entitlementRow).toContainText("revoked");
+    await expect(adminPage.getByRole("button", { name: /^revoke$/i })).toHaveCount(0);
   });
 
   test("11b. The revoke is reflected back in the Account Portal", async ({ page }) => {
@@ -223,7 +237,13 @@ test.describe.serial("Mission 6 ecosystem E2E", () => {
     // otherwise be matched first by an unscoped role query.
     const otherSessionSignOut = page1.locator("main").getByRole("button", { name: /^sign out$/i }).first();
     await expect(otherSessionSignOut).toBeVisible();
-    await otherSessionSignOut.click();
+    // Wait for the revoke DELETE to actually complete, not just for the
+    // click event to dispatch - handleRevoke() is async and click()
+    // resolves before its fetch does.
+    await Promise.all([
+      page1.waitForResponse((r) => r.url().includes("/api/v1/auth/sessions/") && r.request().method() === "DELETE"),
+      otherSessionSignOut.click(),
+    ]);
 
     // The other device's session is now revoked - its next request should redirect to login.
     await page2.goto(`${ACCOUNT}/`);
@@ -246,6 +266,10 @@ test.describe.serial("Mission 6 ecosystem E2E", () => {
     await page.getByLabel(/email/i).fill(SCOPED_ADMIN_EMAIL);
     await page.getByLabel(/password/i).fill("correct-horse-battery");
     await page.getByRole("button", { name: /create account/i }).click();
+    // Must wait for the signup to actually land (and its cookies to be
+    // set) before reading /me below - otherwise this races the signup
+    // request and /me returns 401, making `me.id` undefined.
+    await expect(page).toHaveURL(`${ACCOUNT}/`);
 
     // Fetch the new user's id via /api/v1/auth/me on this same page, then
     // assign the product-scoped role using the super admin's cookie.
@@ -259,13 +283,15 @@ test.describe.serial("Mission 6 ecosystem E2E", () => {
     });
     expect(assignRes.ok()).toBeTruthy();
 
-    // Now sign into Grand Admin as the scoped admin and verify the boundary.
-    await page.goto(`${ADMIN}/login`);
-    await page.getByLabel(/email/i).fill(SCOPED_ADMIN_EMAIL);
-    await page.getByLabel(/password/i).fill("correct-horse-battery");
-    await page.getByRole("button", { name: /sign in/i }).click();
-    await expect(page).toHaveURL(`${ADMIN}/`);
-
+    // Grand Admin and the Account Portal share ONE central session cookie
+    // (same backend, same cookie domain) - this browser is already
+    // authenticated as SCOPED_ADMIN_EMAIL from the signup above, so
+    // Grand Admin's own /login immediately redirects to "/" via the same
+    // "if (!loading && user) return <Navigate to='/' />" pattern Login.tsx
+    // uses everywhere in this codebase (ProtectedRoute.tsx only checks
+    // "is authenticated," never role - RBAC is enforced by the backend
+    // per-endpoint, not by hiding routes). Asserting a login form here
+    // would just time out waiting for a redirect that already happened.
     await page.goto(`${ADMIN}/products/${PRODUCT_ID}`);
     await expect(page.getByRole("heading", { name: PRODUCT_ID })).toBeVisible();
 

@@ -62,6 +62,23 @@ else") to avoid leaking session-id existence, matching this codebase's
 existing "never reveal whether the account exists" convention
 (`request_password_reset`).
 
+**Mission 7 fix**: originally this only revoked the `RefreshToken` row,
+so the targeted device's already-issued `session_access` cookie kept
+authenticating for up to `access_token_ttl_minutes` - the "sign out this
+device" button in the Account Portal was not actually immediate, unlike
+what the table above claims for the session_access cookie generally
+(that claim was only ever true for the sign-out-*everywhere* epoch path).
+Caught by the browser E2E (`ecosystem-e2e.spec.ts` test 15) actually
+reloading the second device's page and expecting an immediate redirect to
+`/login`. Fixed by giving `session_access` an optional `"sid"` claim (the
+issuing `RefreshToken.id`) and having `get_optional_user` reject the
+token if that specific row is revoked - one extra indexed PK lookup per
+authenticated request (only when `sid` is present, i.e. every token
+minted after this fix), traded deliberately for a real "immediate"
+guarantee instead of the up-to-15-minute gap. Single-session revoke is
+now genuinely immediate for the session_access cookie, matching the
+table's claim in full.
+
 ## Password change with optional session revocation (Phase 20)
 
 `POST /api/v1/auth/change-password` gained `revoke_other_sessions: bool

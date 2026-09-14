@@ -9,7 +9,7 @@ from fastapi import Cookie, Depends, Header
 from sqlalchemy.orm import Session
 
 from app.database.db import get_session_factory
-from app.database.models import OAuthClient, User
+from app.database.models import OAuthClient, RefreshToken, User
 from app.models.enums import RoleSlug
 from app.security.jwt_tokens import (
     decode_session_access_token,
@@ -55,6 +55,17 @@ def get_optional_user(
     # bounded by access_token_ttl_minutes.
     if payload.get("epoch") != user.security_epoch:
         return None
+    # Mission 7: single-session revoke ("sign out this device") only marks
+    # ONE RefreshToken row revoked - it can't bump security_epoch without
+    # signing every device out. Without this check, a just-revoked
+    # device's session_access cookie kept authenticating for up to
+    # access_token_ttl_minutes despite the UI claiming immediate effect.
+    # A PK lookup, so no added query shape vs. the User lookup above.
+    session_id = payload.get("sid")
+    if session_id is not None:
+        record = db.get(RefreshToken, session_id)
+        if record is None or record.revoked_at is not None or record.user_id != user.id:
+            return None
     return user
 
 

@@ -163,6 +163,51 @@ def test_http_logout_all_rejects_a_previously_valid_still_unexpired_cookie(clien
     assert r.status_code == 401
 
 
+def test_http_revoke_single_session_immediately_rejects_that_devices_still_unexpired_cookie(client, db_session):
+    """Mission 7: end-to-end through the real cookie-auth dependency
+    chain (not just the service function), covering the gap the browser
+    E2E suite (`ecosystem-e2e.spec.ts` test 15) originally caught -
+    `revoke_session` used to only revoke the RefreshToken row, so the
+    targeted device's already-issued, still-unexpired session_access
+    cookie kept authenticating for up to access_token_ttl_minutes, even
+    though the Account Portal's "sign out this device" button implies an
+    immediate effect. A second device's own session must now be rejected
+    on its very next use, exactly like sign-out-everywhere already was."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    _signup(client, "singlesession@example.com")
+    user = db_session.query(User).filter_by(email="singlesession@example.com").first()
+
+    with TestClient(app) as device_b:
+        login_resp = device_b.post(
+            "/api/v1/auth/login", json={"email": "singlesession@example.com", "password": "correct-horse-battery"},
+        )
+        assert login_resp.status_code == 200
+        device_b_cookie = device_b.cookies.get("plat_session_access")
+        assert device_b_cookie
+
+        sessions = auth_service.list_active_sessions(db_session, user.id)
+        assert len(sessions) == 2
+        device_b_session = next(s for s in sessions if s.token_hash != _refresh_token_hash(client))
+
+        revoke_resp = client.delete(f"/api/v1/auth/sessions/{device_b_session.id}")
+        assert revoke_resp.status_code == 204
+
+        # Re-present device B's OLD (pre-revoke) cookie explicitly - well
+        # formed, correctly signed, not yet expired - and it must still
+        # be rejected.
+        r = device_b.get("/api/v1/auth/me", cookies={"plat_session_access": device_b_cookie})
+        assert r.status_code == 401
+
+
+def _refresh_token_hash(client) -> str:
+    from app.security.tokens import hash_token
+
+    raw = client.cookies.get("plat_session_refresh")
+    return hash_token(raw) if raw else ""
+
+
 def test_security_events_feed_never_shows_another_users_events(client, db_session):
     _signup(client, "secevents-a@example.com")
     a_events = client.get("/api/v1/me/security-events").json()

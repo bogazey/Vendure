@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, type ClosureRequest, type SecurityEvent } from "../services/api";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 export default function Security() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { logoutAll } = useAuth();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [revokeOthers, setRevokeOthers] = useState(true);
@@ -37,7 +39,10 @@ export default function Security() {
   };
 
   const handleSignOutAll = async () => {
-    await api.logoutAll();
+    // Must clear AuthContext's `user` too, not just call the API directly -
+    // otherwise Login.tsx's `if (!loading && user) return <Navigate to="/" />`
+    // bounces this navigation straight back before the stale state clears.
+    await logoutAll();
     navigate("/login", { replace: true });
   };
 

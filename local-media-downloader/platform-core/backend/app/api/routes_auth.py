@@ -40,7 +40,7 @@ def _client_key(request: Request) -> str:
 
 def _set_session_cookies(response: Response, result: AuthResult) -> None:
     settings = get_settings()
-    access_token = create_session_access_token(result.user.id, result.user.security_epoch)
+    access_token = create_session_access_token(result.user.id, result.user.security_epoch, result.session_id)
     access_max_age = settings.access_token_ttl_minutes * 60 if result.remember_me else None
     refresh_max_age = settings.refresh_token_ttl_days * 24 * 3600 if result.remember_me else None
     response.set_cookie(
@@ -142,7 +142,8 @@ async def change_password(
         # bumped epoch instead of leaving them logged out by their own action.
         db.flush()
         db.refresh(user)
-        result = AuthResult(user, refresh_raw=auth_service.reissue_session(db, user, remember_me=True), remember_me=True)
+        refresh_raw, session_id = auth_service.reissue_session(db, user, remember_me=True)
+        result = AuthResult(user, refresh_raw=refresh_raw, remember_me=True, session_id=session_id)
         _set_session_cookies(response, result)
 
 

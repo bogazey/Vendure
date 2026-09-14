@@ -28,7 +28,7 @@ from app.config.settings import get_settings
 from app.security.jwt_keys import get_private_key_pem, get_public_key_pem
 
 
-def create_session_access_token(user_id: str, security_epoch: int = 1) -> str:
+def create_session_access_token(user_id: str, security_epoch: int = 1, session_id: str | None = None) -> str:
     """`security_epoch` (mission-brief Phase 22) is checked against the
     user's *current* `security_epoch` column by the caller after
     decoding (`api/deps.py::get_optional_user`) - a stateless JWT alone
@@ -36,7 +36,16 @@ def create_session_access_token(user_id: str, security_epoch: int = 1) -> str:
     issuance against a value bumped by `auth_service.sign_out_all_sessions`
     gives the central session cookie the same immediate-invalidation
     property a stateful session would have, without a session-lookup on
-    every request."""
+    every request.
+
+    `session_id` (the owning `RefreshToken.id`) closes the same gap for a
+    SINGLE-session revoke ("sign out this device", Phase 21): without it,
+    that device's already-issued session_access cookie would keep working
+    for up to `access_token_ttl_minutes` after being revoked, even though
+    the account portal's UI presents the action as immediate. Optional
+    only so existing callers that mint a token with no real backing
+    `RefreshToken` row (unit tests) keep working - `get_optional_user`
+    skips the per-session check when the claim is absent."""
     settings = get_settings()
     now = datetime.now(timezone.utc)
     payload = {
@@ -49,6 +58,8 @@ def create_session_access_token(user_id: str, security_epoch: int = 1) -> str:
         "exp": now + timedelta(minutes=settings.access_token_ttl_minutes),
         "jti": uuid.uuid4().hex,
     }
+    if session_id is not None:
+        payload["sid"] = session_id
     return jwt.encode(payload, get_private_key_pem(), algorithm="RS256", headers={"kid": settings.jwt_key_id})
 
 
