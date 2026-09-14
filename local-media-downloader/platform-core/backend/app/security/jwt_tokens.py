@@ -28,7 +28,15 @@ from app.config.settings import get_settings
 from app.security.jwt_keys import get_private_key_pem, get_public_key_pem
 
 
-def create_session_access_token(user_id: str) -> str:
+def create_session_access_token(user_id: str, security_epoch: int = 1) -> str:
+    """`security_epoch` (mission-brief Phase 22) is checked against the
+    user's *current* `security_epoch` column by the caller after
+    decoding (`api/deps.py::get_optional_user`) - a stateless JWT alone
+    cannot be revoked mid-flight, but comparing a value baked in at
+    issuance against a value bumped by `auth_service.sign_out_all_sessions`
+    gives the central session cookie the same immediate-invalidation
+    property a stateful session would have, without a session-lookup on
+    every request."""
     settings = get_settings()
     now = datetime.now(timezone.utc)
     payload = {
@@ -36,6 +44,7 @@ def create_session_access_token(user_id: str) -> str:
         "aud": "platform-core-session",
         "sub": user_id,
         "type": "session_access",
+        "epoch": security_epoch,
         "iat": now,
         "exp": now + timedelta(minutes=settings.access_token_ttl_minutes),
         "jti": uuid.uuid4().hex,

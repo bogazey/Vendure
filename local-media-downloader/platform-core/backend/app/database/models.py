@@ -65,6 +65,12 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
+    # Mission 6 (Phase 22): bumped by auth_service.sign_out_all_sessions -
+    # any still-valid central session_access JWT minted before the bump
+    # carries the OLD epoch and is rejected on its very next use
+    # (api/deps.py::get_optional_user), rather than living out its full
+    # access_token_ttl_minutes after a "sign out everywhere."
+    security_epoch: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, onupdate=_now, nullable=False)
 

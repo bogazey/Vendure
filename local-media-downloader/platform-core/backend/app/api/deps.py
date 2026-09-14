@@ -48,6 +48,13 @@ def get_optional_user(
     user = db.get(User, payload.get("sub"))
     if user is None or user.status != "active":
         return None
+    # Mission 6 (Phase 22): a token minted before the user's last
+    # "sign out everywhere" carries the old epoch and is rejected here,
+    # even though its signature and expiry are both still valid - this is
+    # what makes central-session sign-out-all immediate rather than
+    # bounded by access_token_ttl_minutes.
+    if payload.get("epoch") != user.security_epoch:
+        return None
     return user
 
 

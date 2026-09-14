@@ -603,6 +603,19 @@ async def rotate_client_secret(client_id: str, db: Session = Depends(get_db), ad
     return {"client_id": client_id, "client_secret": raw_secret}
 
 
+@router.post("/clients/{client_id}/webhook", dependencies=[Depends(require_super_admin), Depends(rate_limit_admin_mutation)])
+async def configure_client_webhook(client_id: str, payload: dict, db: Session = Depends(get_db), admin: User = Depends(require_super_admin)) -> dict:
+    """Opts a product's registered client into outbound Platform Core
+    webhooks (mission-brief Phase 41). The returned signing secret is
+    shown exactly once, matching the existing client-secret/rotate-secret
+    precedent - it is never retrievable again after this response."""
+    client = db.get(OAuthClient, client_id)
+    if client is None:
+        raise NotFoundError("Client not found.")
+    raw_secret = service_auth.configure_webhook(db, admin, client, payload["webhook_url"])
+    return {"client_id": client_id, "webhook_url": client.webhook_url, "webhook_signing_secret": raw_secret}
+
+
 @router.get("/outbox", dependencies=[Depends(require_global_admin)])
 async def list_outbox_events(db: Session = Depends(get_db), status_filter: str | None = Query(default=None, alias="status"), limit: int = Query(default=100, le=500)) -> list[dict]:
     from app.database.models import OutboxEvent

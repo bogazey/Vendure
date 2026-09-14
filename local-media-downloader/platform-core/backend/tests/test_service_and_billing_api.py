@@ -122,14 +122,45 @@ def test_billing_webhook_endpoint_processes_a_valid_signed_event(client, db_sess
     assert legacy is not None and legacy.source == EntitlementSource.PADDLE.value
 
 
-def test_billing_checkout_against_real_paddle_provider_returns_not_configured(client):
+def test_billing_checkout_succeeds_against_fake_provider_with_a_real_plan(client, db_session):
+    product = _product(db_session, "api-checkout-product-fake")
+    entitlement_service.get_or_create_plan(db_session, product.id, "pro", "Pro")
+    db_session.commit()
+    r = client.post("/api/v1/auth/signup", json={"email": "checkout-fake@example.com", "password": "correct-horse-battery"})
+    assert r.status_code == 201
+
+    resp = client.post("/api/v1/billing/checkout", json={
+        "provider": "fake", "product_id": product.id, "plan_slug": "pro", "success_url": "https://example.test/ok",
+    })
+    assert resp.status_code == 200
+    assert resp.json()["url"].startswith("https://example.test/ok")
+
+
+def test_billing_checkout_rejects_a_plan_that_does_not_exist(client, db_session):
+    _product(db_session, "api-checkout-product-a")
+    db_session.commit()
+    r = client.post("/api/v1/auth/signup", json={"email": "checkout-badplan@example.com", "password": "correct-horse-battery"})
+    assert r.status_code == 201
+
+    resp = client.post("/api/v1/billing/checkout", json={
+        "provider": "fake", "product_id": "api-checkout-product-a", "plan_slug": "does-not-exist",
+        "success_url": "https://example.test/ok",
+    })
+    assert resp.status_code == 422
+    assert resp.json()["code"] == "INVALID_PLAN"
+
+
+def test_billing_checkout_against_real_paddle_provider_returns_not_configured(client, db_session):
     """Mission-brief Phase 9/56: no live Paddle call is ever made in this
     mission - the route must fail loudly (501), never silently succeed."""
+    product = _product(db_session, "api-checkout-product-b")
+    entitlement_service.get_or_create_plan(db_session, product.id, "pro", "Pro")
+    db_session.commit()
     r = client.post("/api/v1/auth/signup", json={"email": "checkout-user@example.com", "password": "correct-horse-battery"})
     assert r.status_code == 201
 
     resp = client.post("/api/v1/billing/checkout", json={
-        "provider": "paddle", "product_id": "any-product", "plan_id": "any-plan", "success_url": "https://example.test/ok",
+        "provider": "paddle", "product_id": product.id, "plan_slug": "pro", "success_url": "https://example.test/ok",
     })
     assert resp.status_code == 501
     assert resp.json()["code"] == "PROVIDER_NOT_CONFIGURED"

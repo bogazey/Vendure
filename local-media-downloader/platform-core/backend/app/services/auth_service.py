@@ -13,11 +13,11 @@ from sqlalchemy.orm import Session
 
 from app.config.logging_config import get_logger
 from app.config.settings import get_settings
-from app.database.models import EmailVerificationToken, PasswordResetToken, RefreshToken, User
-from app.models.enums import UserStatus
+from app.database.models import EmailVerificationToken, OAuthRefreshToken, PasswordResetToken, RefreshToken, User
+from app.models.enums import AuditAction, UserStatus
 from app.security import passwords
 from app.security.tokens import generate_hashed_token, hash_token
-from app.services import email_service
+from app.services import audit_service, email_service
 from app.utils.exceptions import (
     AccountDisabledError,
     EmailAlreadyRegisteredError,
@@ -57,6 +57,7 @@ class AuthService:
 
         self._issue_verification_email(session, user)
         refresh_raw = self._issue_session(session, user, remember_me=True)
+        audit_service.record(session, user.id, AuditAction.USER_SIGNUP, "user", user.id)
         logger.info("Signup: new global user %s", user.id)
         return AuthResult(user, refresh_raw, remember_me=True)
 
@@ -78,6 +79,7 @@ class AuthService:
             user.password_hash = passwords.hash_password(password)
 
         refresh_raw = self._issue_session(session, user, remember_me=remember_me)
+        audit_service.record(session, user.id, AuditAction.USER_LOGIN, "user", user.id)
         logger.info("Login: global user %s", user.id)
         return AuthResult(user, refresh_raw, remember_me=remember_me)
 
@@ -109,13 +111,64 @@ class AuthService:
             record.revoked_at = datetime.now(timezone.utc)
 
     def logout_all_sessions(self, session: Session, user_id: str) -> int:
+        """Ecosystem-wide sign-out foundation (mission-brief Phase 22).
+        Three things happen together, all in the same transaction:
+
+        1. Every central `RefreshToken` is revoked (as before) - no
+           product/account-portal session can silently renew its central
+           access token.
+        2. `User.security_epoch` is bumped - any already-issued, still-
+           unexpired central `session_access` JWT is rejected on its very
+           next use (`api/deps.py::get_optional_user`), rather than
+           living out its remaining `access_token_ttl_minutes`.
+        3. Every product-scoped `OAuthRefreshToken` is revoked too - no
+           product backend can silently mint a fresh OIDC access token
+           for this user after this call, even though this function lives
+           in Platform Core and never touches a product's own code.
+
+        Documented, bounded SLA (never claimed as instant): an already-
+        issued OIDC *access* token a product is holding (not a refresh
+        token) remains valid for up to `OIDC_ACCESS_TOKEN_TTL_MINUTES`
+        (default 15) after this call - the same bounded-propagation
+        precedent `SESSION_REVOCATION.md` already established for account
+        disable."""
         now = datetime.now(timezone.utc)
         records = session.execute(
             select(RefreshToken).where(RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None))
         ).scalars().all()
         for record in records:
             record.revoked_at = now
+
+        oauth_records = session.execute(
+            select(OAuthRefreshToken).where(OAuthRefreshToken.user_id == user_id, OAuthRefreshToken.revoked_at.is_(None))
+        ).scalars().all()
+        for record in oauth_records:
+            record.revoked_at = now
+
+        user = session.get(User, user_id)
+        if user is not None:
+            user.security_epoch += 1
+
+        audit_service.record(
+            session, user_id, AuditAction.ALL_SESSIONS_REVOKED, "user", user_id,
+            after_state={"central_sessions_revoked": len(records), "product_sessions_revoked": len(oauth_records)},
+        )
         return len(records)
+
+    def revoke_session(self, session: Session, user: User, session_id: str) -> bool:
+        """Sign out ONE specific device/session (mission-brief Phase 21),
+        as opposed to `logout_all_sessions`'s "everywhere." IDOR-safe by
+        construction: the row must belong to the calling user, checked in
+        the same query, not as a separate lookup-then-compare step a
+        future refactor could accidentally drop."""
+        record = session.execute(
+            select(RefreshToken).where(RefreshToken.id == session_id, RefreshToken.user_id == user.id)
+        ).scalars().first()
+        if record is None or record.revoked_at is not None:
+            return False
+        record.revoked_at = datetime.now(timezone.utc)
+        audit_service.record(session, user.id, AuditAction.SESSION_REVOKED, "refresh_token", record.id)
+        return True
 
     def list_active_sessions(self, session: Session, user_id: str) -> list[RefreshToken]:
         now = datetime.now(timezone.utc)
@@ -130,6 +183,16 @@ class AuthService:
                 .order_by(RefreshToken.last_used_at.desc())
             ).scalars().all()
         )
+
+    def reissue_session(self, session: Session, user: User, remember_me: bool = True) -> str:
+        """Public wrapper around `_issue_session` for a caller that has
+        already independently authenticated the user by some other means
+        this request (e.g. `routes_auth.change_password` re-authenticating
+        the caller's own current session after `revoke_other_sessions`
+        just revoked it out from under them) - never used to issue a
+        session for anyone whose password/credentials weren't just
+        verified in this same request."""
+        return self._issue_session(session, user, remember_me=remember_me)
 
     def request_password_reset(self, session: Session, email: str) -> None:
         email = _normalize_email(email)
@@ -164,6 +227,7 @@ class AuthService:
         if not passwords.verify_password(current_password, user.password_hash):
             raise InvalidCredentialsError("Current password is incorrect.")
         user.password_hash = passwords.hash_password(new_password)
+        audit_service.record(session, user.id, AuditAction.PASSWORD_CHANGED, "user", user.id)
 
     def request_email_verification(self, session: Session, user: User) -> None:
         self._issue_verification_email(session, user)

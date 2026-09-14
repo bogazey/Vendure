@@ -38,6 +38,13 @@ class VerifyEmailRequest(BaseModel):
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str = Field(min_length=8, max_length=200)
+    # Mission 6 (Phase 20): "define whether other sessions revoke ...
+    # recommended: offer/recommend revoking other sessions" - opt-in
+    # rather than automatic, since forcing every other device to re-
+    # authenticate on every password change is a UX call the caller
+    # (account portal UI) should make explicit, not one this API decides
+    # silently.
+    revoke_other_sessions: bool = False
 
 
 class UserOut(BaseModel):

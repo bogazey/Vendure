@@ -75,6 +75,24 @@ def rotate_client_secret(session: Session, admin: User, client: OAuthClient) -> 
     return raw_secret
 
 
+def configure_webhook(session: Session, admin: User, client: OAuthClient, webhook_url: str) -> str:
+    """Opt a client into outbound product webhooks (mission-brief Phase
+    41) - generates a fresh signing secret every call (re-configuring the
+    URL rotates the secret too, so a leaked old secret stops working the
+    moment an admin touches this client's webhook config again)."""
+    import secrets as _secrets
+
+    raw_secret = _secrets.token_urlsafe(32)
+    client.webhook_url = webhook_url
+    client.webhook_signing_secret = raw_secret
+    session.flush()
+    audit_service.record(
+        session, admin.id, AuditAction.SERVICE_CLIENT_SECRET_ROTATED, "oauth_client", client.client_id, client.product_id,
+        after_state={"webhook_url": webhook_url},
+    )
+    return raw_secret
+
+
 def issue_service_token(session: Session, client_id: str, client_secret: str) -> tuple[str, list[str]]:
     client = session.get(OAuthClient, client_id)
     if client is None or not client.is_active or client.client_secret_hash is None:

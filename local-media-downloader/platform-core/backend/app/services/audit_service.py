@@ -43,3 +43,13 @@ def list_recent(session: Session, limit: int = 100, target_id: str | None = None
     if target_id:
         query = query.where(AuditLog.target_id == target_id)
     return list(session.execute(query).scalars().all())
+
+
+def list_for_actor(session: Session, actor_user_id: str, actions: set[str] | None = None, limit: int = 50) -> list[AuditLog]:
+    """Mission 6 (Phase 23): a user's own security-event feed - always
+    scoped to `actor_user_id`, never a parameter another user's session
+    could redirect to see someone else's history."""
+    query = select(AuditLog).where(AuditLog.actor_user_id == actor_user_id).order_by(AuditLog.created_at.desc()).limit(limit)
+    if actions:
+        query = query.where(AuditLog.action.in_(actions))
+    return list(session.execute(query).scalars().all())

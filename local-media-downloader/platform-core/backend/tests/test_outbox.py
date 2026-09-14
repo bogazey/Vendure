@@ -5,7 +5,8 @@ from __future__ import annotations
 from sqlalchemy import select
 
 from app.database.models import OutboxEvent, Product, User
-from app.services import oidc_service, outbox_service
+from app.models.enums import GLOBAL_SCOPE, RoleSlug
+from app.services import oidc_service, outbox_service, rbac_service
 
 
 def _admin(db_session, email: str) -> User:
@@ -128,3 +129,34 @@ def test_event_reaches_failed_status_after_max_attempts(db_session):
     events = db_session.execute(select(OutboxEvent).where(OutboxEvent.product_id == product.id)).scalars().all()
     assert events[0].status == "failed"
     assert events[0].attempts == get_settings().outbox_max_attempts
+
+
+def test_admin_can_configure_client_webhook_and_it_actually_delivers(client, db_session):
+    r = client.post("/api/v1/auth/signup", json={"email": "admin-obx-config@example.com", "password": "correct-horse-battery"})
+    assert r.status_code == 201
+    admin = db_session.query(User).filter_by(email="admin-obx-config@example.com").first()
+    rbac_service.assign_role(db_session, admin, RoleSlug.SUPER_ADMIN, GLOBAL_SCOPE, granted_by=None)
+    product = _product(db_session, "obx-product-configured")
+    reg_client, _secret = oidc_service.register_client(db_session, admin, "obx-configured-client", "Configured", product.id, [])
+    db_session.commit()
+
+    resp = client.post(f"/api/v1/admin/clients/{reg_client.client_id}/webhook", json={"webhook_url": "https://configured.example/hook"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["webhook_url"] == "https://configured.example/hook"
+    signing_secret = body["webhook_signing_secret"]
+    assert signing_secret
+
+    outbox_service.enqueue(db_session, "entitlement.changed", product.id, {"user_id": "u5"})
+    db_session.commit()
+
+    captured = {}
+
+    def fake_post(url, headers, body_bytes):
+        captured["url"], captured["headers"], captured["body"] = url, headers, body_bytes
+        return 200
+
+    outbox_service.deliver_pending(db_session, http_post=fake_post)
+    db_session.commit()
+    assert captured["url"] == "https://configured.example/hook"
+    assert outbox_service.verify_signature(signing_secret, captured["body"], captured["headers"]["X-Platform-Signature"])

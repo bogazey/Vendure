@@ -99,6 +99,9 @@ class AuditAction(str, Enum):
     SERVICE_CLIENT_SECRET_ROTATED = "service_client_secret_rotated"
     OUTBOX_EVENT_DELIVERED = "outbox_event_delivered"
     OUTBOX_EVENT_FAILED = "outbox_event_failed"
+    PASSWORD_CHANGED = "password_changed"
+    SESSION_REVOKED = "session_revoked"
+    ALL_SESSIONS_REVOKED = "all_sessions_revoked"
 
 
 class PaymentStatus(str, Enum):

@@ -38,7 +38,7 @@ def _client_key(request: Request) -> str:
 
 def _set_session_cookies(response: Response, result: AuthResult) -> None:
     settings = get_settings()
-    access_token = create_session_access_token(result.user.id)
+    access_token = create_session_access_token(result.user.id, result.user.security_epoch)
     access_max_age = settings.access_token_ttl_minutes * 60 if result.remember_me else None
     refresh_max_age = settings.refresh_token_ttl_days * 24 * 3600 if result.remember_me else None
     response.set_cookie(
@@ -130,9 +130,23 @@ async def list_sessions(
 
 @router.post("/change-password", status_code=204, response_model=None)
 async def change_password(
-    payload: ChangePasswordRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+    payload: ChangePasswordRequest, response: Response, db: Session = Depends(get_db), user: User = Depends(get_current_user)
 ) -> None:
     auth_service.change_password(db, user, payload.current_password, payload.new_password)
+    if payload.revoke_other_sessions:
+        auth_service.logout_all_sessions(db, user.id)
+        # The caller's OWN current session must survive a password change
+        # they just made themselves - re-issue fresh cookies bound to the
+        # bumped epoch instead of leaving them logged out by their own action.
+        db.flush()
+        db.refresh(user)
+        result = AuthResult(user, refresh_raw=auth_service.reissue_session(db, user, remember_me=True), remember_me=True)
+        _set_session_cookies(response, result)
+
+
+@router.delete("/sessions/{session_id}", status_code=204, response_model=None)
+async def revoke_session(session_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> None:
+    auth_service.revoke_session(db, user, session_id)
 
 
 @router.post("/forgot-password", status_code=204, response_model=None)

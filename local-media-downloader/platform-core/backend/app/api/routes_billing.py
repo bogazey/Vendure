@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
 from app.database.models import Subscription, User
-from app.services import billing, webhook_service
+from app.services import billing, entitlement_service, webhook_service
 from app.services.billing.base import BillingProviderNotConfiguredError
 from app.services.rate_limit_service import billing_webhook_limiter
 from app.utils.exceptions import NotFoundError, ProviderNotConfiguredError, RateLimitedError
@@ -53,11 +53,22 @@ async def create_checkout(
         provider = billing.get_billing_provider(provider_name)
     except ValueError:
         raise NotFoundError(f"Unknown billing provider '{provider_name}'.")
+
+    # Validate the (product_id, plan_slug) pair BEFORE ever calling the
+    # provider - a real provider's `create_checkout` would resolve the
+    # plan to a processor-side price and charge that amount server-side
+    # (never trusting a client-supplied amount), so this plan must
+    # already exist in Platform Core's own registry, not merely be
+    # whatever string the caller sent (security review finding: an
+    # unvalidated product_id/plan_slug was previously passed straight
+    # through to the provider).
+    plan = entitlement_service.get_plan(db, payload["product_id"], payload["plan_slug"])
+
     try:
         checkout = provider.create_checkout(
             user_id=user.id,
             product_id=payload["product_id"],
-            plan_id=payload["plan_id"],
+            plan_id=plan.id,
             success_url=payload.get("success_url", ""),
         )
     except BillingProviderNotConfiguredError as exc:

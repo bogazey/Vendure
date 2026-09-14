@@ -19,9 +19,23 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import BearerPrincipal, get_bearer_principal, get_current_user, get_db
 from app.database.models import Plan, User
+from app.models.enums import AuditAction
 from app.security.jwt_tokens import introspect_oidc_access_token
-from app.services import entitlement_service, product_service
+from app.services import audit_service, entitlement_service, product_service
 from app.utils.exceptions import AuthError
+
+# Mission 6 (Phase 23): "user-visible security events" - a deliberately
+# small, non-technical allowlist filtered out of the full AuditLog (which
+# also carries admin/system actions no end user should see, e.g. another
+# admin's role grants). New event types are added here explicitly, never
+# by defaulting to "show everything."
+_SECURITY_EVENT_ACTIONS = {
+    AuditAction.USER_SIGNUP.value,
+    AuditAction.USER_LOGIN.value,
+    AuditAction.PASSWORD_CHANGED.value,
+    AuditAction.SESSION_REVOKED.value,
+    AuditAction.ALL_SESSIONS_REVOKED.value,
+}
 
 router = APIRouter(prefix="/api/v1", tags=["v1"])
 
@@ -97,6 +111,15 @@ async def my_memberships(db: Session = Depends(get_db), user: User = Depends(get
 async def my_entitlements(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> list[dict]:
     entitlements = entitlement_service.list_entitlements_for_user(db, user.id)
     return [_entitlement_view(db, e) for e in entitlements]
+
+
+@router.get("/me/security-events")
+async def my_security_events(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> list[dict]:
+    entries = audit_service.list_for_actor(db, user.id, actions=_SECURITY_EVENT_ACTIONS)
+    return [
+        {"action": e.action, "created_at": e.created_at.isoformat(), "target_type": e.target_type}
+        for e in entries
+    ]
 
 
 @router.get("/products")
