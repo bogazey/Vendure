@@ -189,9 +189,36 @@ requires an SDK method.
 | Preflight script | `scripts/platform/preflight-production-migration.sh` | central-adjacent tooling, functional, missing several Mission-7-specific checks (capacity, port conflicts, debug-mode exposure — see Phase 26) |
 | Backup scripts | `scripts/platform/backup-before-platform-migration.sh`, `verify-backup-restorable.sh` | functional, unencrypted, no off-site target — BLOCKER carried from Mission 5 |
 
-**No combined production Compose file exists** — this is Mission 7 Phase
-18's core deliverable and is entirely unbuilt. See
-`MISSION_7_PRODUCTION_TOPOLOGY.md` for the target shape.
+**Combined production Compose (Phase 18): PARTIALLY RESOLVED.**
+`compose.rc.yml` (added at the Mission 7 checkpoint, before this
+continuation) exists and is real — 7 services, resource limits,
+healthchecks, `restart: unless-stopped`, `cap_drop`/`read_only` hardening,
+correct `depends_on: condition: service_healthy` ordering. This
+continuation found it referenced two files that didn't exist
+(`.env.rc.example` and `platform-core/.env.production.example`), which
+would have blocked anyone from ever actually running it — both added.
+`docker compose -f compose.rc.yml config` (structural + variable
+interpolation validation, no build, no containers started) now passes
+clean.
+
+**NOT executed, and deliberately not attempted this session — CUTOVER-DAY
+/ NEXT-SESSION CHECK, not silently assumed working:** this session found
+`docker ps` showing what appears to be a live, real Loady stack already
+bound to host port 80 (`loady-reverse-proxy-1`) alongside a staging stack
+on 8090/8091/8443, on the same machine this repo lives on. A real build+
+run rehearsal of `compose.rc.yml` (Mission 7 Phase 19's "full production-
+like local rehearsal") means building ~5 fresh Docker images and starting
+7 containers - non-trivial CPU/disk/memory use immediately adjacent to
+what may be a live production service, and genuinely risky to attempt
+without the user's explicit go-ahead given "do not touch production" is
+an explicit, standing instruction for this mission. `RC_HTTP_PORT`/
+`RC_HTTPS_PORT` overrides in `.env.rc.example` already document how to
+avoid the port collision itself, but port safety alone doesn't remove
+the resource-contention risk of building/running a full second stack
+next to a live one. Until a rehearsal is actually run and its containers
+observed healthy, `compose.rc.yml` must be treated as **structurally
+validated, not proven** — the same distinction this audit applies
+everywhere else marked `NEEDS EXECUTION`.
 
 ## 6. Feature flags
 
@@ -242,7 +269,7 @@ historical record).
 | Loady's live Paddle integration | must-remove-before-cutover (after Platform Core billing goes live + reconciled) |
 | Platform Core `PaddleBillingProvider` | must-build-before-cutover (currently non-functional beyond pure functions) |
 | Ecosystem-wide sign-out (bounded, ~15 min) | acceptable-post-cutover (documented bound, not a blocker) |
-| Combined production Compose | must-build-before-cutover |
+| Combined production Compose | structurally validated this mission (config passes); build/run rehearsal is CUTOVER-DAY / NEXT-SESSION CHECK — deliberately not attempted, see section 5 |
 | Named feature flags (`PLATFORM_*_ENABLED`) | **RESOLVED this mission** — added, wrap the existing credential-dormancy check, tested |
 | Backup encryption/off-site/retention | must-build-before-cutover (BLOCKER, carried from Mission 5) |
 | Real TLS certificate | CUTOVER-DAY CHECK (needs a real domain, not a code change) |
