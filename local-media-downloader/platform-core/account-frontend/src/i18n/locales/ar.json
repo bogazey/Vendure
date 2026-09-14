@@ -1,0 +1,120 @@
+{
+  "app": {
+    "title": "الحساب",
+    "subtitle": "هوية المنظومة"
+  },
+  "common": {
+    "loading": "جارٍ التحميل...",
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "close": "إغلاق",
+    "confirm": "تأكيد",
+    "email": "البريد الإلكتروني",
+    "password": "كلمة المرور",
+    "language": "English",
+    "signOut": "تسجيل الخروج",
+    "error": "حدث خطأ ما.",
+    "yes": "نعم",
+    "no": "لا"
+  },
+  "nav": {
+    "overview": "نظرة عامة",
+    "products": "المنتجات",
+    "billing": "الخطط والفوترة",
+    "profile": "الملف الشخصي",
+    "security": "الأمان",
+    "sessions": "الجلسات / الأجهزة",
+    "connectedApps": "التطبيقات المرتبطة"
+  },
+  "login": {
+    "heading": "حساب المنظومة",
+    "subheading": "سجّل الدخول بهويتك المركزية.",
+    "signupSubheading": "أنشئ هويتك الواحدة لجميع منتجات المنظومة.",
+    "submit": "تسجيل الدخول",
+    "signupSubmit": "إنشاء حساب",
+    "error": "فشل تسجيل الدخول. تحقق من بياناتك.",
+    "signupError": "تعذّر إنشاء حساب بهذا البريد الإلكتروني.",
+    "switchToSignup": "جديد هنا؟ أنشئ حسابًا",
+    "switchToLogin": "لديك حساب بالفعل؟ سجّل الدخول"
+  },
+  "forbidden": {
+    "heading": "يلزم تسجيل الدخول",
+    "body": "يرجى تسجيل الدخول لعرض هذه الصفحة."
+  },
+  "overview": {
+    "memberSince": "عضو منذ",
+    "emailVerified": "تم توثيق البريد الإلكتروني",
+    "productsHeading": "منتجاتك",
+    "notActivated": "غير مفعّل",
+    "giftedAccess": "وصول مُهدى",
+    "noProducts": "لم تستخدم أي منتج من المنظومة بعد.",
+    "recentSecurity": "النشاط الأمني الأخير",
+    "noEvents": "لا يوجد نشاط حديث."
+  },
+  "products": {
+    "yourProducts": "منتجاتك",
+    "free": "مجاني",
+    "open": "فتح",
+    "discoverHeading": "اكتشف",
+    "discover": "اعرف المزيد",
+    "noneYet": "لم تنضم إلى أي منتج بعد."
+  },
+  "billing": {
+    "empty": "لا توجد خطط نشطة بعد.",
+    "renews": "يتجدد في",
+    "giftedAccess": "وصول مُهدى",
+    "active": "نشط",
+    "cancelingSoon": "ينتهي في نهاية الفترة"
+  },
+  "profile": {
+    "identityHeading": "الهوية",
+    "globalId": "معرّف الحساب العالمي",
+    "pendingEmail": "تغيير معلّق إلى {{email}} - تحقق من ذلك البريد للتأكيد.",
+    "changeEmailHeading": "تغيير البريد الإلكتروني",
+    "changeEmailHint": "سنرسل رابط تأكيد إلى العنوان الجديد - لن يتغير بريد الدخول حتى تؤكده.",
+    "requestChange": "إرسال التأكيد",
+    "emailChangeRequested": "تم إرسال بريد التأكيد - تحقق من صندوق الوارد الجديد.",
+    "languageHeading": "اللغة"
+  },
+  "security": {
+    "changePasswordHeading": "تغيير كلمة المرور",
+    "currentPassword": "كلمة المرور الحالية",
+    "newPassword": "كلمة المرور الجديدة",
+    "revokeOthersOnChange": "تسجيل الخروج من جميع الأجهزة الأخرى بعد تغيير كلمة المرور",
+    "changePassword": "تغيير كلمة المرور",
+    "passwordChanged": "تم تغيير كلمة المرور.",
+    "signOutEverywhereHeading": "تسجيل الخروج من كل مكان",
+    "signOutEverywhereHint": "ينهي فورًا كل جلسة أخرى ويمنع أي منتج من تجديد وصولك بصمت.",
+    "signOutEverywhere": "تسجيل الخروج من جميع الأجهزة",
+    "recentActivity": "النشاط الأمني الأخير",
+    "closureHeading": "إغلاق الحساب",
+    "closureHint": "يعطّل حسابك المركزي ويسجّل خروجك من كل مكان. هذا لا يحذف بياناتك - راجع سياسة البيانات لمعرفة الخطوات التالية.",
+    "closureReasonPlaceholder": "السبب (اختياري)",
+    "requestClosure": "طلب إغلاق الحساب",
+    "closurePendingConfirmation": "تم طلب الإغلاق - التأكيد سيعطّل حسابك فورًا.",
+    "confirmClosure": "تأكيد الإغلاق",
+    "closureInProgress": "حالة الإغلاق: {{status}}"
+  },
+  "sessions": {
+    "unknownDevice": "جهاز غير معروف",
+    "currentSession": "هذا الجهاز",
+    "lastUsed": "آخر استخدام",
+    "signOut": "تسجيل الخروج",
+    "empty": "لا توجد جلسات نشطة."
+  },
+  "connectedApps": {
+    "hint": "منتجات المنظومة التي سجّلت الدخول إليها بهذه الهوية.",
+    "firstAuthorized": "أول تفويض",
+    "lastUsed": "آخر استخدام",
+    "empty": "لا توجد منتجات مرتبطة بعد."
+  },
+  "securityEvents": {
+    "user_signup": "تم إنشاء الحساب",
+    "user_login": "تم تسجيل الدخول",
+    "password_changed": "تم تغيير كلمة المرور",
+    "session_revoked": "تم تسجيل الخروج من جلسة",
+    "all_sessions_revoked": "تم تسجيل الخروج من جميع الأجهزة",
+    "email_change_requested": "طُلب تغيير البريد الإلكتروني",
+    "email_changed": "تم تغيير البريد الإلكتروني"
+  }
+}

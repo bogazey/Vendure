@@ -29,7 +29,11 @@
     "products": "المنتجات",
     "entitlements": "الاستحقاقات",
     "giftedAccess": "الوصول المُهدى",
-    "auditLog": "سجلّ التدقيق"
+    "auditLog": "سجلّ التدقيق",
+    "bundles": "الحزم",
+    "revenue": "الإيرادات",
+    "billingEvents": "أحداث الفوترة",
+    "systemHealth": "سلامة النظام"
   },
   "login": {
     "heading": "الإدارة الكبرى",
@@ -78,7 +82,104 @@
     "createProduct": "إنشاء منتج",
     "live": "مباشر",
     "building": "قيد البناء",
-    "planned": "مخطط له"
+    "planned": "مخطط له",
+    "manage": "إدارة"
+  },
+  "productDetail": {
+    "product": "المنتج",
+    "tabs": {
+      "plans": "الخطط",
+      "capabilities": "الإمكانات",
+      "subscribers": "المشتركون",
+      "billing": "الفوترة"
+    },
+    "plans": {
+      "name": "الاسم",
+      "slug": "المعرّف المختصر",
+      "status": "الحالة",
+      "rank": "الترتيب",
+      "private": "خاص",
+      "empty": "لا توجد خطط بعد.",
+      "createPlan": "إنشاء خطة",
+      "selectPrompt": "اختر خطة لتعديلها.",
+      "archive": "أرشفة",
+      "activate": "تفعيل",
+      "description": "الوصف",
+      "sortOrder": "ترتيب العرض",
+      "public": "عامة",
+      "giftedEligible": "قابلة للإهداء",
+      "trialEligible": "قابلة للتجربة",
+      "saved": "تم الحفظ.",
+      "capabilitiesHeading": "الإمكانات",
+      "versionsHeading": "الإصدارات",
+      "versionsHint": "نشر إصدار جديد يجمّد قيم الإمكانات الحالية - يحتفظ المشتركون الحاليون بالإصدار الذي مُنحوا إياه دون تأثرهم بالتعديلات اللاحقة.",
+      "publishVersion": "نشر إصدار جديد",
+      "versionPublished": "تم نشر إصدار جديد.",
+      "pricesHeading": "الأسعار",
+      "retired": "متوقف",
+      "retirePrice": "إيقاف",
+      "addPrice": "إضافة سعر",
+      "monthly": "شهري",
+      "yearly": "سنوي",
+      "statPaid": "مدفوع",
+      "statGifted": "مُهدى",
+      "statPromotions": "ترويجي",
+      "statTrials": "تجريبي",
+      "statLegacy": "قديم"
+    },
+    "capabilities": {
+      "key": "المفتاح",
+      "type": "النوع",
+      "allowedValues": "القيم المسموحة (مفصولة بفواصل)",
+      "define": "تعريف إمكانية",
+      "empty": "لا توجد إمكانات معرّفة لهذا المنتج بعد."
+    },
+    "subscribers": {
+      "user": "المستخدم",
+      "renews": "التجديد",
+      "empty": "لا يوجد مشتركون بعد."
+    },
+    "billing": {
+      "amount": "المبلغ",
+      "date": "التاريخ",
+      "empty": "لا توجد مدفوعات بعد."
+    }
+  },
+  "bundles": {
+    "name": "الاسم",
+    "slug": "المعرّف المختصر",
+    "create": "إنشاء حزمة",
+    "empty": "لا توجد حزم بعد.",
+    "hint": "تمنح الحزمة الوصول عبر عدة منتجات دفعة واحدة - أضف منتجات إلى الحزمة، ثم امنح المستخدم صلاحية الوصول للحزمة بأكملها."
+  },
+  "revenue": {
+    "productId": "المنتج",
+    "productPlaceholder": "مثال: loady",
+    "load": "تحميل",
+    "prompt": "أدخل معرّف منتج لعرض مقاييس إيراداته.",
+    "revenue": "صافي الإيراد",
+    "mrr": "الإيراد الشهري المتكرر",
+    "arr": "الإيراد السنوي المتكرر",
+    "arpu": "متوسط الإيراد لكل مستخدم",
+    "paidSubscribers": "المشتركون المدفوعون",
+    "refunded": "المسترد",
+    "churn": "معدّل التسرب",
+    "notesHeading": "ملاحظات"
+  },
+  "billingEvents": {
+    "provider": "المزوّد",
+    "eventType": "نوع الحدث",
+    "received": "وقت الاستلام",
+    "replay": "إعادة المحاولة",
+    "empty": "لا توجد أحداث فوترة بعد."
+  },
+  "systemHealth": {
+    "database": "قاعدة البيانات",
+    "signingKey": "مفتاح التوقيع",
+    "outbox": "صندوق الصادر",
+    "billingWebhooks": "استدعاءات الفوترة",
+    "pending": "قيد الانتظار",
+    "failed": "فشل"
   },
   "entitlements": {
     "grantTitle": "منح / تغيير الاستحقاق",

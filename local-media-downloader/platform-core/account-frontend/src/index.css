@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Same dark-navy/blue-purple-aqua glass tokens as Loady's own admin panel
+   (local-media-downloader/frontend/src/index.css), trimmed to what the
+   Grand Admin actually uses, so the two admin consoles feel like the same
+   ecosystem. */
+:root {
+  --color-surface: #05070d;
+  --color-surface-raised: #0a0e18;
+  --color-surface-border: #20283a;
+
+  --color-slate-50: #f4f7ff;
+  --color-slate-100: #e7ecfb;
+  --color-slate-200: #cbd3e8;
+  --color-slate-300: #aeb8d2;
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #8997b0;
+  --color-slate-600: #71809b;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-surface);
+  color: var(--color-slate-100);
+  font-family: "Sora", "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+:root[dir="rtl"] body {
+  direction: rtl;
+}
+
+.bg-aurora {
+  background:
+    radial-gradient(circle at 15% 10%, rgba(59, 130, 246, 0.18), transparent 42%),
+    radial-gradient(circle at 85% 15%, rgba(139, 92, 246, 0.16), transparent 45%),
+    radial-gradient(circle at 50% 95%, rgba(34, 211, 238, 0.12), transparent 40%),
+    var(--color-surface);
+}
+
+.glass-panel {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018));
+  border: 1px solid var(--color-surface-border);
+  border-radius: 18px;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.06), 0 16px 40px rgba(0, 0, 0, 0.25);
+}
+
+.btn-gradient {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 12px;
+  padding: 0.6rem 1.1rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: #060912;
+  background-image: linear-gradient(135deg, #22d3ee 0%, #3b82f6 55%, #8b5cf6 100%);
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.15), 0 8px 30px -6px rgba(59, 130, 246, 0.35);
+}
+
+.btn-gradient:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-glass {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 12px;
+  padding: 0.55rem 1rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  color: var(--color-slate-100);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--color-surface-border);
+  cursor: pointer;
+}
+
+.btn-glass:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.input-glass {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 10px;
+  padding: 0.6rem 0.85rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--color-surface-border);
+  color: var(--color-slate-100);
+  font-size: 0.875rem;
+}
+
+.input-glass:focus {
+  outline: none;
+  border-color: rgba(59, 130, 246, 0.6);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}

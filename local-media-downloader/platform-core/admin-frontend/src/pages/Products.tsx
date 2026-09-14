@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api, ApiError, type ProductOut } from "../services/api";
 import ErrorState from "../components/ErrorState";
@@ -42,6 +43,7 @@ export default function Products() {
               <th className="px-4 py-3">{t("products.name")}</th>
               <th className="px-4 py-3">{t("products.domain")}</th>
               <th className="px-4 py-3">{t("products.status")}</th>
+              <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody>
@@ -52,6 +54,11 @@ export default function Products() {
                 <td className="px-4 py-3">{p.domain}</td>
                 <td className="px-4 py-3">
                   <span className="rounded-full bg-white/5 px-2 py-0.5 text-xs">{t(`products.${p.status}`, { defaultValue: p.status })}</span>
+                </td>
+                <td className="px-4 py-3">
+                  <Link to={`/products/${p.id}`} className="btn-glass !px-3 !py-1 text-xs">
+                    {t("products.manage")}
+                  </Link>
                 </td>
               </tr>
             ))}

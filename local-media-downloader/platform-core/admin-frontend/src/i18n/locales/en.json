@@ -29,7 +29,11 @@
     "products": "Products",
     "entitlements": "Entitlements",
     "giftedAccess": "Gifted Access",
-    "auditLog": "Audit Logs"
+    "auditLog": "Audit Logs",
+    "bundles": "Bundles",
+    "revenue": "Revenue",
+    "billingEvents": "Billing Events",
+    "systemHealth": "System Health"
   },
   "login": {
     "heading": "Grand Admin",
@@ -78,7 +82,104 @@
     "createProduct": "Create product",
     "live": "Live",
     "building": "Building",
-    "planned": "Planned"
+    "planned": "Planned",
+    "manage": "Manage"
+  },
+  "productDetail": {
+    "product": "Product",
+    "tabs": {
+      "plans": "Plans",
+      "capabilities": "Capabilities",
+      "subscribers": "Subscribers",
+      "billing": "Billing"
+    },
+    "plans": {
+      "name": "Name",
+      "slug": "Slug",
+      "status": "Status",
+      "rank": "Rank",
+      "private": "Private",
+      "empty": "No plans yet.",
+      "createPlan": "Create plan",
+      "selectPrompt": "Select a plan to edit it.",
+      "archive": "Archive",
+      "activate": "Activate",
+      "description": "Description",
+      "sortOrder": "Sort order",
+      "public": "Public",
+      "giftedEligible": "Gift-eligible",
+      "trialEligible": "Trial-eligible",
+      "saved": "Saved.",
+      "capabilitiesHeading": "Capabilities",
+      "versionsHeading": "Versions",
+      "versionsHint": "Publishing a version freezes the current capability values - existing subscribers keep the version they were granted, unaffected by later edits.",
+      "publishVersion": "Publish new version",
+      "versionPublished": "New version published.",
+      "pricesHeading": "Prices",
+      "retired": "retired",
+      "retirePrice": "Retire",
+      "addPrice": "Add price",
+      "monthly": "Monthly",
+      "yearly": "Yearly",
+      "statPaid": "Paid",
+      "statGifted": "Gifted",
+      "statPromotions": "Promo",
+      "statTrials": "Trial",
+      "statLegacy": "Legacy"
+    },
+    "capabilities": {
+      "key": "Key",
+      "type": "Type",
+      "allowedValues": "Allowed values (comma-separated)",
+      "define": "Define capability",
+      "empty": "No capabilities defined for this product yet."
+    },
+    "subscribers": {
+      "user": "User",
+      "renews": "Renews",
+      "empty": "No subscribers yet."
+    },
+    "billing": {
+      "amount": "Amount",
+      "date": "Date",
+      "empty": "No payments yet."
+    }
+  },
+  "bundles": {
+    "name": "Name",
+    "slug": "Slug",
+    "create": "Create bundle",
+    "empty": "No bundles yet.",
+    "hint": "A bundle grants access across multiple products at once - add products to a bundle, then grant a user access to the whole bundle."
+  },
+  "revenue": {
+    "productId": "Product",
+    "productPlaceholder": "e.g. loady",
+    "load": "Load",
+    "prompt": "Enter a product id to view its revenue metrics.",
+    "revenue": "Net revenue",
+    "mrr": "MRR",
+    "arr": "ARR",
+    "arpu": "ARPU",
+    "paidSubscribers": "Paid subscribers",
+    "refunded": "Refunded",
+    "churn": "Churn",
+    "notesHeading": "Notes"
+  },
+  "billingEvents": {
+    "provider": "Provider",
+    "eventType": "Event type",
+    "received": "Received",
+    "replay": "Replay",
+    "empty": "No billing webhook events yet."
+  },
+  "systemHealth": {
+    "database": "Database",
+    "signingKey": "Signing key",
+    "outbox": "Outbox",
+    "billingWebhooks": "Billing webhooks",
+    "pending": "Pending",
+    "failed": "Failed"
   },
   "entitlements": {
     "grantTitle": "Grant / change entitlement",

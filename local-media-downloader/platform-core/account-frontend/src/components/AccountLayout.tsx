@@ -4,17 +4,15 @@ import { useAuth } from "../context/AuthContext";
 
 const TABS = [
   { to: "/", key: "overview", end: true },
-  { to: "/users", key: "users", end: false },
   { to: "/products", key: "products", end: false },
-  { to: "/bundles", key: "bundles", end: false },
-  { to: "/revenue", key: "revenue", end: false },
-  { to: "/billing-events", key: "billingEvents", end: false },
-  { to: "/gifted-access", key: "giftedAccess", end: false },
-  { to: "/system-health", key: "systemHealth", end: false },
-  { to: "/audit-log", key: "auditLog", end: false },
+  { to: "/billing", key: "billing", end: false },
+  { to: "/profile", key: "profile", end: false },
+  { to: "/security", key: "security", end: false },
+  { to: "/sessions", key: "sessions", end: false },
+  { to: "/connected-apps", key: "connectedApps", end: false },
 ] as const;
 
-export default function AdminLayout() {
+export default function AccountLayout() {
   const { t, i18n } = useTranslation();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -31,7 +29,7 @@ export default function AdminLayout() {
   return (
     <div className="bg-aurora min-h-screen">
       <header className="border-b border-surface-border/60 bg-surface-raised/60 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
           <div>
             <p className="font-display text-lg font-bold tracking-tight text-slate-50">
               <span className="bg-brand-gradient bg-clip-text text-transparent">{t("app.title")}</span>
@@ -48,7 +46,7 @@ export default function AdminLayout() {
             </button>
           </div>
         </div>
-        <nav className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-5 pb-2 sm:px-8" aria-label="Grand Admin">
+        <nav className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-5 pb-2 sm:px-8" aria-label="Account">
           {TABS.map((tab) => (
             <NavLink
               key={tab.key}
@@ -65,7 +63,7 @@ export default function AdminLayout() {
           ))}
         </nav>
       </header>
-      <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-5 py-8 sm:px-8">
+      <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-5 py-8 sm:px-8">
         <Outlet />
       </main>
     </div>

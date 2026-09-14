@@ -113,6 +113,162 @@ export interface AuditLogOut {
   created_at: string;
 }
 
+// --- Mission 6 continuation: Product Subscription Manager -------------------
+
+export interface CatalogPlanOut {
+  id: string;
+  product_id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  status: string;
+  is_public: boolean;
+  sort_order: number;
+  upgrade_rank: number;
+  gifted_eligible: boolean;
+  trial_eligible: boolean;
+  current_version_id: string | null;
+}
+
+export interface PlanVersionOut {
+  id: string;
+  plan_id: string;
+  version_number: number;
+  status: string;
+  capability_snapshot: Record<string, boolean | number | string>;
+  published_at: string | null;
+}
+
+export interface PriceOut {
+  id: string;
+  product_id: string;
+  plan_id: string;
+  plan_version_id: string | null;
+  provider: string;
+  provider_price_id: string | null;
+  currency: string;
+  amount_cents: number;
+  interval: string;
+  interval_count: number;
+  is_public: boolean;
+  is_active: boolean;
+  created_at: string;
+  retired_at: string | null;
+}
+
+export interface CapabilityDefOut {
+  id: string;
+  key: string;
+  value_type: "boolean" | "integer" | "string" | "enum";
+  description: string | null;
+  allowed_values: string[] | null;
+}
+
+export interface PlanStatsOut {
+  plan_id: string;
+  paid_subscriptions: number;
+  gifted: number;
+  promotions: number;
+  trials: number;
+  legacy_entitlements: number;
+}
+
+export interface BundleOut {
+  id: string;
+  slug: string;
+  name: string;
+  status: string;
+}
+
+export interface RevenueMetricsOut {
+  scope: { product_id: string | null; plan_id: string | null; start: string | null; end: string | null };
+  revenue_cents: number;
+  refunded_cents: number;
+  net_revenue_cents: number;
+  paid_subscribers: number;
+  mrr_cents: number | null;
+  arr_cents: number | null;
+  arpu_cents: number | null;
+  churn_rate: number | null;
+  notes: string[];
+}
+
+export interface SystemHealthOut {
+  database: boolean;
+  signing_key_configured: boolean;
+  outbox: { pending: number; failed: number };
+  billing_webhooks: { pending: number; failed: number };
+}
+
+export const catalogApi = {
+  listPlans: (productId: string) => request<CatalogPlanOut[]>(`/api/v1/admin/catalog/products/${productId}/plans`),
+  createPlan: (productId: string, payload: Partial<CatalogPlanOut> & { slug: string; name: string }) =>
+    request<CatalogPlanOut>(`/api/v1/admin/catalog/products/${productId}/plans`, { method: "POST", body: JSON.stringify(payload) }),
+  updatePlan: (planId: string, payload: Record<string, unknown>) =>
+    request<CatalogPlanOut>(`/api/v1/admin/catalog/plans/${planId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  archivePlan: (planId: string) => request<CatalogPlanOut>(`/api/v1/admin/catalog/plans/${planId}/archive`, { method: "POST" }),
+  activatePlan: (planId: string) => request<CatalogPlanOut>(`/api/v1/admin/catalog/plans/${planId}/activate`, { method: "POST" }),
+  planStats: (planId: string) => request<PlanStatsOut>(`/api/v1/admin/catalog/plans/${planId}/stats`),
+
+  listVersions: (planId: string) => request<PlanVersionOut[]>(`/api/v1/admin/catalog/plans/${planId}/versions`),
+  publishVersion: (planId: string) => request<PlanVersionOut>(`/api/v1/admin/catalog/plans/${planId}/versions`, { method: "POST" }),
+
+  listPrices: (planId: string) => request<PriceOut[]>(`/api/v1/admin/catalog/plans/${planId}/prices`),
+  createPrice: (planId: string, payload: { provider: string; currency: string; amount_cents: number; interval: string; interval_count?: number; provider_price_id?: string; is_public?: boolean }) =>
+    request<PriceOut>(`/api/v1/admin/catalog/plans/${planId}/prices`, { method: "POST", body: JSON.stringify(payload) }),
+  retirePrice: (priceId: string, reason?: string) =>
+    request<PriceOut>(`/api/v1/admin/catalog/prices/${priceId}/retire`, { method: "POST", body: JSON.stringify({ reason }) }),
+  setPriceVisibility: (priceId: string, is_public: boolean) =>
+    request<PriceOut>(`/api/v1/admin/catalog/prices/${priceId}/visibility`, { method: "PATCH", body: JSON.stringify({ is_public }) }),
+
+  listCapabilities: (productId: string) => request<CapabilityDefOut[]>(`/api/v1/admin/products/${productId}/capabilities`),
+  defineCapability: (productId: string, payload: { key: string; value_type: string; description?: string; allowed_values?: string[] }) =>
+    request<CapabilityDefOut>(`/api/v1/admin/products/${productId}/capabilities`, { method: "POST", body: JSON.stringify(payload) }),
+  getPlanCapabilities: (planId: string) => request<Record<string, boolean | number | string>>(`/api/v1/admin/plans/${planId}/capabilities`),
+  setPlanCapability: (planId: string, key: string, value: boolean | number | string) =>
+    request<{ plan_id: string; key: string; value: unknown }>(`/api/v1/admin/plans/${planId}/capabilities/${key}`, { method: "PUT", body: JSON.stringify({ value }) }),
+};
+
+export const bundlesApi = {
+  list: () => request<BundleOut[]>("/api/v1/admin/bundles"),
+  create: (slug: string, name: string) => request<BundleOut>("/api/v1/admin/bundles", { method: "POST", body: JSON.stringify({ slug, name }) }),
+  get: (bundleId: string) => request<BundleOut & { products: Array<{ product_id: string; plan_id: string }> }>(`/api/v1/admin/bundles/${bundleId}`),
+  addProduct: (bundleId: string, productId: string, planSlug: string) =>
+    request(`/api/v1/admin/bundles/${bundleId}/products`, { method: "POST", body: JSON.stringify({ product_id: productId, plan_slug: planSlug }) }),
+  grantAccess: (userId: string, bundleId: string, source: string) =>
+    request(`/api/v1/admin/users/${userId}/bundles/${bundleId}/access`, { method: "POST", body: JSON.stringify({ source }) }),
+};
+
+export const revenueApi = {
+  metrics: (params: { product_id?: string; plan_id?: string; start?: string; end?: string }) => {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]).toString();
+    return request<RevenueMetricsOut>(`/api/v1/admin/revenue/metrics${qs ? `?${qs}` : ""}`);
+  },
+};
+
+export const systemHealthApi = {
+  get: () => request<SystemHealthOut>("/api/v1/admin/system-health"),
+};
+
+export const subscriptionsApi = {
+  list: (params: { user_id?: string } = {}) => {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]).toString();
+    return request<Array<{ id: string; user_id: string; product_id: string; provider: string; status: string; current_period_end: string | null; cancel_at_period_end: boolean }>>(`/api/v1/admin/subscriptions${qs ? `?${qs}` : ""}`);
+  },
+};
+
+export const paymentsApi = {
+  list: (params: { user_id?: string } = {}) => {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]).toString();
+    return request<Array<{ id: string; user_id: string; product_id: string; provider: string; amount_cents: number; currency: string; status: string; refunded_amount_cents: number | null; created_at: string }>>(`/api/v1/admin/payments${qs ? `?${qs}` : ""}`);
+  },
+};
+
+export const billingEventsApi = {
+  list: (status?: string) => request<Array<{ id: string; provider: string; event_type: string; status: string; failure_reason: string | null; retry_count: number; received_at: string }>>(`/api/v1/admin/billing/webhooks${status ? `?status=${status}` : ""}`),
+  replay: (id: string) => request(`/api/v1/admin/billing/webhooks/${id}/replay`, { method: "POST" }),
+};
+
 export const api = {
   login: (email: string, password: string) =>
     request<CurrentUser>("/api/v1/auth/login", { method: "POST", body: JSON.stringify({ email, password, remember_me: true }) }),

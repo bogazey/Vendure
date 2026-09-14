@@ -1,0 +1,120 @@
+{
+  "app": {
+    "title": "Account",
+    "subtitle": "Ecosystem Identity"
+  },
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "confirm": "Confirm",
+    "email": "Email",
+    "password": "Password",
+    "language": "العربية",
+    "signOut": "Sign out",
+    "error": "Something went wrong.",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "nav": {
+    "overview": "Overview",
+    "products": "Products",
+    "billing": "Plans & Billing",
+    "profile": "Profile",
+    "security": "Security",
+    "sessions": "Sessions / Devices",
+    "connectedApps": "Connected Apps"
+  },
+  "login": {
+    "heading": "Ecosystem Account",
+    "subheading": "Sign in with your central identity.",
+    "signupSubheading": "Create your one identity for every product in the ecosystem.",
+    "submit": "Sign in",
+    "signupSubmit": "Create account",
+    "error": "Sign-in failed. Check your credentials.",
+    "signupError": "Could not create an account with that email.",
+    "switchToSignup": "New here? Create an account",
+    "switchToLogin": "Already have an account? Sign in"
+  },
+  "forbidden": {
+    "heading": "Sign in required",
+    "body": "Please sign in to view this page."
+  },
+  "overview": {
+    "memberSince": "Member since",
+    "emailVerified": "Email verified",
+    "productsHeading": "Your products",
+    "notActivated": "Not activated",
+    "giftedAccess": "Gifted Access",
+    "noProducts": "You haven't used any ecosystem products yet.",
+    "recentSecurity": "Recent security activity",
+    "noEvents": "No recent activity."
+  },
+  "products": {
+    "yourProducts": "Your products",
+    "free": "Free",
+    "open": "Open",
+    "discoverHeading": "Discover",
+    "discover": "Learn more",
+    "noneYet": "You haven't joined any products yet."
+  },
+  "billing": {
+    "empty": "No active plans yet.",
+    "renews": "Renews",
+    "giftedAccess": "Gifted Access",
+    "active": "Active",
+    "cancelingSoon": "Ends at period end"
+  },
+  "profile": {
+    "identityHeading": "Identity",
+    "globalId": "Global account ID",
+    "pendingEmail": "Change to {{email}} pending - check that inbox to confirm.",
+    "changeEmailHeading": "Change email",
+    "changeEmailHint": "We'll send a confirmation link to the new address - your login email won't change until you confirm it.",
+    "requestChange": "Send confirmation",
+    "emailChangeRequested": "Confirmation email sent - check your new inbox.",
+    "languageHeading": "Language"
+  },
+  "security": {
+    "changePasswordHeading": "Change password",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "revokeOthersOnChange": "Sign out all other devices after changing my password",
+    "changePassword": "Change password",
+    "passwordChanged": "Password changed.",
+    "signOutEverywhereHeading": "Sign out everywhere",
+    "signOutEverywhereHint": "Immediately ends every other session and prevents any product from silently renewing your access.",
+    "signOutEverywhere": "Sign out of all devices",
+    "recentActivity": "Recent security activity",
+    "closureHeading": "Close account",
+    "closureHint": "Disables your central account and signs you out everywhere. This does not delete your data - see our data policy for what happens next.",
+    "closureReasonPlaceholder": "Reason (optional)",
+    "requestClosure": "Request account closure",
+    "closurePendingConfirmation": "Closure requested - confirming will disable your account immediately.",
+    "confirmClosure": "Confirm closure",
+    "closureInProgress": "Closure status: {{status}}"
+  },
+  "sessions": {
+    "unknownDevice": "Unknown device",
+    "currentSession": "This device",
+    "lastUsed": "Last used",
+    "signOut": "Sign out",
+    "empty": "No active sessions."
+  },
+  "connectedApps": {
+    "hint": "Products in the ecosystem you've signed into with this identity.",
+    "firstAuthorized": "First authorized",
+    "lastUsed": "Last used",
+    "empty": "No connected products yet."
+  },
+  "securityEvents": {
+    "user_signup": "Account created",
+    "user_login": "Signed in",
+    "password_changed": "Password changed",
+    "session_revoked": "A session was signed out",
+    "all_sessions_revoked": "Signed out of all devices",
+    "email_change_requested": "Email change requested",
+    "email_changed": "Email changed"
+  }
+}
