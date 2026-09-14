@@ -61,7 +61,8 @@ app.add_middleware(
         "http://localhost:8100", "http://127.0.0.1:8100",
         "http://localhost:8101", "http://127.0.0.1:8101",
         "http://localhost:8102", "http://127.0.0.1:8102",
-        "http://localhost:5273", "http://127.0.0.1:5273",
+        "http://localhost:5273", "http://127.0.0.1:5273",  # admin-frontend (Grand Admin)
+        "http://localhost:5274", "http://127.0.0.1:5274",  # account-frontend (Account Portal) - Mission 6 continuation
     ],
     allow_credentials=True,
     allow_methods=["*"],

@@ -314,8 +314,21 @@ async def grant_or_change_entitlement(
     replace it with a non-paddle source — an admin action must never
     silently downgrade or corrupt what a real payment already granted
     (mission-brief section 16), mirroring Loady's own
-    `PaidSubscriptionActiveError` precedent."""
-    if not rbac_service.is_global_or_product_admin(db, admin.id, payload.product_id):
+    `PaidSubscriptionActiveError` precedent.
+
+    Mission 6 continuation security review finding: a revenue-adjacent
+    source (`paddle`/`lifetime`) may only ever be set by a GLOBAL admin,
+    never a product-scoped one - product-scoping this route (so a
+    per-product admin could manage their own product's entitlements) would
+    otherwise have newly let a product-scoped admin fabricate a "paid"-
+    looking entitlement for their own product with no real payment behind
+    it, inflating paid-subscriber counts/reports (PaymentRecord itself
+    can't be faked this way, but this source tag is what several report
+    queries filter on - see BILLING.md)."""
+    if payload.source in (EntitlementSource.PADDLE, EntitlementSource.LIFETIME):
+        if not rbac_service.is_global_admin(db, admin.id):
+            raise ForbiddenError("Only a global admin may mark an entitlement as paddle/lifetime-sourced.")
+    elif not rbac_service.is_global_or_product_admin(db, admin.id, payload.product_id):
         raise ForbiddenError(f"You do not have admin access to product '{payload.product_id}'.")
     target = _require_target(db, user_id)
     existing = entitlement_service.get_active_entitlement(db, target.id, payload.product_id)
