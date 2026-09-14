@@ -7,18 +7,46 @@
 # so PRODUCTION_ROLLBACK_REHEARSAL.md / verify-migration.sh can prove every
 # artifact is intact before anyone trusts it as a restore point.
 #
+# Mission 7: closes the encryption-at-rest / off-site / file-permission
+# gaps PLATFORM_BACKUP_RESTORE.md documented as "not yet implemented
+# anywhere" since Mission 4. Every backup artifact is now encrypted with
+# `openssl enc` (AES-256-CBC, PBKDF2) before its plaintext is deleted -
+# `age`/GPG were the doc's original suggestions but neither is installed
+# on this machine; openssl is already present everywhere and gives the
+# same encryption-at-rest property. BACKUP_ENCRYPTION_PASSPHRASE is
+# REQUIRED (fails closed, no plaintext-fallback mode) in both staging and
+# production - there is no principled reason a "staging" backup should be
+# allowed to sit unencrypted when a "production" one isn't.
+#
 # Usage:
-#   scripts/platform/backup-before-platform-migration.sh --env staging --out /path/to/backup/dir
+#   BACKUP_ENCRYPTION_PASSPHRASE=... scripts/platform/backup-before-platform-migration.sh \
+#       --env staging --out /path/to/backup/dir [--retention-days N] [--offsite]
 #   scripts/platform/backup-before-platform-migration.sh --env production --out ... \
 #       (refuses unless PLATFORM_MIGRATION_CONFIRM=I_UNDERSTAND_THIS_IS_PRODUCTION is set -
 #        this mission never sets that variable and never runs this script in production mode)
+#
+# Off-site (--offsite): if set, runs $BACKUP_OFFSITE_CMD (a shell command
+# template; the backup run directory is passed as $1) after the backup
+# completes. No specific provider is hard-coded - e.g.
+#   BACKUP_OFFSITE_CMD='rclone copy "$1" remote:bucket/platform-backups/'
+# UNTESTED beyond the invocation mechanism itself in this environment: no
+# real off-site target (cloud storage account, rclone remote, etc.) is
+# configured here to push to. See docs/platform/PLATFORM_BACKUP_RESTORE.md.
 set -euo pipefail
 
+BACKUP_ENCRYPTION_PASSPHRASE="${BACKUP_ENCRYPTION_PASSPHRASE:-}"
+if [[ -z "$BACKUP_ENCRYPTION_PASSPHRASE" ]]; then
+  echo "NO-GO: BACKUP_ENCRYPTION_PASSPHRASE must be set - backups are never written unencrypted." >&2
+  exit 1
+fi
+
+RETENTION_DAYS=""
+DO_OFFSITE=""
 ENV=""
 OUT_DIR=""
 
 usage() {
-  echo "Usage: $0 --env staging|production --out <backup-dir>" >&2
+  echo "Usage: $0 --env staging|production --out <backup-dir> [--retention-days N] [--offsite]" >&2
   exit 2
 }
 
@@ -26,6 +54,8 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --env) ENV="${2:-}"; shift 2 ;;
     --out) OUT_DIR="${2:-}"; shift 2 ;;
+    --retention-days) RETENTION_DAYS="${2:-}"; shift 2 ;;
+    --offsite) DO_OFFSITE="1"; shift 1 ;;
     *) usage ;;
   esac
 done
@@ -66,20 +96,39 @@ RUN_DIR="$OUT_DIR/${ENV}-${TIMESTAMP}"
 mkdir -p "$RUN_DIR"
 echo "Writing backup to: $RUN_DIR"
 
+# Encrypts a data file in place (writes <file>.enc, then deletes the
+# plaintext) - AES-256-CBC + PBKDF2 via openssl, since neither `age` nor
+# `gpg` (the doc's original suggestions) is installed here. The
+# plaintext is never left on disk once this returns.
+encrypt_in_place() {
+  local plaintext="$1"
+  openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt \
+    -in "$plaintext" -out "${plaintext}.enc" -pass env:BACKUP_ENCRYPTION_PASSPHRASE
+  rm -f "$plaintext"
+}
+
 echo "==> Dumping Loady Postgres ($LOADY_PG_DB)..."
 docker exec "$LOADY_PG_CONTAINER" pg_dump -U "$LOADY_PG_USER" -d "$LOADY_PG_DB" -Fc -f /tmp/loady_backup.dump
 docker cp "$LOADY_PG_CONTAINER:/tmp/loady_backup.dump" "$RUN_DIR/loady_postgres.dump"
 docker exec "$LOADY_PG_CONTAINER" rm -f /tmp/loady_backup.dump
+echo "==> Encrypting loady_postgres.dump..."
+encrypt_in_place "$RUN_DIR/loady_postgres.dump"
 
 echo "==> Copying Loady history/settings SQLite file..."
-docker cp "$LOADY_BACKEND_CONTAINER:/var/lib/loady/data/app.db" "$RUN_DIR/loady_app.db" 2>/dev/null \
-  || echo "    (no app.db present yet - acceptable for a brand-new environment)"
+if docker cp "$LOADY_BACKEND_CONTAINER:/var/lib/loady/data/app.db" "$RUN_DIR/loady_app.db" 2>/dev/null; then
+  echo "==> Encrypting loady_app.db..."
+  encrypt_in_place "$RUN_DIR/loady_app.db"
+else
+  echo "    (no app.db present yet - acceptable for a brand-new environment)"
+fi
 
 if [[ -n "$PLATFORM_PG_CONTAINER" ]] && docker inspect -f '{{.State.Running}}' "$PLATFORM_PG_CONTAINER" >/dev/null 2>&1; then
   echo "==> Dumping Platform Core Postgres ($PLATFORM_PG_DB)..."
   docker exec "$PLATFORM_PG_CONTAINER" pg_dump -U "$PLATFORM_PG_USER" -d "$PLATFORM_PG_DB" -Fc -f /tmp/platform_backup.dump
   docker cp "$PLATFORM_PG_CONTAINER:/tmp/platform_backup.dump" "$RUN_DIR/platform_core_postgres.dump"
   docker exec "$PLATFORM_PG_CONTAINER" rm -f /tmp/platform_backup.dump
+  echo "==> Encrypting platform_core_postgres.dump..."
+  encrypt_in_place "$RUN_DIR/platform_core_postgres.dump"
 else
   echo "==> Platform Core Postgres not running/configured - skipping (not yet initialized)."
 fi
@@ -108,8 +157,26 @@ echo "==> Recording configuration inventory (variable NAMES only - never values)
   fi
 } > "$RUN_DIR/config_inventory.txt"
 
-echo "==> Computing checksums..."
+echo "==> Computing checksums (of the encrypted artifacts, not plaintext - none remains on disk)..."
 (cd "$RUN_DIR" && shasum -a 256 -- * > CHECKSUMS.sha256 2>/dev/null || sha256sum -- * > CHECKSUMS.sha256)
+
+echo "==> Restricting backup file permissions (owner-only)..."
+chmod 700 "$RUN_DIR"
+chmod 600 "$RUN_DIR"/*
+
+if [[ -n "$RETENTION_DAYS" ]]; then
+  echo "==> Pruning backups older than $RETENTION_DAYS day(s) under $OUT_DIR..."
+  find "$OUT_DIR" -maxdepth 1 -mindepth 1 -type d -name '*-*' -mtime "+${RETENTION_DAYS}" -print -exec rm -rf {} \;
+fi
+
+if [[ -n "$DO_OFFSITE" ]]; then
+  if [[ -z "${BACKUP_OFFSITE_CMD:-}" ]]; then
+    echo "NO-GO: --offsite was given but BACKUP_OFFSITE_CMD is not set." >&2
+    exit 1
+  fi
+  echo "==> Pushing off-site (BACKUP_OFFSITE_CMD)..."
+  bash -c "$BACKUP_OFFSITE_CMD" -- "$RUN_DIR"
+fi
 
 echo "==> Backup complete: $RUN_DIR"
 cat "$RUN_DIR/CHECKSUMS.sha256"

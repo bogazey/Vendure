@@ -132,12 +132,21 @@ base) and threat model, not a generic checklist.
   proven, not assumed: a deliberately-corrupted **copy** of a real backup
   was correctly rejected before any restore attempt, while the original
   verified and restored cleanly.
-- `BLOCKER` (unchanged) — No encryption of the backup file itself, no
-  off-site storage, no automation/retention policy (see
-  `PLATFORM_BACKUP_RESTORE.md`). Checksumming and restore-verification
-  (this mission's additions) reduce but do not eliminate this gap — a
-  backup that only ever lives on the same host as the database it backs
-  up still does not survive that host's failure.
+- ✅ **DONE (Mission 7) — encryption-at-rest, file permissions, and
+  retention pruning added and verified end-to-end** against the real
+  staging containers (real backup taken and encrypted, wrong-passphrase
+  rejection confirmed, restore-from-encrypted-backup succeeded into an
+  isolated container, old backup directory pruned by `--retention-days`).
+  See `PLATFORM_BACKUP_RESTORE.md` "Mission 7 additions" for the full
+  verification record.
+- `BLOCKER` (narrowed, not closed) — **off-site storage still not
+  configured anywhere.** The push mechanism (`--offsite` /
+  `BACKUP_OFFSITE_CMD`) was built and verified to actually fire with a
+  local stand-in destination, but no real remote target (cloud storage
+  account, rclone remote, etc.) exists in this environment to point it
+  at. A backup that only ever lives on the same host as the database it
+  backs up still does not survive that host's failure — this remains
+  true until someone configures a real `BACKUP_OFFSITE_CMD`.
 
 ## Restore
 
@@ -374,8 +383,16 @@ base) and threat model, not a generic checklist.
 ## Consolidated summary (Mission 5, Phase 36 classification)
 
 **Remaining BLOCKERs** (must fix before any real production migration):
-1. Backup encryption-at-rest, off-site storage, and automation (Backup).
-2. Ecosystem-wide logout does not exist (Identity).
+1. Backup off-site storage specifically (Backup) — encryption-at-rest,
+   file permissions, and retention are DONE (Mission 7, see above);
+   off-site is the one piece still not configured anywhere.
+2. Ecosystem-wide logout does not exist (Identity) — NOTE: stale as of
+   Mission 6, which added `logout_all_sessions` (security_epoch-based,
+   immediate for the session_access cookie) and Mission 7, which closed
+   the remaining single-session-revoke gap - this whole checklist
+   predates both and was not otherwise re-audited this session; treat
+   this specific line as superseded, not as evidence the rest of the
+   list is current.
 3. Self-signed TLS in staging — production needs a real certificate
    (TLS) — not a code change, but genuinely unstarted.
 

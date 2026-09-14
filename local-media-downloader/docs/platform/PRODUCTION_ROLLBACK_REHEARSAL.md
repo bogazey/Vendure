@@ -4,6 +4,23 @@ Status: EXECUTED against `loady-staging` / `platform-core-staging` on this
 machine. All timings and findings below are measured, not estimated.
 Nothing here touched real production.
 
+**Mission 7 note**: `backup-before-platform-migration.sh` now encrypts
+every artifact it writes (`loady_postgres.dump.enc`, not
+`loady_postgres.dump` - see `docs/platform/PLATFORM_BACKUP_RESTORE.md`
+"Mission 7 additions"), which broke `rollback-platform-migration.sh`'s
+`--layer full-restore` (it referenced the old plaintext filename
+directly). Fixed to decrypt via `BACKUP_ENCRYPTION_PASSPHRASE` before
+restoring - caught by grepping every caller of the backup scripts after
+adding encryption, not assumed safe. **Not re-executed end-to-end this
+session**: `--layer kill-switch` rewrites the real, currently-configured
+`.env.staging` in place (blanking `PLATFORM_CLIENT_ID`/`SECRET`), and
+`--layer full-restore` stops the live `loady-staging-backend-1` and
+drops/recreates `loady_staging` - both real, disruptive actions against
+the currently-running staging environment's actual configuration, not
+just a syntax check. Re-running this full rehearsal for real (as Mission
+5 did) is a reasonable next step, but wasn't done unprompted this
+session given the mutating effect on `.env.staging`.
+
 ## Phase 20 — Disaster scenario decision table
 
 For each injected failure, the objective decision (continue / retry /

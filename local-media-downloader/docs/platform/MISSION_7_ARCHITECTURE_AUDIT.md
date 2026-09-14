@@ -187,7 +187,7 @@ requires an SDK method.
 | Platform Core staging compose | `platform-core/compose.staging.yml` | central, never merged into a combined production-shape file |
 | Maintenance mode | `backend/app/config/commercial_settings.py:44` (`MAINTENANCE_MODE`, default `false`) | product-owned, real, proven live in Mission 5 rehearsal |
 | Preflight script | `scripts/platform/preflight-production-migration.sh` | central-adjacent tooling, functional, missing several Mission-7-specific checks (capacity, port conflicts, debug-mode exposure — see Phase 26) |
-| Backup scripts | `scripts/platform/backup-before-platform-migration.sh`, `verify-backup-restorable.sh` | functional, unencrypted, no off-site target — BLOCKER carried from Mission 5 |
+| Backup scripts | `scripts/platform/backup-before-platform-migration.sh`, `verify-backup-restorable.sh` | **RESOLVED this mission**: encryption-at-rest, file permissions, retention pruning all added and verified end-to-end against the real staging containers. Off-site push mechanism built and verified with a local stand-in; a real remote destination is not configured anywhere — the one open item, see `docs/platform/PLATFORM_BACKUP_RESTORE.md` "Mission 7 additions" |
 
 **Combined production Compose (Phase 18): PARTIALLY RESOLVED.**
 `compose.rc.yml` (added at the Mission 7 checkpoint, before this
@@ -271,6 +271,6 @@ historical record).
 | Ecosystem-wide sign-out (bounded, ~15 min) | acceptable-post-cutover (documented bound, not a blocker) |
 | Combined production Compose | structurally validated this mission (config passes); build/run rehearsal is CUTOVER-DAY / NEXT-SESSION CHECK — deliberately not attempted, see section 5 |
 | Named feature flags (`PLATFORM_*_ENABLED`) | **RESOLVED this mission** — added, wrap the existing credential-dormancy check, tested |
-| Backup encryption/off-site/retention | must-build-before-cutover (BLOCKER, carried from Mission 5) |
+| Backup encryption/off-site/retention | **RESOLVED this mission** (encryption, permissions, retention verified end-to-end); real off-site destination still not configured — CUTOVER-DAY CHECK |
 | Real TLS certificate | CUTOVER-DAY CHECK (needs a real domain, not a code change) |
 | Grand Admin, Account Portal, SDKs | central, no changes needed |

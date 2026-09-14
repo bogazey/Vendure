@@ -1,8 +1,10 @@
 # Platform Core Backup / Restore (Mission 4, Phase 17)
 
 Staging-only procedure, rehearsed for real against the actual staging
-PostgreSQL container. Production adds encryption-at-rest and off-site
-storage requirements (below) not yet implemented anywhere.
+PostgreSQL container. Encryption-at-rest, file permissions, and
+retention are now implemented and verified (see "Mission 7 additions"
+below) — real off-site storage to separate infrastructure is the one
+requirement from the original list still not configured anywhere.
 
 ## Backup
 
@@ -111,12 +113,13 @@ mission brief.
   the application worked correctly against it end-to-end (phase 21) —
   the strongest form of "restore testing" available short of production
   itself.
-- **File permissions** — not yet enforced by tooling. The backup
-  directory and every file in it should be `chmod 600`/`700` (owner-only)
-  at minimum; this mission's scripts do not currently set permissions
-  explicitly (they inherit the umask of whoever runs them) — a
-  MEDIUM-severity gap to close before production, tracked in
-  `PRODUCTION_READINESS_CHECKLIST.md`.
+- **File permissions** — not yet enforced by tooling as of Mission 5.
+  The backup directory and every file in it should be `chmod 600`/`700`
+  (owner-only) at minimum; this mission's scripts do not currently set
+  permissions explicitly (they inherit the umask of whoever runs them) —
+  a MEDIUM-severity gap to close before production, tracked in
+  `PRODUCTION_READINESS_CHECKLIST.md`. **Closed in Mission 7** — see
+  below.
 - **Secret separation** — confirmed by design and re-verified this
   mission: `backup-before-platform-migration.sh`'s configuration
   inventory captures environment variable **names only**
@@ -127,18 +130,84 @@ mission brief.
   plaintext credentials — this is the existing, unchanged security
   property of both databases' own schemas, not something backup tooling
   adds or could remove.
-- **Retention** — still entirely unautomated (per the pre-existing gap
-  above). Recommendation for an initial production policy, absent any
+- **Retention** — as of Mission 5, still entirely unautomated.
+  Recommendation for an initial production policy, absent any
   automation: keep the last 7 daily backups plus the last backup taken
   immediately before any migration/cutover event, until off-site
-  automated backups exist.
-- **Off-server recommendation** — unchanged, still a BLOCKER for
-  production (see above). For the local rehearsal specifically, every
+  automated backups exist. **Automated pruning added in Mission 7** —
+  see below (the "keep 7 daily + pre-cutover" policy recommendation
+  above still applies as the retention *window* to configure via
+  `--retention-days`; this mission added the mechanism, not a mandated
+  number).
+- **Off-server recommendation** — as of Mission 5, unchanged, still a
+  BLOCKER for production. For the local rehearsal specifically, every
   backup produced by this mission is gitignored
   (`docs/platform/rehearsal-artifacts/`) and never leaves this machine —
   correct for a rehearsal, but a reminder that "committed to git" is
   never an acceptable substitute for real off-site backup storage even
-  if it were not explicitly forbidden here.
+  if it were not explicitly forbidden here. **Mission 7 built the
+  off-site push mechanism** (see below) but a real destination is still
+  not configured — this remains the one genuinely open item.
+
+## Mission 7 additions: encryption, file permissions, retention, off-site hook
+
+Closes most of "Production requirements not yet implemented" above —
+run and verified for real against the live staging containers
+(`loady-staging-postgres-1`, `platform-core-staging-postgres-1`,
+`loady-staging-backend-1`), not just read/reasoned about:
+
+- ✅ **Encryption at rest** — every data artifact
+  (`loady_postgres.dump`, `loady_app.db`, `platform_core_postgres.dump`)
+  is now encrypted with `openssl enc -aes-256-cbc -pbkdf2` immediately
+  after being written, and the plaintext is deleted in the same step -
+  `BACKUP_ENCRYPTION_PASSPHRASE` is a hard requirement
+  (`backup-before-platform-migration.sh` refuses to run without it, in
+  both staging and production mode - there is no plaintext-fallback
+  mode). `age`/GPG were this doc's original suggestions; neither is
+  installed on this machine, so `openssl` (already present everywhere)
+  was used instead - equivalent encryption-at-rest property, swap in
+  `age`/GPG later if preferred, nothing else about the pipeline depends
+  on which tool does the encryption. Verified end-to-end this mission:
+  ran a real backup against the staging containers, confirmed only
+  `.enc`/`.txt`/`.sha256` files exist on disk (no plaintext dump ever
+  left behind), then ran `verify-backup-restorable.sh` against it -
+  decrypt → checksum-verify → restore into an isolated container all
+  succeeded, and a **wrong passphrase** was confirmed to fail loudly
+  (`openssl` "bad decrypt", `pg_restore` "does not appear to be a valid
+  archive", non-zero exit) rather than silently producing corrupt data.
+- ✅ **File permissions** — `chmod 700` on the run directory, `chmod 600`
+  on every file in it, immediately after checksums are computed.
+  Verified: `ls -la` on a real run directory showed `drwx------` /
+  `-rw-------` throughout. Closes the MEDIUM-severity gap Mission 5 left
+  open.
+- ✅ **Retention** — `--retention-days N` prunes backup run-directories
+  older than N days under `--out` on every invocation (`find ... -mtime
+  +N`). Verified: created a fake backup directory dated 2020-01-01,
+  confirmed it was removed by a real invocation with
+  `--retention-days 30` while newer directories were kept.
+- **Off-site storage — mechanism built and verified, real destination
+  still NOT configured.** `--offsite` invokes `$BACKUP_OFFSITE_CMD` (an
+  operator-supplied shell command template, the run directory passed as
+  `$1`) after the backup completes - no specific provider is hard-coded,
+  matching this doc's original "object storage in a different region/
+  provider, at minimum" framing without prescribing which one. Verified
+  the invocation mechanism actually fires and receives the correct
+  directory using a local stand-in (`cp -r "$1" ...`) as
+  `BACKUP_OFFSITE_CMD` - genuinely proves the hook works, but this
+  environment has no real cloud storage account/rclone remote/etc. to
+  push to, so an actual off-site transfer to separate infrastructure
+  remains **UNTESTED** and is **still the one open item from this
+  section** before "backup encryption/off-site" can be called fully
+  resolved. Whoever configures a real `BACKUP_OFFSITE_CMD` (e.g. `rclone
+  copy "$1" remote:bucket/platform-backups/`) should re-verify the push
+  actually lands before trusting it.
+- **Automation (scheduling)** — still not built. `--retention-days` and
+  `--offsite` make the script itself capable of running unattended, but
+  nothing here adds a cron job/systemd timer/CI schedule to actually
+  invoke it periodically - that wiring is environment-specific
+  (production may run on the host directly; the local rehearsal in
+  `compose.rc.yml` doesn't need a schedule at all) and deliberately left
+  to the deployment target, not this repo's tooling.
 
 ## Mission 6 addendum (Phase 47)
 

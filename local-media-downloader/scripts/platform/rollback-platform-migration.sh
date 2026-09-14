@@ -27,6 +27,15 @@
 # Production mode requires PLATFORM_MIGRATION_CONFIRM=I_UNDERSTAND_THIS_IS_PRODUCTION,
 # exactly like backup-before-platform-migration.sh. This mission never sets
 # that variable and never runs this script against production.
+#
+# Mission 7: backup-before-platform-migration.sh now encrypts every data
+# artifact (loady_postgres.dump.enc, AES-256-CBC via openssl) - --layer
+# full-restore requires BACKUP_ENCRYPTION_PASSPHRASE to decrypt it before
+# restoring. This was a real, previously-unnoticed breakage this
+# continuation caught by grepping for every caller of the backup scripts
+# after adding encryption, not just updating the two backup scripts
+# themselves and assuming nothing else referenced their old plaintext
+# filenames.
 set -euo pipefail
 
 ENV=""
@@ -54,8 +63,11 @@ done
 [[ "$LAYER" == "kill-switch" || "$LAYER" == "full-restore" ]] || { echo "NO-GO: --layer must be kill-switch or full-restore." >&2; exit 1; }
 if [[ "$LAYER" == "full-restore" ]]; then
   [[ -n "$BACKUP_DIR" && -d "$BACKUP_DIR" ]] || { echo "NO-GO: --backup-dir is required and must exist for --layer full-restore." >&2; exit 1; }
-  [[ -f "$BACKUP_DIR/loady_postgres.dump" && -f "$BACKUP_DIR/CHECKSUMS.sha256" ]] || {
+  [[ -f "$BACKUP_DIR/loady_postgres.dump.enc" && -f "$BACKUP_DIR/CHECKSUMS.sha256" ]] || {
     echo "NO-GO: $BACKUP_DIR does not look like a backup produced by backup-before-platform-migration.sh." >&2; exit 1;
+  }
+  [[ -n "${BACKUP_ENCRYPTION_PASSPHRASE:-}" ]] || {
+    echo "NO-GO: BACKUP_ENCRYPTION_PASSPHRASE must be set to decrypt this backup for --layer full-restore." >&2; exit 1;
   }
 fi
 
@@ -102,9 +114,16 @@ if [[ "$LAYER" == "full-restore" ]]; then
   (cd "$BACKUP_DIR" && (shasum -a 256 -c CHECKSUMS.sha256 || sha256sum -c CHECKSUMS.sha256)) \
     || { echo "NO-GO: backup checksum verification failed - refusing to restore from a possibly-corrupt backup." >&2; exit 1; }
 
+  echo "--> Decrypting backup..."
+  decrypt_tmp="$(mktemp)"
+  trap 'rm -f "$decrypt_tmp"' EXIT
+  openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 \
+    -in "$BACKUP_DIR/loady_postgres.dump.enc" -out "$decrypt_tmp" -pass env:BACKUP_ENCRYPTION_PASSPHRASE
+
   echo "--> Layer 2: restoring Loady Postgres from backup..."
   docker compose -f "$COMPOSE_FILE" --env-file "$LOADY_ENV_FILE" stop backend
-  docker cp "$BACKUP_DIR/loady_postgres.dump" "$LOADY_PG_CONTAINER:/tmp/rollback_restore.dump"
+  docker cp "$decrypt_tmp" "$LOADY_PG_CONTAINER:/tmp/rollback_restore.dump"
+  rm -f "$decrypt_tmp"
   docker exec "$LOADY_PG_CONTAINER" psql -U "$LOADY_PG_USER" -d postgres -v ON_ERROR_STOP=1 -c \
     "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='$LOADY_PG_DB' AND pid != pg_backend_pid();"
   docker exec "$LOADY_PG_CONTAINER" dropdb -U "$LOADY_PG_USER" "$LOADY_PG_DB"
