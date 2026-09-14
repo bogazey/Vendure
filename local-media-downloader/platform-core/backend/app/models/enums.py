@@ -189,3 +189,4 @@ class EffectiveSourceKind(str, Enum):
     SUBSCRIPTION = "subscription"
     GIFTED = "gifted"
     BUNDLE = "bundle"
+    PROMOTION = "promotion"

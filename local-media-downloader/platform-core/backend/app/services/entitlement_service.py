@@ -114,6 +114,13 @@ def grant_or_change(
 ) -> Entitlement:
     plan = get_plan(session, product_id, plan_slug)
     now = datetime.now(timezone.utc)
+    # Pin whichever plan version is current right now (Mission 6
+    # continuation: Product Subscription Manager versioning) - `None` if
+    # the plan has never published a version, preserving pre-versioning
+    # behavior exactly.
+    from app.services import catalog_service
+
+    _capabilities, plan_version_id = catalog_service.capabilities_for_grant(session, plan)
     # Deliberately the LATEST row for this (user, product) pair, not just
     # the currently-active one: a grant against a user whose previous
     # entitlement here has already expired or been revoked must reactivate
@@ -142,6 +149,7 @@ def grant_or_change(
         existing.granted_by = admin.id
         existing.reason = reason
         existing.status = EntitlementStatus.ACTIVE.value
+        existing.plan_version_id = plan_version_id
         session.flush()
         after = {"plan_id": existing.plan_id, "source": existing.source, "status": existing.status}
         audit_service.record(
@@ -160,6 +168,7 @@ def grant_or_change(
         expires_at=expires_at,
         granted_by=admin.id,
         reason=reason,
+        plan_version_id=plan_version_id,
     )
     session.add(entitlement)
     session.flush()

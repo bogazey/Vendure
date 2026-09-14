@@ -10,7 +10,16 @@ from fastapi.responses import JSONResponse
 
 from sqlalchemy import text
 
-from app.api import routes_admin, routes_auth, routes_billing, routes_oauth, routes_pages, routes_service, routes_v1
+from app.api import (
+    routes_admin,
+    routes_auth,
+    routes_billing,
+    routes_catalog,
+    routes_oauth,
+    routes_pages,
+    routes_service,
+    routes_v1,
+)
 from app.config.logging_config import get_logger, setup_logging
 from app.config.settings import get_settings
 from app.database.db import get_engine, get_session_factory
@@ -71,6 +80,7 @@ app.include_router(routes_v1.router)
 app.include_router(routes_admin.router)
 app.include_router(routes_billing.router)
 app.include_router(routes_service.router)
+app.include_router(routes_catalog.router)
 
 
 @app.get("/health")

@@ -44,16 +44,23 @@ def upsert_subscription(
     current_period_start: datetime | None,
     current_period_end: datetime | None,
     cancel_at_period_end: bool = False,
+    price_id: str | None = None,
 ) -> Subscription:
+    from app.services import catalog_service
+
     existing = get_subscription_by_ref(session, provider, provider_subscription_ref)
     is_new = existing is None
 
     if existing is None:
+        # Pinned once, at creation, exactly like `price_id` - a later
+        # catalog/version edit must never change what THIS subscription's
+        # agreement was at signup (mission brief: version-safety).
+        _capabilities, plan_version_id = catalog_service.capabilities_for_grant(session, plan)
         existing = Subscription(
             user_id=user_id, product_id=product_id, provider=provider,
             provider_customer_ref=provider_customer_ref, provider_subscription_ref=provider_subscription_ref,
             status=status, current_period_start=current_period_start, current_period_end=current_period_end,
-            cancel_at_period_end=cancel_at_period_end,
+            cancel_at_period_end=cancel_at_period_end, price_id=price_id, plan_version_id=plan_version_id,
         )
         session.add(existing)
         session.flush()
@@ -67,7 +74,11 @@ def upsert_subscription(
             select(SubscriptionItem).where(SubscriptionItem.subscription_id == existing.id)
         ).scalars().first()
         if item is not None and item.plan_id != plan.id:
-            item.plan_id = plan.id  # a plan change (upgrade/downgrade) event
+            # A genuine plan change (upgrade/downgrade) re-pins the
+            # version too - this subscription's agreement now legitimately
+            # reflects the NEW plan, at whatever version is current for it.
+            item.plan_id = plan.id
+            _capabilities, existing.plan_version_id = catalog_service.capabilities_for_grant(session, plan)
     session.flush()
 
     _sync_legacy_entitlement(session, existing, plan, status)

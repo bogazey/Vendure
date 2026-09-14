@@ -79,12 +79,16 @@ def configure_webhook(session: Session, admin: User, client: OAuthClient, webhoo
     """Opt a client into outbound product webhooks (mission-brief Phase
     41) - generates a fresh signing secret every call (re-configuring the
     URL rotates the secret too, so a leaked old secret stops working the
-    moment an admin touches this client's webhook config again)."""
+    moment an admin touches this client's webhook config again). Stored
+    encrypted at rest (`secret_encryption.encrypt`) - only ever returned
+    to the caller once, here, at generation time; never logged."""
     import secrets as _secrets
+
+    from app.security import secret_encryption
 
     raw_secret = _secrets.token_urlsafe(32)
     client.webhook_url = webhook_url
-    client.webhook_signing_secret = raw_secret
+    client.webhook_signing_secret_encrypted = secret_encryption.encrypt(raw_secret)
     session.flush()
     audit_service.record(
         session, admin.id, AuditAction.SERVICE_CLIENT_SECRET_ROTATED, "oauth_client", client.client_id, client.product_id,

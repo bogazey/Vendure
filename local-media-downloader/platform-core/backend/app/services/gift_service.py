@@ -33,11 +33,19 @@ def grant_gift(
     reason: str | None,
     expires_at: datetime | None,
 ) -> GiftedAccess:
+    if not plan.gifted_eligible:
+        raise ForbiddenError(f"Plan '{plan.slug}' is not eligible for gifting.")
+
+    from app.services import catalog_service
+
+    _capabilities, plan_version_id = catalog_service.capabilities_for_grant(session, plan)
+
     now = datetime.now(timezone.utc)
     gift = GiftedAccess(
         user_id=target.id,
         product_id=plan.product_id,
         plan_id=plan.id,
+        plan_version_id=plan_version_id,
         reason=reason,
         granted_by=admin.id,
         granted_at=now,

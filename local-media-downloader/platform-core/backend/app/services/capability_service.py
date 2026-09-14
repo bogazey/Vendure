@@ -37,6 +37,8 @@ from app.database.models import (
     GiftedAccess,
     Plan,
     PlanEntitlement,
+    PlanVersion,
+    PromotionAccess,
     Subscription,
     SubscriptionItem,
 )
@@ -65,6 +67,8 @@ _TIE_BREAK_RANK: dict[str, int] = {
     "subscription": 100,
     "bundle": 80,
     "gifted": 60,
+    "promotion": 45,
+    "trial": 35,
     "legacy:paddle": 90,
     "legacy:lifetime": 85,
     "legacy:bundle": 75,
@@ -252,6 +256,32 @@ def _bundle_access_contributes(access: BundleAccess, now: datetime) -> bool:
     return True
 
 
+def _promotion_contributes(grant: PromotionAccess, now: datetime) -> bool:
+    if grant.status != "active":
+        return False
+    if grant.starts_at > now:
+        return False
+    if grant.expires_at <= now:
+        return False
+    return True
+
+
+def _capabilities_for(session: Session, plan: Plan, plan_version_id: str | None) -> dict[str, CapabilityValue]:
+    """Version-pinned resolution (Mission 6 continuation - Product
+    Subscription Manager versioning): if the contributing row recorded a
+    `plan_version_id` at grant time, its FROZEN snapshot is used, never
+    today's live `PlanEntitlement` rows - this is what keeps an existing
+    subscriber's capabilities stable across a later catalog edit. A
+    `None` `plan_version_id` (a row that predates plan versioning, or a
+    plan that has never published a version) falls back to the live
+    values exactly as before this feature existed."""
+    if plan_version_id is not None:
+        version = session.get(PlanVersion, plan_version_id)
+        if version is not None:
+            return dict(version.capability_snapshot)
+    return get_plan_capabilities(session, plan.id)
+
+
 def _merge_boolean(current: bool | None, candidate: bool) -> bool:
     return bool(current) or candidate
 
@@ -276,7 +306,7 @@ def resolve_effective_entitlements(
     now = now or datetime.now(timezone.utc)
     result = EffectiveEntitlementResult(product_id=product_id)
 
-    candidates: list[tuple[str, str, Plan]] = []  # (tier_key, status, plan)
+    candidates: list[tuple[str, str, Plan, str | None]] = []  # (tier_key, status, plan, plan_version_id)
 
     # 1. Legacy Entitlement (paid/free/gifted/trial/etc. not yet migrated
     # onto a dedicated V2 table).
@@ -289,7 +319,7 @@ def resolve_effective_entitlements(
         plan = session.get(Plan, legacy.plan_id)
         if plan is not None:
             tier = f"legacy:{legacy.source}"
-            candidates.append((tier, legacy.status, plan))
+            candidates.append((tier, legacy.status, plan, legacy.plan_version_id))
             result.sources.append(
                 EffectiveSource(
                     kind=EffectiveSourceKind.LEGACY_ENTITLEMENT.value,
@@ -311,7 +341,7 @@ def resolve_effective_entitlements(
             plan = session.get(Plan, item.plan_id)
             if plan is None:
                 continue
-            candidates.append(("subscription", subscription.status, plan))
+            candidates.append(("subscription", subscription.status, plan, subscription.plan_version_id))
             result.sources.append(
                 EffectiveSource(
                     kind=EffectiveSourceKind.SUBSCRIPTION.value,
@@ -330,7 +360,7 @@ def resolve_effective_entitlements(
         plan = session.get(Plan, gift.plan_id)
         if plan is None:
             continue
-        candidates.append(("gifted", gift.status, plan))
+        candidates.append(("gifted", gift.status, plan, gift.plan_version_id))
         result.sources.append(
             EffectiveSource(
                 kind=EffectiveSourceKind.GIFTED.value,
@@ -355,7 +385,7 @@ def resolve_effective_entitlements(
         plan = session.get(Plan, bpp.plan_id)
         if plan is None:
             continue
-        candidates.append(("bundle", access.status, plan))
+        candidates.append(("bundle", access.status, plan, None))
         result.sources.append(
             EffectiveSource(
                 kind=EffectiveSourceKind.BUNDLE.value,
@@ -363,11 +393,29 @@ def resolve_effective_entitlements(
             )
         )
 
+    # 5. Promotions / trials (distinct from gifted - Mission 6 continuation).
+    promotions = session.execute(
+        select(PromotionAccess).where(PromotionAccess.user_id == user_id, PromotionAccess.product_id == product_id)
+    ).scalars().all()
+    for grant in promotions:
+        if not _promotion_contributes(grant, now):
+            continue
+        plan = session.get(Plan, grant.plan_id)
+        if plan is None:
+            continue
+        candidates.append((grant.kind, grant.status, plan, grant.plan_version_id))
+        result.sources.append(
+            EffectiveSource(
+                kind=EffectiveSourceKind.PROMOTION.value,
+                plan_id=plan.id, plan_slug=plan.slug, status=grant.status, expires_at=grant.expires_at,
+            )
+        )
+
     # --- Merge capabilities across every contributing plan ---
     best_string_rank: dict[str, int] = {}
-    for tier, _status, plan in candidates:
+    for tier, _status, plan, plan_version_id in candidates:
         rank = _TIE_BREAK_RANK.get(tier, 0)
-        plan_caps = get_plan_capabilities(session, plan.id)
+        plan_caps = _capabilities_for(session, plan, plan_version_id)
         for key, value in plan_caps.items():
             if isinstance(value, bool):
                 result.capabilities[key] = _merge_boolean(result.capabilities.get(key), value)  # type: ignore[arg-type]

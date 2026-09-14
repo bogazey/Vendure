@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from app.config.settings import get_settings
 from app.database.models import OAuthClient, OutboxEvent
+from app.security import secret_encryption
 
 HttpPost = Callable[[str, dict[str, str], bytes], int]
 
@@ -95,8 +96,16 @@ def deliver_pending(session: Session, http_post: HttpPost, limit: int = 100) -> 
         body = json.dumps({"id": event.id, "event_type": event.event_type, "payload": event.payload}).encode("utf-8")
         all_ok = True
         for client in clients:
+            try:
+                raw_secret = secret_encryption.decrypt(client.webhook_signing_secret_encrypted) if client.webhook_signing_secret_encrypted else ""
+            except secret_encryption.SecretDecryptionError:
+                # A corrupt/undecryptable secret must not crash delivery
+                # to every OTHER client - treat as a per-client failure.
+                all_ok = False
+                event.last_error = f"{client.client_id}: secret could not be decrypted"
+                continue
             ts = int(time.time())
-            signature = sign(client.webhook_signing_secret or "", body, ts)
+            signature = sign(raw_secret, body, ts)
             headers = {"Content-Type": "application/json", "X-Platform-Signature": f"ts={ts};h1={signature}"}
             try:
                 status_code = http_post(client.webhook_url, headers, body)  # type: ignore[arg-type]

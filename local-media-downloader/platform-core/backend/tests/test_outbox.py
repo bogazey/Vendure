@@ -6,6 +6,7 @@ from sqlalchemy import select
 
 from app.database.models import OutboxEvent, Product, User
 from app.models.enums import GLOBAL_SCOPE, RoleSlug
+from app.security import secret_encryption
 from app.services import oidc_service, outbox_service, rbac_service
 
 
@@ -43,7 +44,7 @@ def test_delivered_event_is_signed_and_verifiable(db_session):
     product = _product(db_session, "obx-product-b")
     client, _secret = oidc_service.register_client(db_session, admin, "obx-client-b", "Obx client", product.id, [])
     client.webhook_url = "https://product.example/webhooks/platform"
-    client.webhook_signing_secret = "obx-shared-secret"
+    client.webhook_signing_secret_encrypted = secret_encryption.encrypt("obx-shared-secret")
     db_session.commit()
 
     event = outbox_service.enqueue(db_session, "entitlement.changed", product.id, {"user_id": "u2"})
@@ -79,8 +80,10 @@ def test_one_failing_client_does_not_block_delivery_to_another(db_session):
     product = _product(db_session, "obx-product-c")
     good, _s1 = oidc_service.register_client(db_session, admin, "obx-good", "Good", product.id, [])
     bad, _s2 = oidc_service.register_client(db_session, admin, "obx-bad", "Bad", product.id, [])
-    good.webhook_url, good.webhook_signing_secret = "https://good.example/hook", "secret-good"
-    bad.webhook_url, bad.webhook_signing_secret = "https://bad.example/hook", "secret-bad"
+    good.webhook_url = "https://good.example/hook"
+    good.webhook_signing_secret_encrypted = secret_encryption.encrypt("secret-good")
+    bad.webhook_url = "https://bad.example/hook"
+    bad.webhook_signing_secret_encrypted = secret_encryption.encrypt("secret-bad")
     db_session.commit()
 
     event = outbox_service.enqueue(db_session, "entitlement.changed", product.id, {"user_id": "u3"})
@@ -111,7 +114,8 @@ def test_event_reaches_failed_status_after_max_attempts(db_session):
     admin = _admin(db_session, "admin-obx3@example.com")
     product = _product(db_session, "obx-product-d")
     client, _s = oidc_service.register_client(db_session, admin, "obx-alwaysfail", "AlwaysFail", product.id, [])
-    client.webhook_url, client.webhook_signing_secret = "https://down.example/hook", "secret"
+    client.webhook_url = "https://down.example/hook"
+    client.webhook_signing_secret_encrypted = secret_encryption.encrypt("secret")
     db_session.commit()
 
     outbox_service.enqueue(db_session, "entitlement.changed", product.id, {"user_id": "u4"})

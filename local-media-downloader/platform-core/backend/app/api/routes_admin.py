@@ -1,9 +1,16 @@
-"""Grand Admin API — every route requires at least `require_global_admin`
+"""Grand Admin API — most routes require at least `require_global_admin`
 (role `admin` or `super_admin` at global scope); role/client management
 additionally requires `require_super_admin`. A normal user, or a user with
-only a product-scoped role, gets 401/403 from every route here — there is
+only a product-scoped role, gets 401/403 from every such route — there is
 no path by which a product-scoped admin can escalate to global admin
 (mission-brief sections 17/32/46).
+
+Mission 6 continuation (Product-Scoped RBAC): routes whose resource
+belongs to exactly one product (capabilities, gifted access, the simple
+plan-create endpoint below) instead use `require_product_admin`/
+`require_plan_admin`, which ALSO accept a global admin - a product-scoped
+`admin` may manage only their own product; a global admin may manage
+every product. See `api/deps.py` and `docs/platform/ADMIN_RBAC.md`.
 """
 from __future__ import annotations
 
@@ -13,7 +20,17 @@ from sqlalchemy import func, select
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, rate_limit_admin_mutation, require_global_admin, require_super_admin
+from app.api.deps import (
+    get_current_user,
+    get_db,
+    rate_limit_admin_mutation,
+    require_client_admin,
+    require_global_admin,
+    require_global_admin_or_any_product_admin,
+    require_plan_admin,
+    require_product_admin,
+    require_super_admin,
+)
 from app.database.models import (
     AuditLog,
     BillingWebhookEvent,
@@ -240,14 +257,20 @@ async def create_product(payload: AdminCreateProductRequest, db: Session = Depen
     return ProductOut.model_validate(product, from_attributes=True)
 
 
-@router.get("/products/{product_id}/plans", response_model=list[PlanOut], dependencies=[Depends(require_global_admin)])
+@router.get("/products/{product_id}/plans", response_model=list[PlanOut], dependencies=[Depends(require_product_admin)])
 async def list_plans(product_id: str, db: Session = Depends(get_db)) -> list[PlanOut]:
     plans = db.execute(select(Plan).where(Plan.product_id == product_id)).scalars().all()
     return [PlanOut.model_validate(p, from_attributes=True) for p in plans]
 
 
-@router.post("/products/{product_id}/plans", response_model=PlanOut, dependencies=[Depends(require_global_admin)])
+@router.post("/products/{product_id}/plans", response_model=PlanOut, dependencies=[Depends(require_product_admin), Depends(rate_limit_admin_mutation)])
 async def create_plan(product_id: str, slug: str, name: str, db: Session = Depends(get_db)) -> PlanOut:
+    """Minimal legacy form (name+slug only) - kept for backward
+    compatibility with Mission 6 phase 1 callers. `routes_catalog.py`'s
+    `POST /api/v1/admin/catalog/products/{product_id}/plans` is the full
+    Product Subscription Manager form (description, sort order, upgrade
+    rank, gifted/trial eligibility) and is what Grand Admin's plan editor
+    actually uses."""
     product_service.get_product(db, product_id)
     plan = entitlement_service.get_or_create_plan(db, product_id, slug, name)
     return PlanOut.model_validate(plan, from_attributes=True)
@@ -255,14 +278,16 @@ async def create_plan(product_id: str, slug: str, name: str, db: Session = Depen
 
 # --- Entitlements / Gifted Access --------------------------------------------
 
-@router.get("/gifted-access", dependencies=[Depends(require_global_admin)])
-async def list_gifted_access(db: Session = Depends(get_db)) -> list[dict]:
-    rows = db.execute(
-        select(Entitlement).where(
-            Entitlement.status == EntitlementStatus.ACTIVE.value,
-            Entitlement.source.in_(_GIFTED_SOURCES),
-        ).order_by(Entitlement.updated_at.desc())
-    ).scalars().all()
+@router.get("/gifted-access", dependencies=[Depends(require_global_admin_or_any_product_admin)])
+async def list_gifted_access(db: Session = Depends(get_db), admin: User = Depends(get_current_user)) -> list[dict]:
+    visible = rbac_service.admin_visible_product_ids(db, admin.id)
+    query = select(Entitlement).where(
+        Entitlement.status == EntitlementStatus.ACTIVE.value,
+        Entitlement.source.in_(_GIFTED_SOURCES),
+    ).order_by(Entitlement.updated_at.desc())
+    if visible is not None:
+        query = query.where(Entitlement.product_id.in_(visible))
+    rows = db.execute(query).scalars().all()
     out = []
     for e in rows:
         user = db.get(User, e.user_id)
@@ -278,9 +303,9 @@ async def list_gifted_access(db: Session = Depends(get_db)) -> list[dict]:
     return out
 
 
-@router.patch("/users/{user_id}/entitlements", dependencies=[Depends(require_global_admin), Depends(rate_limit_admin_mutation)])
+@router.patch("/users/{user_id}/entitlements", dependencies=[Depends(rate_limit_admin_mutation)])
 async def grant_or_change_entitlement(
-    user_id: str, payload: GrantEntitlementRequest, db: Session = Depends(get_db), admin: User = Depends(require_global_admin)
+    user_id: str, payload: GrantEntitlementRequest, db: Session = Depends(get_db), admin: User = Depends(get_current_user)
 ) -> dict:
     """The Gifted/Entitlement management action (mission-brief section 16).
     Blocked (409-equivalent AppError) if the user already holds an active
@@ -289,6 +314,8 @@ async def grant_or_change_entitlement(
     silently downgrade or corrupt what a real payment already granted
     (mission-brief section 16), mirroring Loady's own
     `PaidSubscriptionActiveError` precedent."""
+    if not rbac_service.is_global_or_product_admin(db, admin.id, payload.product_id):
+        raise ForbiddenError(f"You do not have admin access to product '{payload.product_id}'.")
     target = _require_target(db, user_id)
     existing = entitlement_service.get_active_entitlement(db, target.id, payload.product_id)
     if existing is not None and existing.source == EntitlementSource.PADDLE.value and payload.source != EntitlementSource.PADDLE:
@@ -302,9 +329,9 @@ async def grant_or_change_entitlement(
     return {"id": entitlement.id, "status": entitlement.status, "source": entitlement.source}
 
 
-@router.delete("/users/{user_id}/entitlements/{product_id}", dependencies=[Depends(require_global_admin), Depends(rate_limit_admin_mutation)])
+@router.delete("/users/{user_id}/entitlements/{product_id}", dependencies=[Depends(rate_limit_admin_mutation)])
 async def revoke_entitlement(
-    user_id: str, product_id: str, payload: RevokeEntitlementRequest, db: Session = Depends(get_db), admin: User = Depends(require_global_admin)
+    user_id: str, product_id: str, payload: RevokeEntitlementRequest, db: Session = Depends(get_db), admin: User = Depends(require_product_admin)
 ) -> dict:
     target = _require_target(db, user_id)
     existing = entitlement_service.get_active_entitlement(db, target.id, product_id)
@@ -361,7 +388,7 @@ async def audit_log(db: Session = Depends(get_db), limit: int = Query(default=10
 # =============================================================================
 
 
-@router.get("/products/{product_id}/capabilities", dependencies=[Depends(require_global_admin)])
+@router.get("/products/{product_id}/capabilities", dependencies=[Depends(require_product_admin)])
 async def list_capabilities(product_id: str, db: Session = Depends(get_db)) -> list[dict]:
     defs = capability_service.list_capabilities(db, product_id)
     return [
@@ -370,8 +397,8 @@ async def list_capabilities(product_id: str, db: Session = Depends(get_db)) -> l
     ]
 
 
-@router.post("/products/{product_id}/capabilities", dependencies=[Depends(require_global_admin), Depends(rate_limit_admin_mutation)])
-async def define_capability(product_id: str, payload: dict, db: Session = Depends(get_db), admin: User = Depends(require_global_admin)) -> dict:
+@router.post("/products/{product_id}/capabilities", dependencies=[Depends(rate_limit_admin_mutation)])
+async def define_capability(product_id: str, payload: dict, db: Session = Depends(get_db), admin: User = Depends(require_product_admin)) -> dict:
     product_service.get_product(db, product_id)
     try:
         value_type = CapabilityValueType(payload["value_type"])
@@ -384,15 +411,15 @@ async def define_capability(product_id: str, payload: dict, db: Session = Depend
     return {"id": definition.id, "key": definition.key, "value_type": definition.value_type}
 
 
-@router.get("/plans/{plan_id}/capabilities", dependencies=[Depends(require_global_admin)])
+@router.get("/plans/{plan_id}/capabilities", dependencies=[Depends(require_plan_admin)])
 async def get_plan_capabilities(plan_id: str, db: Session = Depends(get_db)) -> dict:
     if db.get(Plan, plan_id) is None:
         raise NotFoundError("Plan not found.")
     return capability_service.get_plan_capabilities(db, plan_id)
 
 
-@router.put("/plans/{plan_id}/capabilities/{key}", dependencies=[Depends(require_global_admin), Depends(rate_limit_admin_mutation)])
-async def set_plan_capability(plan_id: str, key: str, payload: dict, db: Session = Depends(get_db), admin: User = Depends(require_global_admin)) -> dict:
+@router.put("/plans/{plan_id}/capabilities/{key}", dependencies=[Depends(rate_limit_admin_mutation)])
+async def set_plan_capability(plan_id: str, key: str, payload: dict, db: Session = Depends(get_db), admin: User = Depends(require_plan_admin)) -> dict:
     plan = db.get(Plan, plan_id)
     if plan is None:
         raise NotFoundError("Plan not found.")
@@ -401,7 +428,7 @@ async def set_plan_capability(plan_id: str, key: str, payload: dict, db: Session
     return {"plan_id": plan_id, "key": key, "value": payload["value"]}
 
 
-@router.get("/users/{user_id}/effective-entitlements", dependencies=[Depends(require_global_admin)])
+@router.get("/users/{user_id}/effective-entitlements", dependencies=[Depends(require_product_admin)])
 async def effective_entitlements(user_id: str, product_id: str = Query(...), db: Session = Depends(get_db)) -> dict:
     _require_target(db, user_id)
     result = capability_service.resolve_effective_entitlements(db, user_id, product_id)
@@ -421,10 +448,14 @@ async def effective_entitlements(user_id: str, product_id: str = Query(...), db:
 # =============================================================================
 
 
-@router.get("/users/{user_id}/gifts", dependencies=[Depends(require_global_admin)])
-async def list_user_gifts(user_id: str, db: Session = Depends(get_db)) -> list[dict]:
+@router.get("/users/{user_id}/gifts", dependencies=[Depends(require_global_admin_or_any_product_admin)])
+async def list_user_gifts(user_id: str, db: Session = Depends(get_db), admin: User = Depends(get_current_user)) -> list[dict]:
     _require_target(db, user_id)
-    return [_gift_out(db, g) for g in gift_service.list_gift_history(db, user_id)]
+    visible = rbac_service.admin_visible_product_ids(db, admin.id)
+    history = gift_service.list_gift_history(db, user_id)
+    if visible is not None:
+        history = [g for g in history if g.product_id in visible]
+    return [_gift_out(db, g) for g in history]
 
 
 def _gift_out(db: Session, gift: GiftedAccess) -> dict:
@@ -437,8 +468,13 @@ def _gift_out(db: Session, gift: GiftedAccess) -> dict:
     }
 
 
-@router.post("/users/{user_id}/gifts", dependencies=[Depends(require_global_admin), Depends(rate_limit_admin_mutation)])
-async def grant_gift(user_id: str, payload: dict, db: Session = Depends(get_db), admin: User = Depends(require_global_admin)) -> dict:
+@router.post("/users/{user_id}/gifts", dependencies=[Depends(rate_limit_admin_mutation)])
+async def grant_gift(user_id: str, payload: dict, db: Session = Depends(get_db), admin: User = Depends(get_current_user)) -> dict:
+    # product_id lives in the body, not a path/query parameter, so the
+    # product-scope check happens here rather than as a route dependency
+    # (mission 6 continuation: product-scoped RBAC).
+    if not rbac_service.is_global_or_product_admin(db, admin.id, payload["product_id"]):
+        raise ForbiddenError(f"You do not have admin access to product '{payload['product_id']}'.")
     target = _require_target(db, user_id)
     plan = entitlement_service.get_plan(db, payload["product_id"], payload["plan_slug"])
     expires_at = datetime.fromisoformat(payload["expires_at"]) if payload.get("expires_at") else None
@@ -446,8 +482,13 @@ async def grant_gift(user_id: str, payload: dict, db: Session = Depends(get_db),
     return _gift_out(db, gift)
 
 
-@router.delete("/gifts/{gift_id}", dependencies=[Depends(require_global_admin), Depends(rate_limit_admin_mutation)])
-async def revoke_gift(gift_id: str, payload: dict | None = None, db: Session = Depends(get_db), admin: User = Depends(require_global_admin)) -> dict:
+@router.delete("/gifts/{gift_id}", dependencies=[Depends(rate_limit_admin_mutation)])
+async def revoke_gift(gift_id: str, payload: dict | None = None, db: Session = Depends(get_db), admin: User = Depends(get_current_user)) -> dict:
+    existing = db.get(GiftedAccess, gift_id)
+    if existing is None:
+        raise NotFoundError("Gift not found.")
+    if not rbac_service.is_global_or_product_admin(db, admin.id, existing.product_id):
+        raise ForbiddenError(f"You do not have admin access to product '{existing.product_id}'.")
     reason = (payload or {}).get("reason")
     gift = gift_service.revoke_gift(db, admin, gift_id, reason)
     return _gift_out(db, gift)
@@ -518,11 +559,14 @@ async def list_user_bundle_access(user_id: str, db: Session = Depends(get_db)) -
 # =============================================================================
 
 
-@router.get("/subscriptions", dependencies=[Depends(require_global_admin)])
-async def list_subscriptions(db: Session = Depends(get_db), user_id: str | None = Query(default=None), limit: int = Query(default=100, le=500)) -> list[dict]:
+@router.get("/subscriptions", dependencies=[Depends(require_global_admin_or_any_product_admin)])
+async def list_subscriptions(db: Session = Depends(get_db), admin: User = Depends(get_current_user), user_id: str | None = Query(default=None), limit: int = Query(default=100, le=500)) -> list[dict]:
+    visible = rbac_service.admin_visible_product_ids(db, admin.id)
     query = select(Subscription).order_by(Subscription.created_at.desc()).limit(limit)
     if user_id:
         query = query.where(Subscription.user_id == user_id)
+    if visible is not None:
+        query = query.where(Subscription.product_id.in_(visible))
     rows = db.execute(query).scalars().all()
     return [
         {"id": s.id, "user_id": s.user_id, "product_id": s.product_id, "provider": s.provider,
@@ -532,16 +576,22 @@ async def list_subscriptions(db: Session = Depends(get_db), user_id: str | None 
     ]
 
 
-@router.get("/payments", dependencies=[Depends(require_global_admin)])
-async def list_payments(db: Session = Depends(get_db), user_id: str | None = Query(default=None), limit: int = Query(default=100, le=500)) -> list[dict]:
+@router.get("/payments", dependencies=[Depends(require_global_admin_or_any_product_admin)])
+async def list_payments(db: Session = Depends(get_db), admin: User = Depends(get_current_user), user_id: str | None = Query(default=None), limit: int = Query(default=100, le=500)) -> list[dict]:
     """Every row here is real (mission-brief Phase 12/36): only
     `webhook_service._apply_transaction_event` ever inserts a
     `PaymentRecord`, and only from a signature-verified
     `transaction.completed` provider event - nothing in this listing is
-    ever estimated or fabricated."""
+    ever estimated or fabricated. A product-scoped admin (mission 6
+    continuation) sees only their own product's payments - "Filey admin
+    must not see Loady's payments" applies here exactly as much as to
+    prices/plans."""
+    visible = rbac_service.admin_visible_product_ids(db, admin.id)
     query = select(PaymentRecord).order_by(PaymentRecord.created_at.desc()).limit(limit)
     if user_id:
         query = query.where(PaymentRecord.user_id == user_id)
+    if visible is not None:
+        query = query.where(PaymentRecord.product_id.in_(visible))
     rows = db.execute(query).scalars().all()
     return [
         {"id": p.id, "user_id": p.user_id, "product_id": p.product_id, "provider": p.provider,
@@ -575,13 +625,17 @@ async def replay_billing_webhook(webhook_event_id: str, db: Session = Depends(ge
 
 
 # =============================================================================
-# Mission 6 (Phase 36): service clients (super_admin only, matches existing
-# OAuth client registration's own privilege level)
+# Mission 6 continuation: service clients. Granting a scope / configuring
+# a webhook is now product-scoped (`require_client_admin` also accepts a
+# global admin) - a product's own admin may configure ITS OWN client
+# without needing super_admin. Registering a brand-new client and
+# rotating an existing secret remain super_admin-only (see
+# `api/deps.py::require_client_admin`'s own docstring for why).
 # =============================================================================
 
 
-@router.post("/clients/{client_id}/service-grants", dependencies=[Depends(require_super_admin), Depends(rate_limit_admin_mutation)])
-async def grant_service_scope(client_id: str, payload: dict, db: Session = Depends(get_db), admin: User = Depends(require_super_admin)) -> dict:
+@router.post("/clients/{client_id}/service-grants", dependencies=[Depends(rate_limit_admin_mutation)])
+async def grant_service_scope(client_id: str, payload: dict, db: Session = Depends(get_db), admin: User = Depends(require_client_admin)) -> dict:
     client = db.get(OAuthClient, client_id)
     if client is None:
         raise NotFoundError("Client not found.")
@@ -589,7 +643,7 @@ async def grant_service_scope(client_id: str, payload: dict, db: Session = Depen
     return {"client_id": client_id, "scope": grant.scope}
 
 
-@router.get("/clients/{client_id}/service-grants", dependencies=[Depends(require_super_admin)])
+@router.get("/clients/{client_id}/service-grants", dependencies=[Depends(require_client_admin)])
 async def list_service_scopes(client_id: str, db: Session = Depends(get_db)) -> list[str]:
     return service_auth.list_scopes(db, client_id)
 
@@ -603,8 +657,8 @@ async def rotate_client_secret(client_id: str, db: Session = Depends(get_db), ad
     return {"client_id": client_id, "client_secret": raw_secret}
 
 
-@router.post("/clients/{client_id}/webhook", dependencies=[Depends(require_super_admin), Depends(rate_limit_admin_mutation)])
-async def configure_client_webhook(client_id: str, payload: dict, db: Session = Depends(get_db), admin: User = Depends(require_super_admin)) -> dict:
+@router.post("/clients/{client_id}/webhook", dependencies=[Depends(rate_limit_admin_mutation)])
+async def configure_client_webhook(client_id: str, payload: dict, db: Session = Depends(get_db), admin: User = Depends(require_client_admin)) -> dict:
     """Opts a product's registered client into outbound Platform Core
     webhooks (mission-brief Phase 41). The returned signing secret is
     shown exactly once, matching the existing client-secret/rotate-secret
@@ -643,13 +697,19 @@ async def system_health(db: Session = Depends(get_db)) -> dict:
     }
 
 
-@router.get("/outbox", dependencies=[Depends(require_global_admin)])
-async def list_outbox_events(db: Session = Depends(get_db), status_filter: str | None = Query(default=None, alias="status"), limit: int = Query(default=100, le=500)) -> list[dict]:
+@router.get("/outbox", dependencies=[Depends(require_global_admin_or_any_product_admin)])
+async def list_outbox_events(db: Session = Depends(get_db), admin: User = Depends(get_current_user), status_filter: str | None = Query(default=None, alias="status"), limit: int = Query(default=100, le=500)) -> list[dict]:
     from app.database.models import OutboxEvent
 
+    visible = rbac_service.admin_visible_product_ids(db, admin.id)
     query = select(OutboxEvent).order_by(OutboxEvent.created_at.desc()).limit(limit)
     if status_filter:
         query = query.where(OutboxEvent.status == status_filter)
+    if visible is not None:
+        # A product-less (global/system) event has product_id IS NULL -
+        # never shown to a product-scoped-only admin, since it isn't
+        # theirs to see either.
+        query = query.where(OutboxEvent.product_id.in_(visible))
     rows = db.execute(query).scalars().all()
     return [
         {"id": e.id, "event_type": e.event_type, "product_id": e.product_id, "status": e.status,

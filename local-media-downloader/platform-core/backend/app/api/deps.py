@@ -18,7 +18,7 @@ from app.security.jwt_tokens import (
 )
 from app.services import rbac_service
 from app.services.rate_limit_service import admin_mutation_limiter
-from app.utils.exceptions import AuthError, ForbiddenError, InsufficientScopeError, RateLimitedError
+from app.utils.exceptions import AuthError, ForbiddenError, InsufficientScopeError, NotFoundError, RateLimitedError
 
 SESSION_ACCESS_COOKIE = "plat_session_access"
 SESSION_REFRESH_COOKIE = "plat_session_refresh"
@@ -77,6 +77,89 @@ def require_super_admin(
 ) -> User:
     if not rbac_service.is_super_admin(db, user.id):
         raise ForbiddenError("Super admin access required.")
+    return user
+
+
+# --- Mission 6 continuation: product-scoped RBAC ----------------------------
+#
+# A product-scoped `admin` role assignment (RoleAssignment.scope ==
+# "product:<slug>") grants admin access ONLY to that product's own catalog/
+# gifts/webhook config - never another product's, and never a global role
+# or client-registration action (mission-brief: "a Loady product admin
+# must not manage Gamey plans... or global platform roles"). Every
+# dependency below resolves the concrete product_id from whatever path
+# parameter the route actually has (a plan, a price, or a client are each
+# owned by exactly one product) and checks it BEFORE the route body runs -
+# enforcement lives here, at the backend, not in whether a UI happens to
+# hide a button.
+
+
+def require_product_admin(
+    product_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)
+) -> User:
+    if not rbac_service.is_global_or_product_admin(db, user.id, product_id):
+        raise ForbiddenError(f"You do not have admin access to product '{product_id}'.")
+    return user
+
+
+def require_plan_admin(
+    plan_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)
+) -> User:
+    from app.database.models import Plan
+
+    plan = db.get(Plan, plan_id)
+    if plan is None:
+        raise NotFoundError("Plan not found.")
+    if not rbac_service.is_global_or_product_admin(db, user.id, plan.product_id):
+        raise ForbiddenError(f"You do not have admin access to product '{plan.product_id}'.")
+    return user
+
+
+def require_price_admin(
+    price_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)
+) -> User:
+    from app.database.models import Price
+
+    price = db.get(Price, price_id)
+    if price is None:
+        raise NotFoundError("Price not found.")
+    if not rbac_service.is_global_or_product_admin(db, user.id, price.product_id):
+        raise ForbiddenError(f"You do not have admin access to product '{price.product_id}'.")
+    return user
+
+
+def require_global_admin_or_any_product_admin(
+    user: User = Depends(get_current_user), db: Session = Depends(get_db)
+) -> User:
+    """Gate for a cross-product LISTING endpoint that has no single
+    product_id path/query parameter to check (e.g. a user's gift
+    history spans every product they've ever touched) - lets in anyone
+    with global admin OR at least one product-scoped admin role; the
+    route body itself is responsible for filtering rows down to
+    `rbac_service.admin_visible_product_ids`."""
+    if rbac_service.is_global_admin(db, user.id):
+        return user
+    if rbac_service.admin_visible_product_ids(db, user.id):
+        return user
+    raise ForbiddenError("Admin access required.")
+
+
+def require_client_admin(
+    client_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)
+) -> User:
+    """Scoped OAuthClient operations (webhook config, service grants) -
+    NOT client secret rotation or new-client registration, which remain
+    super_admin-only (a product admin rotating their own client's secret
+    is a reasonable ask but was judged lower priority than closing the
+    catalog/plan/price gaps this continuation was chartered to fix first;
+    tracked as a known limitation, see MISSION_6_SECURITY_REVIEW.md)."""
+    from app.database.models import OAuthClient
+
+    client = db.get(OAuthClient, client_id)
+    if client is None:
+        raise NotFoundError("Client not found.")
+    if client.product_id is None or not rbac_service.is_global_or_product_admin(db, user.id, client.product_id):
+        raise ForbiddenError("You do not have admin access to this client's product.")
     return user
 
 

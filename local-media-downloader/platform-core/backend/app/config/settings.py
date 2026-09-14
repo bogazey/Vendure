@@ -80,6 +80,13 @@ class PlatformSettings(BaseSettings):
     outbox_delivery_timeout_seconds: float = Field(default=5.0, alias="OUTBOX_DELIVERY_TIMEOUT_SECONDS")
     outbox_max_attempts: int = Field(default=5, alias="OUTBOX_MAX_ATTEMPTS")
 
+    # --- Mission 6 continuation: webhook secret encryption at rest ---
+    # 32 raw bytes, base64-encoded. Empty in dev (an ephemeral per-process
+    # key is generated instead - see app/security/secret_encryption.py);
+    # staging/production MUST set a real value or every encrypt/decrypt
+    # call fails closed rather than storing plaintext.
+    webhook_secret_encryption_key: str = Field(default="", alias="WEBHOOK_SECRET_ENCRYPTION_KEY")
+
 
 _settings: PlatformSettings | None = None
 

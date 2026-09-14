@@ -170,15 +170,14 @@ class OAuthClient(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     # --- Mission 6 (Phase 41): where/how to deliver outbound product
-    # webhooks for this client's product. `webhook_signing_secret` is
-    # stored in plaintext in this mission's local/test architecture (it
-    # must be presented again at verification time, unlike a login
-    # credential, which only round-trips as a hash) - flagged in
-    # SECURITY.md as a known limitation needing a secrets manager before
-    # any real deployment. `None` means this client has not opted into
-    # outbound webhooks; events destined for it simply are not delivered.
+    # webhooks for this client's product. `webhook_signing_secret_
+    # encrypted` holds the AES-256-GCM envelope from
+    # `app/security/secret_encryption.py` (mirrors Loady's
+    # `token_encryption_service.py` pattern exactly) - never plaintext.
+    # `None` means this client has not opted into outbound webhooks;
+    # events destined for it simply are not delivered.
     webhook_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    webhook_signing_secret: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    webhook_signing_secret_encrypted: Mapped[str | None] = mapped_column(String(400), nullable=True)
 
 
 class AuthorizationCode(Base):
@@ -227,7 +226,17 @@ class OAuthRefreshToken(Base):
 class Plan(Base):
     """Product-scoped plans (mission-brief section 9: "do not assume every
     product has the same plans"). `slug` is only unique within a product,
-    e.g. `loady`/`free` and `demo-a`/`free` are two distinct rows."""
+    e.g. `loady`/`free` and `demo-a`/`free` are two distinct rows.
+
+    Mission 6 continuation (Product Subscription Manager): every field
+    below is admin-configurable per product, independently - Loady having
+    3 plans and Gamey having 3 differently-named, differently-capable
+    plans requires zero code branching anywhere, only different rows.
+    `current_version_id` is a soft reference (no DB-level FK) to
+    `plan_versions.id` - kept soft specifically to avoid a circular FK
+    between `plans`/`plan_versions` at the schema level; application code
+    (`catalog_service.py`) is the only writer of this column and always
+    validates the target version belongs to this same plan first."""
 
     __tablename__ = "plans"
     __table_args__ = (UniqueConstraint("product_id", "slug", name="uq_plan_product_slug"),)
@@ -236,7 +245,80 @@ class Plan(Base):
     product_id: Mapped[str] = mapped_column(String(40), ForeignKey("products.id"), index=True, nullable=False)
     slug: Mapped[str] = mapped_column(String(40), nullable=False)
     name: Mapped[str] = mapped_column(String(80), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
+    is_public: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Total-order rank for upgrade/downgrade comparison WITHIN a product
+    # (higher = more capable) - "downgrade" is simply a transition to a
+    # lower rank, so no separate PlanTransitionRule table is needed for
+    # V1's linear-tier commerce model (mission-brief: "do not
+    # over-engineer unsupported commerce models").
+    upgrade_rank: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    gifted_eligible: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    trial_eligible: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    current_version_id: Mapped[str | None] = mapped_column(String(48), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, onupdate=_now, nullable=False)
+
+
+class PlanVersion(Base):
+    """An immutable, published snapshot of a plan's capability set
+    (mission-brief continuation: "existing users must retain the exact
+    entitlement/version... agreement they are currently assigned to until
+    explicitly changed"). `capability_snapshot` is a frozen `{key:
+    value}` copy taken from live `PlanEntitlement` rows at publish time -
+    once `status` is `published`, a version's `capability_snapshot` is
+    never mutated again; a capability change publishes a NEW version
+    instead. `Subscription`/`GiftedAccess`/`PromotionAccess` rows pin the
+    version they were granted against (`plan_version_id`) so a later
+    catalog edit cannot silently change what an existing subscriber is
+    contractually entitled to."""
+
+    __tablename__ = "plan_versions"
+    __table_args__ = (UniqueConstraint("plan_id", "version_number", name="uq_plan_version_number"),)
+
+    id: Mapped[str] = mapped_column(String(48), primary_key=True, default=_id("plver"))
+    plan_id: Mapped[str] = mapped_column(String(48), ForeignKey("plans.id"), index=True, nullable=False)
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    capability_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="draft", nullable=False)
+    created_by: Mapped[str | None] = mapped_column(String(48), ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    published_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+
+
+class Price(Base):
+    """One purchasable (or historical) price point for a plan
+    (mission-brief continuation: "a plan must NOT simply contain one
+    price"). Prices are append-only with respect to `amount_cents`/
+    `currency`/`interval` - "editing a price" in the admin API always
+    means retiring this row (`is_active=False`, `retired_at` set) and
+    creating a new one, never mutating the amount in place, which is what
+    makes "changing the public price must not silently mutate... the
+    historical price of existing users" true structurally: a
+    `Subscription` pins `price_id` at creation and that row's amount
+    never changes underneath it."""
+
+    __tablename__ = "prices"
+
+    id: Mapped[str] = mapped_column(String(48), primary_key=True, default=_id("price"))
+    product_id: Mapped[str] = mapped_column(String(40), ForeignKey("products.id"), index=True, nullable=False)
+    plan_id: Mapped[str] = mapped_column(String(48), ForeignKey("plans.id"), index=True, nullable=False)
+    # Soft reference, same reasoning as Plan.current_version_id - a price
+    # may be pinned to the specific plan version it was published
+    # alongside, but this is optional (many products won't need it).
+    plan_version_id: Mapped[str | None] = mapped_column(String(48), nullable=True)
+    provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    provider_price_id: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
+    currency: Mapped[str] = mapped_column(String(10), nullable=False)
+    amount_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    interval: Mapped[str] = mapped_column(String(20), nullable=False)
+    interval_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    is_public: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    retired_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
 
 
 class Entitlement(Base):
@@ -261,6 +343,10 @@ class Entitlement(Base):
     expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     granted_by: Mapped[str | None] = mapped_column(String(48), ForeignKey("users.id"), nullable=True)
     reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Pinned at grant time (nullable soft reference) - a NULL here means
+    # "predates plan versioning," resolved via live PlanEntitlement rows
+    # exactly like before (see capability_service's version-aware path).
+    plan_version_id: Mapped[str | None] = mapped_column(String(48), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, onupdate=_now, nullable=False)
 
@@ -428,6 +514,11 @@ class Subscription(Base):
     provider_customer_ref: Mapped[str] = mapped_column(String(200), nullable=False)
     provider_subscription_ref: Mapped[str] = mapped_column(String(200), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Pinned at creation - the historical-price-preservation guarantee
+    # (see `Price`'s own docstring) depends on this never being
+    # repointed at a different Price row after the fact.
+    price_id: Mapped[str | None] = mapped_column(String(48), ForeignKey("prices.id"), nullable=True)
+    plan_version_id: Mapped[str | None] = mapped_column(String(48), nullable=True)
     current_period_start: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     current_period_end: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -496,6 +587,7 @@ class GiftedAccess(Base):
     user_id: Mapped[str] = mapped_column(String(48), ForeignKey("users.id"), index=True, nullable=False)
     product_id: Mapped[str] = mapped_column(String(40), ForeignKey("products.id"), index=True, nullable=False)
     plan_id: Mapped[str] = mapped_column(String(48), ForeignKey("plans.id"), nullable=False)
+    plan_version_id: Mapped[str | None] = mapped_column(String(48), nullable=True)
     reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     granted_by: Mapped[str] = mapped_column(String(48), ForeignKey("users.id"), nullable=False)
     granted_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
@@ -611,3 +703,58 @@ class ServiceGrant(Base):
     client_id: Mapped[str] = mapped_column(String(60), ForeignKey("oauth_clients.client_id"), index=True, nullable=False)
     scope: Mapped[str] = mapped_column(String(80), nullable=False)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+
+
+# =============================================================================
+# Mission 6 continuation: promotions / trials (distinct from gifted/paid)
+# =============================================================================
+
+
+class PromotionAccess(Base):
+    """A time-boxed, non-payment access grant that is explicitly NOT a
+    gift (mission brief: "promotion and trial must remain distinct from
+    gifted/paid/bundle/internal"). `kind` distinguishes a marketing
+    promotion (often tied to a `source_code`) from a product trial - both
+    share the same lifecycle shape, so one table with a `kind` column,
+    not two near-identical tables. Like `GiftedAccess`, this NEVER
+    creates or references a `PaymentRecord` - a promotion/trial cannot
+    generate revenue any more than a gift can."""
+
+    __tablename__ = "promotion_access"
+
+    id: Mapped[str] = mapped_column(String(48), primary_key=True, default=_id("promo"))
+    user_id: Mapped[str] = mapped_column(String(48), ForeignKey("users.id"), index=True, nullable=False)
+    product_id: Mapped[str] = mapped_column(String(40), ForeignKey("products.id"), index=True, nullable=False)
+    plan_id: Mapped[str] = mapped_column(String(48), ForeignKey("plans.id"), nullable=False)
+    plan_version_id: Mapped[str | None] = mapped_column(String(48), nullable=True)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)  # "promotion" | "trial"
+    source_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    granted_by: Mapped[str | None] = mapped_column(String(48), ForeignKey("users.id"), nullable=True)
+    starts_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+
+
+# =============================================================================
+# Mission 6 continuation: account closure (Phase 39 minimum)
+# =============================================================================
+
+
+class AccountClosureRequest(Base):
+    """The safe minimum lifecycle (mission brief: "do not implement
+    irreversible deletion casually"). No code path anywhere reachable
+    from this table performs physical row deletion or PII anonymization -
+    that remains explicitly unsupported/future work (see
+    ACCOUNT_DELETION.md)."""
+
+    __tablename__ = "account_closure_requests"
+
+    id: Mapped[str] = mapped_column(String(48), primary_key=True, default=_id("close"))
+    user_id: Mapped[str] = mapped_column(String(48), ForeignKey("users.id"), index=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="requested", nullable=False)  # requested|confirmed|closing|closed|canceled
+    reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    requested_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    confirmed_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    closed_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    canceled_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
