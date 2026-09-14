@@ -154,6 +154,56 @@ def get_authoritative_entitlement(session: Session, user: User) -> dict | None:
     if response.status_code != 200:
         logger.warning("Platform Core entitlement lookup returned %s", response.status_code)
         return None
+    result = response.json()
+    if result.get("entitled"):
+        return result
+
+    # Mission 7 (MISSION_7_ARCHITECTURE_AUDIT.md section 2, "must-build-
+    # before-cutover"): `/entitlements/me` only ever looks at the single
+    # legacy Entitlement row, so a user entitled purely through a bundle
+    # or a promotion/trial (V2-only sources) shows as not-entitled here
+    # even though Platform Core's own capability engine knows better.
+    # Fall back to the bearer-scoped `/api/v1/capabilities/me` (Mission 7)
+    # before accepting "not entitled" - additive only: this can turn a
+    # false into a true, never the reverse, so it cannot weaken the
+    # existing fail-closed guarantee, only close a real gap in it.
+    capabilities_result = _fetch_capabilities_me(access_token, settings)
+    if capabilities_result is None or not capabilities_result.get("entitled"):
+        return result
+
+    sources = capabilities_result.get("sources") or []
+    if not sources:
+        return result
+    winner = max(sources, key=lambda s: s.get("rank", 0))
+    return {
+        "entitled": True,
+        "entitlement": {
+            "product_id": capabilities_result.get("product_id"),
+            "plan_slug": winner.get("plan_slug"),
+            "source": winner.get("kind"),
+            "status": winner.get("status"),
+            "expires_at": winner.get("expires_at"),
+        },
+    }
+
+
+def _fetch_capabilities_me(access_token: str, settings) -> dict | None:
+    """Best-effort companion call to `/api/v1/capabilities/me` - any
+    failure here (network, non-200) is swallowed and treated as "no V2
+    data available," never raised, since the caller already has a valid
+    (if less complete) `/entitlements/me` answer to fall back to."""
+    try:
+        response = httpx.get(
+            f"{_server_api_base_url(settings)}/api/v1/capabilities/me",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=10,
+        )
+    except httpx.HTTPError as exc:
+        logger.warning("Platform Core capabilities lookup failed (network): %s", exc)
+        return None
+    if response.status_code != 200:
+        logger.warning("Platform Core capabilities lookup returned %s", response.status_code)
+        return None
     return response.json()
 
 

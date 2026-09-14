@@ -508,7 +508,7 @@ async def effective_entitlements(user_id: str, product_id: str = Query(...), db:
         "capabilities": result.capabilities,
         "sources": [
             {"kind": s.kind, "plan_id": s.plan_id, "plan_slug": s.plan_slug, "status": s.status,
-             "expires_at": s.expires_at.isoformat() if s.expires_at else None}
+             "expires_at": s.expires_at.isoformat() if s.expires_at else None, "rank": s.rank}
             for s in result.sources
         ],
     }

@@ -21,7 +21,7 @@ from app.api.deps import BearerPrincipal, get_bearer_principal, get_current_user
 from app.database.models import Plan, User
 from app.models.enums import AuditAction
 from app.security.jwt_tokens import introspect_oidc_access_token
-from app.services import audit_service, entitlement_service, product_service
+from app.services import audit_service, capability_service, entitlement_service, product_service
 from app.utils.exceptions import AuthError
 
 # Mission 6 (Phase 23): "user-visible security events" - a deliberately
@@ -68,6 +68,40 @@ async def my_entitlement_for_calling_product(
     if entitlement is None:
         return {"entitled": False, "entitlement": None}
     return {"entitled": True, "entitlement": _entitlement_view(db, entitlement)}
+
+
+@router.get("/capabilities/me")
+async def my_capabilities_for_calling_product(
+    db: Session = Depends(get_db), principal: BearerPrincipal = Depends(get_bearer_principal)
+) -> dict:
+    """Mission 7 (Phase 28 blocker): `/entitlements/me` only ever looked at
+    the single legacy `Entitlement` row, so a user entitled via a bundle
+    or a promotion/trial (V2-only sources) showed as `entitled=False` to
+    a product even though `capability_service.resolve_effective_entitlements`
+    (Mission 6's merge-across-sources engine) already knew about them
+    correctly - that engine just had no bearer-authenticated, self-serve
+    route, only the admin-only `/admin/users/{id}/effective-entitlements`.
+    Same product-scoping guarantee as `/entitlements/me`: a client with no
+    `product_id` (a global/service client, not a product's own OAuth
+    client) gets nothing back for any user, and every other client only
+    ever sees ITS OWN product_id's merged capabilities, never another
+    product's, regardless of what the same global user holds elsewhere.
+    Response shape matches the admin endpoint's (`product_id`,
+    `capabilities`, `sources`) plus a top-level `entitled` flag so a
+    product can adopt this without inventing its own truthiness rule."""
+    if principal.client.product_id is None:
+        return {"entitled": False, "product_id": None, "capabilities": {}, "sources": []}
+    result = capability_service.resolve_effective_entitlements(db, principal.user.id, principal.client.product_id)
+    return {
+        "entitled": len(result.sources) > 0,
+        "product_id": result.product_id,
+        "capabilities": result.capabilities,
+        "sources": [
+            {"kind": s.kind, "plan_id": s.plan_id, "plan_slug": s.plan_slug, "status": s.status,
+             "expires_at": s.expires_at.isoformat() if s.expires_at else None, "rank": s.rank}
+            for s in result.sources
+        ],
+    }
 
 
 @router.get("/me/status")

@@ -104,6 +104,14 @@ def test_resolution_merges_paid_and_gifted_and_preserves_both_sources(db_session
     assert "legacy_entitlement" in kinds or "gifted" in kinds
     assert len(result.sources) >= 2
 
+    # Mission 7: `rank` (exposed via /api/v1/capabilities/me for a bearer
+    # caller with no single "winning plan" concept of its own) must pick
+    # the paid entitlement over the gift here, matching this exact
+    # worked example's own stated tie-break philosophy - a real paid
+    # subscription outranks a gift.
+    winner = max(result.sources, key=lambda s: s.rank)
+    assert winner.plan_slug == "pro"
+
 
 def test_expired_gift_falls_away_automatically(db_session):
     admin = _user(db_session, "admin-cap2@example.com")

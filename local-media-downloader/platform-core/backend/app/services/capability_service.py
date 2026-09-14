@@ -218,6 +218,14 @@ class EffectiveSource:
     plan_slug: str
     status: str
     expires_at: datetime | None
+    # Mission 7: same tie-break rank `_merge_capabilities` uses internally
+    # for STRING/ENUM capabilities (see `_TIE_BREAK_RANK`) - exposed here
+    # so a bearer caller (e.g. Loady's hybrid resolver, which has no
+    # single "winning plan" concept of its own to fall back to once it
+    # needs a source beyond the legacy Entitlement row) can pick the
+    # highest-ranked contributing source's plan_slug without duplicating
+    # this ranking table on the product side, which would drift.
+    rank: int = 0
 
 
 @dataclass
@@ -324,6 +332,7 @@ def resolve_effective_entitlements(
                 EffectiveSource(
                     kind=EffectiveSourceKind.LEGACY_ENTITLEMENT.value,
                     plan_id=plan.id, plan_slug=plan.slug, status=legacy.status, expires_at=legacy.expires_at,
+                    rank=_TIE_BREAK_RANK.get(tier, 0),
                 )
             )
 
@@ -347,6 +356,7 @@ def resolve_effective_entitlements(
                     kind=EffectiveSourceKind.SUBSCRIPTION.value,
                     plan_id=plan.id, plan_slug=plan.slug, status=subscription.status,
                     expires_at=subscription.current_period_end,
+                    rank=_TIE_BREAK_RANK.get("subscription", 0),
                 )
             )
 
@@ -365,6 +375,7 @@ def resolve_effective_entitlements(
             EffectiveSource(
                 kind=EffectiveSourceKind.GIFTED.value,
                 plan_id=plan.id, plan_slug=plan.slug, status=gift.status, expires_at=gift.expires_at,
+                rank=_TIE_BREAK_RANK.get("gifted", 0),
             )
         )
 
@@ -390,6 +401,7 @@ def resolve_effective_entitlements(
             EffectiveSource(
                 kind=EffectiveSourceKind.BUNDLE.value,
                 plan_id=plan.id, plan_slug=plan.slug, status=access.status, expires_at=access.expires_at,
+                rank=_TIE_BREAK_RANK.get("bundle", 0),
             )
         )
 
@@ -408,6 +420,7 @@ def resolve_effective_entitlements(
             EffectiveSource(
                 kind=EffectiveSourceKind.PROMOTION.value,
                 plan_id=plan.id, plan_slug=plan.slug, status=grant.status, expires_at=grant.expires_at,
+                rank=_TIE_BREAK_RANK.get(grant.kind, 0),
             )
         )
 

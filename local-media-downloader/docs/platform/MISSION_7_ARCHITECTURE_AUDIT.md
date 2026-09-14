@@ -75,53 +75,80 @@ propagated" — classify as **transitional**, document the ~15-minute bound
 explicitly in the cutover runbook, and treat "immediate revocation
 propagation" as a CUTOVER-DAY / post-launch hardening item, not a blocker
 (disabling a compromised account already works via the same bounded
-mechanism).
+mechanism). This bound is specifically about a *product's* (Loady's)
+cached OIDC access token — Platform Core has no control over when Loady's
+own code re-checks it, unlike the finding below.
+
+**RESOLVED this mission — a real gap found by actually running the
+browser E2E, not by re-reading docs**: unlike the cross-product case
+above, Platform Core's own single-session revoke ("sign out this device,"
+Account Portal → Sessions page) was NOT actually immediate for its own
+first-party `session_access` cookie, despite the UI presenting it as an
+immediate action and despite the sign-out-*everywhere* path already being
+provably immediate via the `security_epoch` claim. `revoke_session` only
+ever revoked the `RefreshToken` row; the target device's already-issued
+access-token cookie kept authenticating for up to
+`access_token_ttl_minutes` (default 15) regardless. Since Platform Core
+owns both token issuance and verification here (no other team's code to
+touch, unlike the OIDC-access-token case), this was fixed rather than
+just documented as a bound: `session_access` gained an optional `"sid"`
+claim (the owning `RefreshToken.id`), checked in `get_optional_user`
+alongside the existing epoch check. See `docs/platform/SESSION_SECURITY.md`
+"Single-session revoke (Phase 21)" for the detail and
+`test_http_revoke_single_session_immediately_rejects_that_devices_still_unexpired_cookie`
+for the regression test. Single-session revoke is now genuinely
+immediate, matching sign-out-everywhere.
 
 ## 2. Entitlements / Capabilities
 
+**RESOLVED this mission** (was the Phase 28 BLOCKER below — kept for the
+historical record, since a future mission re-verifying this section
+should be able to see exactly what changed and why):
+
 | Component | File | Classification |
 |---|---|---|
-| V2 capability engine (`resolve_effective_entitlements`) | `platform-core/backend/app/services/capability_service.py:297` | central, **not exposed to products** |
-| V1 single-row entitlement (`get_active_entitlement`) | `platform-core/backend/app/services/entitlement_service.py` | central, **this is what Loady actually consumes** |
-| `/api/v1/entitlements/me` (bearer, product-scoped) | `platform-core/backend/app/api/routes_v1.py:58-70` | wired to V1 model only |
-| `/effective-entitlements` (capability engine) | `platform-core/backend/app/api/routes_admin.py:502` | **admin-only**, not bearer/product-callable |
-| Loady hybrid resolver | `backend/app/services/platform_entitlement_service.py:280-383` | transitional |
-| Loady's local `Subscription`/plan logic | `backend/app/services/plan_policy.py`, `download_gate_service.py` | product-owned today, must shrink |
+| V2 capability engine (`resolve_effective_entitlements`) | `platform-core/backend/app/services/capability_service.py:297` | central, **now exposed to products via `/api/v1/capabilities/me`** |
+| V1 single-row entitlement (`get_active_entitlement`) | `platform-core/backend/app/services/entitlement_service.py` | central, still Loady's primary/fast-path source |
+| `/api/v1/entitlements/me` (bearer, product-scoped) | `platform-core/backend/app/api/routes_v1.py` | wired to V1 model only, unchanged |
+| `/api/v1/capabilities/me` (bearer, product-scoped) | `platform-core/backend/app/api/routes_v1.py` | **new**: self-serve bearer route onto the V2 merge engine, same product-scoping guarantee as `/entitlements/me` |
+| `/effective-entitlements` (capability engine) | `platform-core/backend/app/api/routes_admin.py:502` | admin-only, unchanged, now shares its response shape (incl. `rank`) with the bearer route |
+| Loady hybrid resolver | `backend/app/services/platform_entitlement_service.py` | transitional, **now consults `/capabilities/me` as a fallback** when `/entitlements/me` says not-entitled |
+| Loady's local `Subscription`/plan logic | `backend/app/services/plan_policy.py`, `download_gate_service.py` | product-owned today, must shrink — unchanged by this fix |
 
-**Key finding (confirmed by reading both sides of the wire, not just
-docs)**: Mission 5 wired Loady's live download gate to call Platform Core
-for a **migrated user's plan** (`resolve_effective_plan()`,
-`platform_entitlement_service.py:333`, confirmed called from
-`routes_downloads.py:128`) — this part is real, live, and fail-closed
-(unreachable Platform Core → `Plan.FREE`, never escalates, never hangs
-open). **However**, the Platform Core endpoint it calls
-(`/api/v1/entitlements/me`) is backed by `entitlement_service.py`'s V1
-single `Entitlement` row (`product_id`, `plan_id`, `source`, `status`) —
-the same model from Mission 3/4. Mission 6's V2 capability engine
-(`capability_service.py`), which merges entitlements across
-subscription + gift + bundle + promotion sources into granular
-capabilities (daily download limit, max resolution, concurrent jobs, etc. —
-exactly what Mission 7 Phase 4 asks for), is **built, tested, but only
-reachable through an admin-authenticated endpoint**
-(`routes_admin.py:502`, `require_product_admin` dependency). There is no
-self-serve, bearer-authenticated `/api/v1/capabilities/me` (or equivalent)
-a product's own backend can call for its own signed-in user.
+**What was fixed**: `/api/v1/entitlements/me` only ever looked at the
+single legacy `Entitlement` row, so a user entitled via a *bundle* or a
+*promotion/trial* (V2-only concepts) showed as `entitled=False` to their
+own product. Added `/api/v1/capabilities/me`, backed directly by
+`resolve_effective_entitlements()`, with the exact same per-product
+bearer-scoping guarantee `/entitlements/me` already had (a client with no
+`product_id` gets nothing; every other client only ever sees its own
+product's merged capabilities). `EffectiveSource` gained a `rank` field
+(the same tie-break rank `_merge_capabilities` already used internally
+for STRING/ENUM capabilities) so a bearer caller with no "winning plan"
+concept of its own — like Loady — can pick the highest-ranked
+contributing source's `plan_slug` without duplicating Platform Core's
+internal ranking table on the product side.
 
-**Consequence**: today, a Loady user entitled via a *bundle* or a
-*promotion/trial* (V2-only concepts) would show as `entitled=False` from
-Loady's perspective, because `/entitlements/me` only looks at the single
-`Entitlement` row, not the merged V2 sources. This is a real,
-must-fix-before-cutover gap, not a documentation staleness issue — classify
-**must-remove-before-cutover is the wrong framing here; this is
-must-build-before-cutover**: add a bearer-scoped `/api/v1/capabilities/me`
-(or extend `/entitlements/me`'s response) backed by
-`resolve_effective_entitlements()`, then update Loady's hybrid resolver to
-consume it. Tracked as a BLOCKER in the Phase 28 review.
+Loady's `get_authoritative_entitlement` now calls `/capabilities/me` as
+an **additive-only** fallback: only when `/entitlements/me` says
+`entitled=False` does it check `/capabilities/me`, and only a `true`
+there can turn the answer into `entitled=True` — it can never turn an
+already-`true` answer false, so it cannot weaken the existing fail-closed
+guarantee (unreachable/erroring `/capabilities/me` is swallowed and
+treated as "no V2 data available," falling back to the legacy answer,
+never raised). Fail-closed behavior itself (cache TTL, outage handling,
+`Plan.FREE` on any doubt) is unchanged — proven correct by Mission 5's
+rehearsal and still valid at the wiring level; only the *source data* one
+layer down was extended, not the hybrid/cache/outage mechanism.
 
-Fail-closed behavior itself (cache TTL, outage handling) is proven correct
-by Mission 5's rehearsal and remains valid at the wiring level — it is the
-*source data* one layer down (V1 vs V2 model) that needs replacing, not the
-hybrid/cache/outage mechanism, which can be reused as-is.
+Test coverage: `platform-core/backend/tests/test_capabilities_me.py`
+(the exact gap — bundle-only access invisible to `/entitlements/me`,
+visible and correctly product-scoped via `/capabilities/me`),
+`test_capability_engine.py`'s rank assertion, and
+`backend/tests/test_platform_capabilities_fallback.py` (Loady-side:
+the actual HTTP-calling fallback logic, including "never calls
+`/capabilities/me` when already entitled" and "network failure never
+raises, falls back to the legacy answer").
 
 ## 3. Billing
 
@@ -191,7 +218,7 @@ re-proven, and should reject the unsafe combination
 |---|---|
 | Loady local password truth | must-remove-before-cutover |
 | Loady local single-row plan gate for non-migrated users | acceptable-post-cutover (Free-tier/never-linked users have nothing to migrate) |
-| V1 `/entitlements/me` as sole product-facing entitlement source | must-build-before-cutover (replace/extend with V2 capability data) |
+| V1 `/entitlements/me` as sole product-facing entitlement source | **RESOLVED this mission** — `/api/v1/capabilities/me` added, Loady's hybrid resolver now falls back to it |
 | Loady's live Paddle integration | must-remove-before-cutover (after Platform Core billing goes live + reconciled) |
 | Platform Core `PaddleBillingProvider` | must-build-before-cutover (currently non-functional beyond pure functions) |
 | Ecosystem-wide sign-out (bounded, ~15 min) | acceptable-post-cutover (documented bound, not a blocker) |
