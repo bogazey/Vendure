@@ -1,0 +1,265 @@
+# Mission 7, Phase 18 — Release Candidate production compose.
+#
+# Combines Loady's existing production stack (compose.production.yml +
+# compose.tls.yml, both UNCHANGED and still the source of truth for a
+# Loady-only deployment) with Platform Core (previously only in
+# platform-core/compose.staging.yml, never in a production-shaped file).
+#
+# Production builds only. No dev servers, no bind-mounted source code.
+# Host ports default to the real production values (80/443) but are
+# overridable — Phase 19's full local rehearsal MUST override them (see
+# .env.rc.example) to avoid colliding with anything already running,
+# including the personal-use local Docker stack this mission must not
+# touch (Absolute Safety Rule 15).
+#
+# Bring up (production): see MISSION_7_PRODUCTION_CUTOVER_RUNBOOK.md.
+# Bring up (local rehearsal): see MISSION_7 Phase 19 section of the same
+# runbook, or run:
+#   cp .env.rc.example .env.rc
+#   docker compose -p loady-rc -f compose.rc.yml --env-file .env.rc up -d --build
+
+name: loady-rc
+
+services:
+  # ---------------------------------------------------------------------
+  # Combined edge — replaces Loady's own `reverse-proxy` service (extends
+  # it with three more virtual hosts). Built from the same Loady frontend
+  # image; only the nginx config mounted over it differs from
+  # compose.tls.yml.
+  # ---------------------------------------------------------------------
+  reverse-proxy:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+        VITE_SITE_URL: ${VITE_SITE_URL:-https://loady.cc}
+    ports:
+      - "${RC_HTTP_PORT:-80}:80"
+      - "${RC_HTTPS_PORT:-443}:443"
+    environment:
+      RC_LOADY_HOSTNAME: ${RC_LOADY_HOSTNAME:?set RC_LOADY_HOSTNAME}
+      RC_PLATFORM_AUTH_HOSTNAME: ${RC_PLATFORM_AUTH_HOSTNAME:?set RC_PLATFORM_AUTH_HOSTNAME}
+      RC_ACCOUNT_HOSTNAME: ${RC_ACCOUNT_HOSTNAME:?set RC_ACCOUNT_HOSTNAME}
+      RC_ADMIN_HOSTNAME: ${RC_ADMIN_HOSTNAME:?set RC_ADMIN_HOSTNAME}
+    volumes:
+      - ${RC_TLS_DIR:-./secrets/tls}:/etc/nginx/tls:ro
+      - ./platform-core/reverse-proxy/nginx.production.conf.template:/etc/nginx/templates/default.conf.template:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      platform-core-backend:
+        condition: service_healthy
+      platform-core-account-frontend:
+        condition: service_started
+      platform-core-admin-frontend:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      default:
+      platform-net:
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=32m
+      - /var/run:size=4m
+      - /etc/nginx/conf.d:size=4m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID, NET_BIND_SERVICE]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "--no-check-certificate", "https://127.0.0.1/robots.txt"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+
+  # --- Loady backend (unchanged from compose.production.yml, plus the
+  # platform-net join needed to call platform-core-backend by internal
+  # DNS name via PLATFORM_INTERNAL_BASE_URL) ---
+  backend:
+    build:
+      context: ./backend
+    env_file: ${LOADY_ENV_FILE:-.env.production}
+    environment:
+      PLATFORM_INTERNAL_BASE_URL: http://platform-core-backend:8000
+    expose:
+      - "8000"
+    volumes:
+      - app-data:/var/lib/loady/data
+      - media-data:/var/lib/loady/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      default:
+      platform-net:
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "3.00"
+          memory: 5G
+
+  postgres:
+    image: postgres:16-alpine
+    user: "70:70"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    expose:
+      - "5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 1G
+
+  # ---------------------------------------------------------------------
+  # Platform Core — internal-only, no host ports, reached exclusively
+  # through the combined edge or Loady's server-to-server call above.
+  # ---------------------------------------------------------------------
+  platform-core-postgres:
+    image: postgres:16-alpine
+    user: "70:70"
+    environment:
+      POSTGRES_DB: ${PLATFORM_POSTGRES_DB:?set PLATFORM_POSTGRES_DB}
+      POSTGRES_USER: ${PLATFORM_POSTGRES_USER:?set PLATFORM_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${PLATFORM_POSTGRES_PASSWORD:?set PLATFORM_POSTGRES_PASSWORD}
+    expose:
+      - "5432"
+    volumes:
+      - platform-postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks: [platform-net]
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+
+  platform-core-backend:
+    build:
+      context: ./platform-core/backend
+    env_file: ${PLATFORM_ENV_FILE:-./platform-core/.env.production}
+    environment:
+      DATABASE_URL: postgresql+psycopg://${PLATFORM_POSTGRES_USER:?set PLATFORM_POSTGRES_USER}:${PLATFORM_POSTGRES_PASSWORD:?set PLATFORM_POSTGRES_PASSWORD}@platform-core-postgres:5432/${PLATFORM_POSTGRES_DB:?set PLATFORM_POSTGRES_DB}
+    expose:
+      - "8000"
+    volumes:
+      - ${PLATFORM_SIGNING_KEY_PATH:-./platform-core/secrets/platform-signing-key.pem}:/run/secrets/platform-signing-key.pem:ro
+    depends_on:
+      platform-core-postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [platform-net]
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 512M
+
+  platform-core-account-frontend:
+    build:
+      context: ./platform-core/account-frontend
+      args:
+        VITE_PLATFORM_API_BASE_URL: ${VITE_PLATFORM_API_BASE_URL:-}
+    expose:
+      - "80"
+    depends_on:
+      platform-core-backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [platform-net]
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=16m
+      - /var/run:size=4m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID, NET_BIND_SERVICE]
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
+  platform-core-admin-frontend:
+    build:
+      context: ./platform-core/admin-frontend
+      args:
+        VITE_PLATFORM_API_BASE_URL: ${VITE_PLATFORM_API_BASE_URL:-}
+    expose:
+      - "80"
+    depends_on:
+      platform-core-backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [platform-net]
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=16m
+      - /var/run:size=4m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID, NET_BIND_SERVICE]
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
+networks:
+  platform-net:
+    internal: true
+
+volumes:
+  app-data:
+  media-data:
+  postgres-data:
+  platform-postgres-data:

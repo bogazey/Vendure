@@ -21,7 +21,7 @@
  *     regardless of which product it is, and ARE driven through the
  *     browser here.
  */
-import { test, expect, type APIRequestContext } from "@playwright/test";
+import { test, expect, type APIRequestContext, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
 const BACKEND = "http://127.0.0.1:8100";
 const ADMIN = "http://127.0.0.1:5273";
@@ -46,31 +46,59 @@ test.describe.serial("Mission 6 ecosystem E2E", () => {
   let adminCookie = "";
   let planId = "";
 
-  test("1. Central signup (Account Portal)", async ({ page }) => {
+  // Tests 6 through 10 are one continuous Grand Admin browser journey
+  // (login, then several pages that all depend on still being signed in).
+  // The same per-test fresh-context rule documented above applies here:
+  // give them one shared context/page instead of the default `page`
+  // fixture, or every test after "6. Grand Admin login" deterministically
+  // hits the sign-in form again (Mission 7 Phase 23 test-matrix run
+  // caught this too, once the fix above let the suite run this far).
+  let adminContext: BrowserContext;
+  let adminPage: Page;
+
+  test.beforeAll(async ({ browser }: { browser: Browser }) => {
+    adminContext = await browser.newContext();
+    adminPage = await adminContext.newPage();
+  });
+
+  test.afterAll(async () => {
+    await adminContext.close();
+  });
+
+  test("1. Central signup (Account Portal) + 2. Overview for a fresh user", async ({ page }) => {
+    // Both assertions must run on the SAME page/context: Playwright gives
+    // every `test()` a fresh, cookie-less BrowserContext by default (true
+    // regardless of `describe.serial`, which only orders execution and
+    // stops on failure - it does not share session state). Every other
+    // authenticated test below correctly re-logs-in on its own page for
+    // exactly this reason (see tests 11, 11b, 14, 15, 12); this pair was
+    // the one place that assumed continuity across a test boundary, which
+    // made "2." deterministically render the signed-out Account Portal
+    // (Mission 7 Phase 23 test-matrix run) instead of ever exercising the
+    // fresh-user Overview view it claims to. Keeping both checks on one
+    // page, as one continuous user journey, is the fix - not a change to
+    // any application code.
     await page.goto(`${ACCOUNT}/login`);
     await page.getByText(/new here\?/i).click();
     await page.getByLabel(/email/i).fill(TARGET_EMAIL);
     await page.getByLabel(/password/i).fill(TARGET_PASSWORD);
     await page.getByRole("button", { name: /create account/i }).click();
     await expect(page).toHaveURL(`${ACCOUNT}/`);
-  });
 
-  test("2. Account Portal renders Overview for a fresh user", async ({ page }) => {
-    await page.goto(`${ACCOUNT}/`);
     await expect(page.getByText(/member since/i)).toBeVisible();
     await expect(page.getByText(/haven't used any ecosystem products/i)).toBeVisible();
   });
 
-  test("6. Grand Admin login", async ({ page, request }) => {
-    await page.goto(`${ADMIN}/login`);
-    await page.getByLabel(/email/i).fill(SUPER_ADMIN_EMAIL);
-    await page.getByLabel(/password/i).fill(SUPER_ADMIN_PASSWORD);
-    await page.getByRole("button", { name: /sign in/i }).click();
-    await expect(page).toHaveURL(`${ADMIN}/`);
-    await expect(page.getByText(/total users/i)).toBeVisible();
+  test("6. Grand Admin login", async () => {
+    await adminPage.goto(`${ADMIN}/login`);
+    await adminPage.getByLabel(/email/i).fill(SUPER_ADMIN_EMAIL);
+    await adminPage.getByLabel(/password/i).fill(SUPER_ADMIN_PASSWORD);
+    await adminPage.getByRole("button", { name: /sign in/i }).click();
+    await expect(adminPage).toHaveURL(`${ADMIN}/`);
+    await expect(adminPage.getByText(/total users/i)).toBeVisible();
 
     // Capture the resulting session cookie for setup API calls in later steps.
-    const cookies = await page.context().cookies();
+    const cookies = await adminContext.cookies();
     adminCookie = cookies.map((c) => `${c.name}=${c.value}`).join("; ");
     expect(adminCookie).toContain("plat_session_access");
   });
@@ -82,44 +110,44 @@ test.describe.serial("Mission 6 ecosystem E2E", () => {
     expect(res.ok()).toBeTruthy();
   });
 
-  test("7. Create a product plan through the Grand Admin UI", async ({ page }) => {
-    await page.goto(`${ADMIN}/products/${PRODUCT_ID}`);
-    await page.getByPlaceholder("creator").fill("pro");
-    await page.getByPlaceholder("Creator").fill("Pro");
-    await page.getByRole("button", { name: /create plan/i }).click();
-    await expect(page.getByText("Pro").first()).toBeVisible();
-    await expect(page.getByText("pro").first()).toBeVisible();
+  test("7. Create a product plan through the Grand Admin UI", async () => {
+    await adminPage.goto(`${ADMIN}/products/${PRODUCT_ID}`);
+    await adminPage.getByPlaceholder("creator").fill("pro");
+    await adminPage.getByPlaceholder("Creator").fill("Pro");
+    await adminPage.getByRole("button", { name: /create plan/i }).click();
+    await expect(adminPage.getByText("Pro").first()).toBeVisible();
+    await expect(adminPage.getByText("pro").first()).toBeVisible();
   });
 
-  test("7b. Edit the plan (description + sort order) through the UI", async ({ page }) => {
-    await page.goto(`${ADMIN}/products/${PRODUCT_ID}`);
-    await page.getByText("Pro").first().click();
-    const textarea = page.locator("textarea");
+  test("7b. Edit the plan (description + sort order) through the UI", async () => {
+    await adminPage.goto(`${ADMIN}/products/${PRODUCT_ID}`);
+    await adminPage.getByText("Pro").first().click();
+    const textarea = adminPage.locator("textarea");
     await textarea.fill("The E2E test plan.");
-    await page.getByRole("button", { name: /^save$/i }).click();
-    await expect(page.getByText(/saved\./i)).toBeVisible();
+    await adminPage.getByRole("button", { name: /^save$/i }).click();
+    await expect(adminPage.getByText(/saved\./i)).toBeVisible();
   });
 
-  test("8. Create a price through the Grand Admin UI", async ({ page }) => {
-    await page.goto(`${ADMIN}/products/${PRODUCT_ID}`);
-    await page.getByText("Pro").first().click();
-    await page.getByPlaceholder("9.99").fill("4.99");
-    await page.getByRole("button", { name: /add price/i }).click();
-    await expect(page.getByText(/4\.99 USD \/ month/i)).toBeVisible();
+  test("8. Create a price through the Grand Admin UI", async () => {
+    await adminPage.goto(`${ADMIN}/products/${PRODUCT_ID}`);
+    await adminPage.getByText("Pro").first().click();
+    await adminPage.getByPlaceholder("9.99").fill("4.99");
+    await adminPage.getByRole("button", { name: /add price/i }).click();
+    await expect(adminPage.getByText(/4\.99 USD \/ month/i)).toBeVisible();
   });
 
-  test("9. Grant gifted access to the target user through the Users UI", async ({ page }) => {
-    await page.goto(`${ADMIN}/users`);
-    await page.getByPlaceholder(/search by email/i).fill(TARGET_EMAIL);
-    await page.waitForTimeout(300);
-    await page.getByRole("row", { name: new RegExp(TARGET_EMAIL) }).getByRole("button", { name: /^view$/i }).click();
-    await page.getByPlaceholder("Product", { exact: true }).fill(PRODUCT_ID);
-    await page.getByPlaceholder("Plan", { exact: true }).fill("pro");
+  test("9. Grant gifted access to the target user through the Users UI", async () => {
+    await adminPage.goto(`${ADMIN}/users`);
+    await adminPage.getByPlaceholder(/search by email/i).fill(TARGET_EMAIL);
+    await adminPage.waitForTimeout(300);
+    await adminPage.getByRole("row", { name: new RegExp(TARGET_EMAIL) }).getByRole("button", { name: /^view$/i }).click();
+    await adminPage.getByPlaceholder("Product", { exact: true }).fill(PRODUCT_ID);
+    await adminPage.getByPlaceholder("Plan", { exact: true }).fill("pro");
     // Two <select> elements exist on this page once a user is selected
     // (role assignment, then source) - the source select is the second one.
-    await page.getByRole("combobox").nth(1).selectOption("gifted");
-    await page.getByRole("button", { name: /^grant$/i }).click();
-    await expect(page.getByText(PRODUCT_ID).first()).toBeVisible();
+    await adminPage.getByRole("combobox").nth(1).selectOption("gifted");
+    await adminPage.getByRole("button", { name: /^grant$/i }).click();
+    await expect(adminPage.getByText(PRODUCT_ID).first()).toBeVisible();
   });
 
   test("11. The target user's Account Portal reflects the grant", async ({ page }) => {
@@ -135,15 +163,15 @@ test.describe.serial("Mission 6 ecosystem E2E", () => {
     await expect(page.getByText("Gifted Access")).toBeVisible();
   });
 
-  test("10. Revoke the gift through the Users UI and confirm it disappears", async ({ page }) => {
-    await page.goto(`${ADMIN}/users`);
-    await page.getByPlaceholder(/search by email/i).fill(TARGET_EMAIL);
-    await page.waitForTimeout(300);
-    await page.getByRole("row", { name: new RegExp(TARGET_EMAIL) }).getByRole("button", { name: /^view$/i }).click();
-    await expect(page.getByText(PRODUCT_ID).first()).toBeVisible();
+  test("10. Revoke the gift through the Users UI and confirm it disappears", async () => {
+    await adminPage.goto(`${ADMIN}/users`);
+    await adminPage.getByPlaceholder(/search by email/i).fill(TARGET_EMAIL);
+    await adminPage.waitForTimeout(300);
+    await adminPage.getByRole("row", { name: new RegExp(TARGET_EMAIL) }).getByRole("button", { name: /^view$/i }).click();
+    await expect(adminPage.getByText(PRODUCT_ID).first()).toBeVisible();
     // The existing entitlement list item has its own revoke control.
-    await page.getByRole("button", { name: /^revoke$/i }).first().click();
-    await expect(page.getByText(PRODUCT_ID)).toHaveCount(0);
+    await adminPage.getByRole("button", { name: /^revoke$/i }).first().click();
+    await expect(adminPage.getByText(PRODUCT_ID)).toHaveCount(0);
   });
 
   test("11b. The revoke is reflected back in the Account Portal", async ({ page }) => {
