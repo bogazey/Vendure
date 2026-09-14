@@ -83,7 +83,31 @@
     "live": "Live",
     "building": "Building",
     "planned": "Planned",
-    "manage": "Manage"
+    "manage": "Manage",
+    "addProduct": "Add product",
+    "addProductHint": "Register a new ecosystem product and its initial OAuth client in one step.",
+    "description": "Description",
+    "descriptionPlaceholder": "What is this product?",
+    "discoverable": "Discoverable (may appear in a \"discover more products\" listing)",
+    "initialOauthClient": "Initial OAuth client",
+    "clientId": "Client ID",
+    "clientName": "Client name",
+    "redirectUris": "Redirect URIs",
+    "redirectUrisHint": "One per line or comma-separated. Must exactly match what the product presents at sign-in — no wildcards.",
+    "productOnboarded": "Product onboarded",
+    "productOnboardedHint": "\"{{name}}\" and its OAuth client \"{{clientId}}\" were created.",
+    "secretShownOnce": "This secret will not be shown again. Copy it now and store it somewhere secure — Platform Core only ever keeps a hash of it.",
+    "clientSecret": "Client secret",
+    "copy": "Copy",
+    "copied": "Copied",
+    "doneSecretSaved": "Done — I've saved the secret",
+    "rotateSecret": "Rotate secret",
+    "rotateSecretConfirm": "Rotating generates a new secret and immediately invalidates the old one. Any running deployment of this product using the old secret will stop being able to authenticate until it's updated. Continue?",
+    "secretRotated": "Secret rotated",
+    "secretRotatedHint": "The new secret for \"{{clientId}}\" is shown once below. The previous secret no longer works.",
+    "oauthClients": "OAuth clients",
+    "noOauthClients": "No OAuth clients registered for this product yet.",
+    "configurationSuperAdminOnly": "OAuth client configuration is visible to super admins only."
   },
   "productDetail": {
     "product": "Product",
@@ -91,7 +115,12 @@
       "plans": "Plans",
       "capabilities": "Capabilities",
       "subscribers": "Subscribers",
-      "billing": "Billing"
+      "billing": "Billing",
+      "configuration": "Configuration"
+    },
+    "configuration": {
+      "active": "Active",
+      "inactive": "Inactive"
     },
     "plans": {
       "name": "Name",

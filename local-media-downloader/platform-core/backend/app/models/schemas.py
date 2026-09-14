@@ -87,6 +87,8 @@ class ProductOut(BaseModel):
     domain: str
     status: str
     icon_ref: Optional[str]
+    description: Optional[str] = None
+    is_discoverable: bool = True
     created_at: datetime
 
     class Config:
@@ -207,6 +209,8 @@ class AdminCreateProductRequest(BaseModel):
     domain: str = Field(min_length=3, max_length=255)
     status: ProductStatus = ProductStatus.PLANNED
     icon_ref: Optional[str] = Field(default=None, max_length=80)
+    description: Optional[str] = Field(default=None, max_length=500)
+    is_discoverable: bool = True
 
 
 # --- OAuth client registration (service-to-service; Grand Admin only) ----
@@ -220,4 +224,29 @@ class RegisterClientRequest(BaseModel):
 
 class RegisterClientResponse(BaseModel):
     client_id: str
+    client_secret: str
+
+
+# --- Product onboarding (Grand Admin UI; super_admin only) -----------------
+# Combines product registration + its initial OAuth client registration
+# into one super_admin-gated action - see routes_admin.py::onboard_product.
+
+
+class ProductOnboardRequest(BaseModel):
+    id: str = Field(min_length=2, max_length=40, pattern=r"^[a-z0-9-]+$")
+    name: str = Field(min_length=1, max_length=80)
+    domain: str = Field(min_length=3, max_length=255)
+    description: Optional[str] = Field(default=None, max_length=500)
+    is_discoverable: bool = True
+    status: ProductStatus = ProductStatus.PLANNED
+    client_id: str = Field(min_length=2, max_length=60, pattern=r"^[a-z0-9-]+$")
+    client_name: str = Field(min_length=1, max_length=120)
+    redirect_uris: list[str] = Field(min_length=1, max_length=10)
+
+
+class ProductOnboardResponse(BaseModel):
+    product: ProductOut
+    client_id: str
+    # Plaintext, present only in this one response - never retrievable
+    # again afterward (see routes_admin.py::onboard_product's docstring).
     client_secret: str

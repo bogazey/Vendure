@@ -154,6 +154,13 @@ class Product(Base):
     domain: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="planned", nullable=False)
     icon_ref: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # Mission 6 continuation (Grand Admin product onboarding): free-text
+    # blurb shown in Grand Admin/Account Portal, and whether this product
+    # should appear in a user-facing "discover more products" listing
+    # before it's necessarily `status == "live"` (a product can be
+    # discoverable while still "building", e.g. a public beta waitlist).
+    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    is_discoverable: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
 

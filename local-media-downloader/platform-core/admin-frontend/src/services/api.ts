@@ -71,7 +71,35 @@ export interface ProductOut {
   domain: string;
   status: string;
   icon_ref: string | null;
+  description: string | null;
+  is_discoverable: boolean;
   created_at: string;
+}
+
+export interface OAuthClientOut {
+  client_id: string;
+  name: string;
+  product_id: string | null;
+  redirect_uris: string[];
+  is_active: boolean;
+}
+
+export interface ProductOnboardRequest {
+  id: string;
+  name: string;
+  domain: string;
+  description?: string;
+  is_discoverable: boolean;
+  status: string;
+  client_id: string;
+  client_name: string;
+  redirect_uris: string[];
+}
+
+export interface ProductOnboardResponse {
+  product: ProductOut;
+  client_id: string;
+  client_secret: string;
 }
 
 export interface EntitlementView {
@@ -294,6 +322,11 @@ export const api = {
   listProducts: () => request<ProductOut[]>("/api/v1/admin/products"),
   createProduct: (payload: { id: string; name: string; domain: string; status: string }) =>
     request<ProductOut>("/api/v1/admin/products", { method: "POST", body: JSON.stringify(payload) }),
+  onboardProduct: (payload: ProductOnboardRequest) =>
+    request<ProductOnboardResponse>("/api/v1/admin/products/onboard", { method: "POST", body: JSON.stringify(payload) }),
+  listClients: () => request<OAuthClientOut[]>("/api/v1/admin/clients"),
+  rotateClientSecret: (clientId: string) =>
+    request<{ client_id: string; client_secret: string }>(`/api/v1/admin/clients/${clientId}/rotate-secret`, { method: "POST" }),
   listPlans: (productId: string) => request<Array<{ id: string; slug: string; name: string }>>(`/api/v1/admin/products/${productId}/plans`),
   createPlan: (productId: string, slug: string, name: string) =>
     request<{ id: string; slug: string; name: string }>(

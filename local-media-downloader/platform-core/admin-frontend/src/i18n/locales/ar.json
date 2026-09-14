@@ -83,7 +83,31 @@
     "live": "مباشر",
     "building": "قيد البناء",
     "planned": "مخطط له",
-    "manage": "إدارة"
+    "manage": "إدارة",
+    "addProduct": "إضافة منتج",
+    "addProductHint": "سجّل منتجًا جديدًا في المنظومة وعميل OAuth الأولي الخاص به في خطوة واحدة.",
+    "description": "الوصف",
+    "descriptionPlaceholder": "ما هو هذا المنتج؟",
+    "discoverable": "قابل للاكتشاف (قد يظهر في قائمة \"اكتشف المزيد من المنتجات\")",
+    "initialOauthClient": "عميل OAuth الأولي",
+    "clientId": "معرّف العميل",
+    "clientName": "اسم العميل",
+    "redirectUris": "روابط إعادة التوجيه",
+    "redirectUrisHint": "رابط واحد في كل سطر أو مفصولة بفواصل. يجب أن تطابق تمامًا ما يقدّمه المنتج عند تسجيل الدخول — بلا أحرف بدل.",
+    "productOnboarded": "تم تأهيل المنتج",
+    "productOnboardedHint": "تم إنشاء \"{{name}}\" وعميل OAuth الخاص به \"{{clientId}}\".",
+    "secretShownOnce": "لن يُعرض هذا السر مرة أخرى. انسخه الآن واحفظه في مكان آمن — لا تحتفظ منصة Platform Core إلا بتجزئة له.",
+    "clientSecret": "سر العميل",
+    "copy": "نسخ",
+    "copied": "تم النسخ",
+    "doneSecretSaved": "تم — لقد حفظت السر",
+    "rotateSecret": "تدوير السر",
+    "rotateSecretConfirm": "يؤدي التدوير إلى إنشاء سر جديد وإبطال القديم فورًا. أي نشر قيد التشغيل لهذا المنتج يستخدم السر القديم سيتوقف عن المصادقة حتى يُحدَّث. متابعة؟",
+    "secretRotated": "تم تدوير السر",
+    "secretRotatedHint": "السر الجديد لـ \"{{clientId}}\" معروض أدناه مرة واحدة. لم يعد السر السابق يعمل.",
+    "oauthClients": "عملاء OAuth",
+    "noOauthClients": "لا يوجد عملاء OAuth مسجّلون لهذا المنتج بعد.",
+    "configurationSuperAdminOnly": "إعدادات عميل OAuth مرئية للمشرفين العامّين فقط."
   },
   "productDetail": {
     "product": "المنتج",
@@ -91,7 +115,12 @@
       "plans": "الخطط",
       "capabilities": "الإمكانات",
       "subscribers": "المشتركون",
-      "billing": "الفوترة"
+      "billing": "الفوترة",
+      "configuration": "الإعدادات"
+    },
+    "configuration": {
+      "active": "نشط",
+      "inactive": "غير نشط"
     },
     "plans": {
       "name": "الاسم",

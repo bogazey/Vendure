@@ -2,18 +2,21 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
+  api,
   catalogApi,
   paymentsApi,
   subscriptionsApi,
+  ApiError,
   type CapabilityDefOut,
   type CatalogPlanOut,
+  type OAuthClientOut,
   type PlanStatsOut,
   type PlanVersionOut,
   type PriceOut,
 } from "../services/api";
 import ErrorState from "../components/ErrorState";
 
-type Tab = "plans" | "capabilities" | "subscribers" | "billing";
+type Tab = "plans" | "capabilities" | "subscribers" | "billing" | "configuration";
 
 export default function ProductDetail() {
   const { productId = "" } = useParams();
@@ -43,7 +46,7 @@ export default function ProductDetail() {
       </div>
 
       <div className="flex gap-1 border-b border-surface-border/60">
-        {(["plans", "capabilities", "subscribers", "billing"] as Tab[]).map((key) => (
+        {(["plans", "capabilities", "subscribers", "billing", "configuration"] as Tab[]).map((key) => (
           <button
             key={key}
             type="button"
@@ -70,6 +73,7 @@ export default function ProductDetail() {
       )}
       {tab === "subscribers" && <SubscribersTab productId={productId} />}
       {tab === "billing" && <BillingTab productId={productId} />}
+      {tab === "configuration" && <ConfigurationTab productId={productId} />}
     </div>
   );
 }
@@ -521,6 +525,106 @@ function BillingTab({ productId }: { productId: string }) {
           {rows.length === 0 && <tr><td colSpan={3} className="px-4 py-6 text-center text-slate-500">{t("productDetail.billing.empty")}</td></tr>}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// --- Configuration tab: OAuth client(s) + secret rotation ---------------------
+//
+// `GET /api/v1/admin/clients` is deliberately super_admin-only and
+// unfiltered (mission 6 continuation: "product-scoped admins must NOT
+// create global products or OAuth clients" - this tab is where they'd see
+// one if listing were scoped, so it stays global-admin-only rather than
+// widening that route). A product-scoped admin visiting their own
+// product's page gets a plain "super admins only" message here instead of
+// the whole page 403'ing - the Plans/Capabilities tabs above remain fully
+// usable for them regardless.
+
+function ConfigurationTab({ productId }: { productId: string }) {
+  const { t } = useTranslation();
+  const [clients, setClients] = useState<OAuthClientOut[] | null>(null);
+  const [forbidden, setForbidden] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [rotated, setRotated] = useState<{ client_id: string; client_secret: string } | null>(null);
+
+  const load = () => {
+    api
+      .listClients()
+      .then((all) => setClients(all.filter((c) => c.product_id === productId)))
+      .catch((err) => {
+        if (err instanceof ApiError && err.status === 403) setForbidden(true);
+        else setError(err);
+      });
+  };
+  useEffect(load, [productId]);
+
+  const rotate = async (clientId: string) => {
+    if (!window.confirm(t("products.rotateSecretConfirm"))) return;
+    try {
+      const result = await api.rotateClientSecret(clientId);
+      setRotated(result);
+    } catch (err) {
+      setError(err);
+    }
+  };
+
+  if (error) return <ErrorState error={error} />;
+  if (forbidden) {
+    return <div className="glass-panel p-6 text-sm text-slate-400">{t("products.configurationSuperAdminOnly")}</div>;
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="glass-panel overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-surface-border text-xs uppercase text-slate-500">
+              <th className="px-4 py-3">{t("products.clientId")}</th>
+              <th className="px-4 py-3">{t("products.clientName")}</th>
+              <th className="px-4 py-3">{t("products.redirectUris")}</th>
+              <th className="px-4 py-3">{t("common.status")}</th>
+              <th className="px-4 py-3" />
+            </tr>
+          </thead>
+          <tbody>
+            {(clients ?? []).map((c) => (
+              <tr key={c.client_id} className="border-b border-surface-border/60 text-slate-300">
+                <td className="px-4 py-3 font-mono text-xs">{c.client_id}</td>
+                <td className="px-4 py-3">{c.name}</td>
+                <td className="px-4 py-3 font-mono text-xs">{c.redirect_uris.join(", ") || "—"}</td>
+                <td className="px-4 py-3">{c.is_active ? t("productDetail.configuration.active") : t("productDetail.configuration.inactive")}</td>
+                <td className="px-4 py-3">
+                  <button type="button" className="btn-glass !px-3 !py-1 text-xs" onClick={() => rotate(c.client_id)}>
+                    {t("products.rotateSecret")}
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {clients !== null && clients.length === 0 && (
+              <tr><td colSpan={5} className="px-4 py-6 text-center text-slate-500">{t("products.noOauthClients")}</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {rotated && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="glass-panel w-full max-w-lg p-6">
+            <h2 className="font-display text-lg font-semibold text-slate-50">{t("products.secretRotated")}</h2>
+            <p className="mt-1 text-sm text-slate-300">{t("products.secretRotatedHint", { clientId: rotated.client_id })}</p>
+            <div className="mt-4 rounded-lg border border-amber-400/40 bg-amber-400/10 p-3 text-sm font-semibold text-amber-300">
+              {t("products.secretShownOnce")}
+            </div>
+            <label className="mb-1 mt-4 block text-xs text-slate-500">{t("products.clientSecret")}</label>
+            <input readOnly className="input-glass w-full font-mono text-xs" value={rotated.client_secret} onFocus={(e) => e.target.select()} />
+            <div className="mt-6 flex justify-end">
+              <button type="button" className="btn-gradient" onClick={() => setRotated(null)}>
+                {t("products.doneSecretSaved")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -28,8 +28,14 @@ def get_product(session: Session, product_id: str) -> Product:
     return product
 
 
-def create_product(session: Session, product_id: str, name: str, domain: str, status: str, icon_ref: str | None) -> Product:
-    product = Product(id=product_id, name=name, domain=domain, status=status, icon_ref=icon_ref)
+def create_product(
+    session: Session, product_id: str, name: str, domain: str, status: str, icon_ref: str | None,
+    *, description: str | None = None, is_discoverable: bool = True,
+) -> Product:
+    product = Product(
+        id=product_id, name=name, domain=domain, status=status, icon_ref=icon_ref,
+        description=description, is_discoverable=is_discoverable,
+    )
     session.add(product)
     session.flush()
     return product

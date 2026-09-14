@@ -54,6 +54,8 @@ from app.models.schemas import (
     AuditLogOut,
     GrantEntitlementRequest,
     PlanOut,
+    ProductOnboardRequest,
+    ProductOnboardResponse,
     ProductOut,
     RegisterClientRequest,
     RegisterClientResponse,
@@ -262,9 +264,55 @@ async def list_products(db: Session = Depends(get_db), admin: User = Depends(get
 async def create_product(payload: AdminCreateProductRequest, db: Session = Depends(get_db), admin: User = Depends(require_global_admin)) -> ProductOut:
     if db.get(Product, payload.id) is not None:
         raise InvalidPlanError(f"Product '{payload.id}' already exists.")
-    product = product_service.create_product(db, payload.id, payload.name, payload.domain, payload.status.value, payload.icon_ref)
+    product = product_service.create_product(
+        db, payload.id, payload.name, payload.domain, payload.status.value, payload.icon_ref,
+        description=payload.description, is_discoverable=payload.is_discoverable,
+    )
     audit_service.record(db, admin.id, AuditAction.PRODUCT_CREATED, "product", product.id, product_id=product.id, after_state={"name": product.name, "domain": product.domain})
     return ProductOut.model_validate(product, from_attributes=True)
+
+
+@router.post(
+    "/products/onboard", response_model=ProductOnboardResponse,
+    dependencies=[Depends(require_super_admin), Depends(rate_limit_admin_mutation)],
+)
+async def onboard_product(
+    payload: ProductOnboardRequest, db: Session = Depends(get_db), admin: User = Depends(require_super_admin)
+) -> ProductOnboardResponse:
+    """The Grand Admin "Add Product" flow (mission 6 continuation): creates
+    the product AND registers its initial OAuth client in one super_admin-
+    gated action, instead of requiring two separate calls. `super_admin`
+    (not merely `require_global_admin`, which the standalone `POST
+    /products` above accepts) because this also registers an OAuth
+    client - the same bar `POST /clients` already sets on its own, and a
+    product-scoped admin can never reach this route regardless (product-
+    scoped roles are never `super_admin`).
+
+    The returned `client_secret` is plaintext and appears in exactly this
+    one response - only its Argon2 hash is ever persisted
+    (`oidc_service.register_client`), and there is no endpoint anywhere
+    that can retrieve a plaintext secret after this. If registering the
+    client fails (e.g. a duplicate `client_id`), the product row is rolled
+    back too - `get_db` only commits when the whole request completes
+    without raising, so this is atomic without extra bookkeeping here."""
+    if db.get(Product, payload.id) is not None:
+        raise InvalidPlanError(f"Product '{payload.id}' already exists.")
+    product = product_service.create_product(
+        db, payload.id, payload.name, payload.domain, payload.status.value, None,
+        description=payload.description, is_discoverable=payload.is_discoverable,
+    )
+    audit_service.record(
+        db, admin.id, AuditAction.PRODUCT_CREATED, "product", product.id, product_id=product.id,
+        after_state={"name": product.name, "domain": product.domain, "via": "onboard"},
+    )
+    _client, raw_secret = oidc_service.register_client(
+        db, admin, payload.client_id, payload.client_name, product.id, payload.redirect_uris
+    )
+    return ProductOnboardResponse(
+        product=ProductOut.model_validate(product, from_attributes=True),
+        client_id=payload.client_id,
+        client_secret=raw_secret,
+    )
 
 
 @router.get("/products/{product_id}/plans", response_model=list[PlanOut], dependencies=[Depends(require_product_admin)])

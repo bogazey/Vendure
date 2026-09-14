@@ -147,6 +147,28 @@ class PlatformClient:
         response.raise_for_status()
         return response.json()
 
+    # Mirrors `capability_service._TIE_BREAK_RANK` on the Platform Core
+    # side (kept in sync manually, same as `has_capability` already mirrors
+    # `capability_service`'s merge rules) - used only to pick a single
+    # "primary" plan to *display*; every contributing source is still
+    # returned untouched in `sources` for a caller that wants all of them.
+    _SOURCE_RANK: dict[str, int] = {
+        "subscription": 100, "bundle": 80, "gifted": 60, "promotion": 45, "trial": 35,
+        "legacy:paddle": 90, "legacy:lifetime": 85, "legacy:bundle": 75, "legacy:gifted": 60,
+        "legacy:promotion": 50, "legacy:trial": 40, "legacy:internal": 30, "legacy:free": 10,
+    }
+
+    @classmethod
+    def primary_source(cls, effective_entitlements: dict[str, Any]) -> dict[str, Any] | None:
+        """The single highest-precedence contributing source, for a caller
+        (like `fastapi_ext.build_platform_router`) that wants one plan to
+        show a user rather than the full multi-source breakdown. `None`
+        when no source contributed anything (a free/unentitled user)."""
+        sources = effective_entitlements.get("sources") or []
+        if not sources:
+            return None
+        return max(sources, key=lambda s: cls._SOURCE_RANK.get(s.get("kind", ""), 0))
+
     @staticmethod
     def has_capability(effective_entitlements: dict[str, Any], key: str, *, at_least: int | None = None) -> bool:
         """A small, deliberately dumb helper over the raw capability map
