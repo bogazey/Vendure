@@ -30,6 +30,11 @@ platform-core/backend/data/*.pem
 platform-core/admin-frontend/node_modules/
 platform-core/admin-frontend/dist/
 platform-core/admin-frontend/*.tsbuildinfo
+platform-core/account-frontend/node_modules/
+platform-core/account-frontend/dist/
+platform-core/account-frontend/*.tsbuildinfo
+platform-core/sdk/python/**/__pycache__/
+platform-core/sdk/python/**/*.egg-info/
 platform-core/demo-product-a/backend/.venv/
 platform-core/demo-product-a/backend/__pycache__/
 platform-core/demo-product-b/backend/.venv/
