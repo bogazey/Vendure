@@ -102,6 +102,8 @@ class AuditAction(str, Enum):
     PASSWORD_CHANGED = "password_changed"
     SESSION_REVOKED = "session_revoked"
     ALL_SESSIONS_REVOKED = "all_sessions_revoked"
+    EMAIL_CHANGE_REQUESTED = "email_change_requested"
+    EMAIL_CHANGED = "email_changed"
 
 
 class PaymentStatus(str, Enum):

@@ -35,6 +35,8 @@ _SECURITY_EVENT_ACTIONS = {
     AuditAction.PASSWORD_CHANGED.value,
     AuditAction.SESSION_REVOKED.value,
     AuditAction.ALL_SESSIONS_REVOKED.value,
+    AuditAction.EMAIL_CHANGE_REQUESTED.value,
+    AuditAction.EMAIL_CHANGED.value,
 }
 
 router = APIRouter(prefix="/api/v1", tags=["v1"])

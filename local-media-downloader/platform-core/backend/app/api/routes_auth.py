@@ -15,8 +15,10 @@ from app.config.settings import get_settings
 from app.database.models import User
 from app.models.schemas import (
     ChangePasswordRequest,
+    ConfirmEmailChangeRequest,
     ForgotPasswordRequest,
     LoginRequest,
+    RequestEmailChangeRequest,
     ResetPasswordRequest,
     SessionOut,
     SignupRequest,
@@ -168,6 +170,24 @@ async def verify_email(payload: VerifyEmailRequest, request: Request, db: Sessio
     if not password_reset_limiter.allow(_client_key(request), max_events=10, window_seconds=3600):
         raise RateLimitedError("Too many attempts. Please try again later.")
     auth_service.verify_email(db, payload.token)
+
+
+@router.post("/request-email-change", status_code=204, response_model=None)
+async def request_email_change(
+    payload: RequestEmailChangeRequest, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+) -> None:
+    """Mission 6 continuation (Phase 19). Rate-limited the same way
+    password reset is - this sends mail (to the NEW address) triggered by
+    an otherwise-unauthenticated-adjacent action a script could hammer."""
+    if not password_reset_limiter.allow(_client_key(request), max_events=5, window_seconds=3600):
+        raise RateLimitedError("Too many requests. Please try again later.")
+    auth_service.request_email_change(db, user, payload.new_email)
+
+
+@router.post("/confirm-email-change", response_model=UserOut)
+async def confirm_email_change(payload: ConfirmEmailChangeRequest, db: Session = Depends(get_db)) -> UserOut:
+    user = auth_service.confirm_email_change(db, payload.token)
+    return UserOut.model_validate(user, from_attributes=True)
 
 
 @router.post("/resend-verification", status_code=204, response_model=None)

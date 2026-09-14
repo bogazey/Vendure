@@ -53,9 +53,18 @@ class UserOut(BaseModel):
     email_verified: bool
     status: str
     created_at: datetime
+    pending_new_email: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+
+class RequestEmailChangeRequest(BaseModel):
+    new_email: EmailStr
+
+
+class ConfirmEmailChangeRequest(BaseModel):
+    token: str
 
 
 class SessionOut(BaseModel):

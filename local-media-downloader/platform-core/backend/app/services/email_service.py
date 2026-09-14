@@ -17,3 +17,9 @@ def send_verification_email(to_email: str, verify_url: str) -> None:
 
 def send_password_reset_email(to_email: str, reset_url: str) -> None:
     logger.info("[dev email] password reset email to %s: %s", to_email, reset_url)
+
+
+def send_email_change_verification(to_email: str, verify_url: str) -> None:
+    """Sent to the NEW address only - confirms the requester actually
+    controls it before `User.email` ever changes (mission-brief Phase 19)."""
+    logger.info("[dev email] email-change verification to %s: %s", to_email, verify_url)

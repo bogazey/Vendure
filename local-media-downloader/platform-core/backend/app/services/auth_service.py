@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.config.logging_config import get_logger
 from app.config.settings import get_settings
-from app.database.models import EmailVerificationToken, OAuthRefreshToken, PasswordResetToken, RefreshToken, User
+from app.database.models import EmailChangeToken, EmailVerificationToken, OAuthRefreshToken, PasswordResetToken, RefreshToken, User
 from app.models.enums import AuditAction, UserStatus
 from app.security import passwords
 from app.security.tokens import generate_hashed_token, hash_token
@@ -228,6 +228,51 @@ class AuthService:
             raise InvalidCredentialsError("Current password is incorrect.")
         user.password_hash = passwords.hash_password(new_password)
         audit_service.record(session, user.id, AuditAction.PASSWORD_CHANGED, "user", user.id)
+
+    def request_email_change(self, session: Session, user: User, new_email: str) -> None:
+        """Mission 6 continuation (Phase 19): `User.email` is NOT touched
+        here - only `pending_new_email`, purely informational until the
+        new address is actually verified. Never reveals whether
+        `new_email` is already registered to someone else (mirrors
+        `request_password_reset`'s "never reveal whether the account
+        exists" discipline) - the collision is instead checked, and
+        safely rejected, only at confirmation time."""
+        new_email = _normalize_email(new_email)
+        user.pending_new_email = new_email
+        raw, token_hash, expires_at = generate_hashed_token(timedelta(hours=48))
+        session.add(EmailChangeToken(user_id=user.id, new_email=new_email, token_hash=token_hash, expires_at=expires_at))
+        settings = get_settings()
+        verify_url = f"{settings.platform_auth_base_url}/verify-email-change?token={raw}"
+        email_service.send_email_change_verification(new_email, verify_url)
+        audit_service.record(session, user.id, AuditAction.EMAIL_CHANGE_REQUESTED, "user", user.id)
+
+    def confirm_email_change(self, session: Session, raw_token: str) -> User:
+        token_hash = hash_token(raw_token)
+        record = session.execute(
+            select(EmailChangeToken).where(EmailChangeToken.token_hash == token_hash)
+        ).scalars().first()
+        now = datetime.now(timezone.utc)
+        if record is None or record.used_at is not None or record.expires_at < now:
+            raise InvalidTokenError("This email-change link is invalid or has expired.")
+
+        existing = session.execute(select(User).where(User.email == record.new_email)).scalars().first()
+        if existing is not None and existing.id != record.user_id:
+            raise EmailAlreadyRegisteredError("That email address is already in use by another account.")
+
+        user = session.get(User, record.user_id)
+        if user is None:
+            raise InvalidTokenError("This email-change link is invalid or has expired.")
+
+        old_email = user.email
+        user.email = record.new_email
+        user.pending_new_email = None
+        record.used_at = now
+        audit_service.record(
+            session, user.id, AuditAction.EMAIL_CHANGED, "user", user.id,
+            before_state={"email": old_email}, after_state={"email": user.email},
+        )
+        logger.info("Email change completed for global user %s", user.id)
+        return user
 
     def request_email_verification(self, session: Session, user: User) -> None:
         self._issue_verification_email(session, user)

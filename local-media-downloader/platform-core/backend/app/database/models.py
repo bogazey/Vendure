@@ -71,6 +71,11 @@ class User(Base):
     # (api/deps.py::get_optional_user), rather than living out its full
     # access_token_ttl_minutes after a "sign out everywhere."
     security_epoch: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    # Mission 6 continuation (Phase 19): the target of an in-progress,
+    # not-yet-confirmed email change - `email` itself never changes until
+    # the NEW address is verified (EmailChangeToken below). NULL means no
+    # change is pending.
+    pending_new_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, onupdate=_now, nullable=False)
 
@@ -112,6 +117,24 @@ class PasswordResetToken(Base):
 
     id: Mapped[str] = mapped_column(String(48), primary_key=True, default=_id("prt"))
     user_id: Mapped[str] = mapped_column(String(48), ForeignKey("users.id"), index=True, nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+
+
+class EmailChangeToken(Base):
+    """Mission 6 continuation (Phase 19): a verified email-change flow -
+    `new_email` is only ever written to `User.email` once this specific
+    token is redeemed (`auth_service.confirm_email_change`), never
+    immediately at request time. Single-use, short-lived, hashed exactly
+    like every other token in this schema."""
+
+    __tablename__ = "email_change_tokens"
+
+    id: Mapped[str] = mapped_column(String(48), primary_key=True, default=_id("ect"))
+    user_id: Mapped[str] = mapped_column(String(48), ForeignKey("users.id"), index=True, nullable=False)
+    new_email: Mapped[str] = mapped_column(String(320), nullable=False)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
