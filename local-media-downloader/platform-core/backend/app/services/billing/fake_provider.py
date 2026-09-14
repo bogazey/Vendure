@@ -83,6 +83,11 @@ class FakeBillingProvider(BillingProvider):
         occurred_at = (
             datetime.fromisoformat(occurred_at_raw) if occurred_at_raw else datetime.now(timezone.utc)
         )
+
+        def _dt(key: str) -> datetime | None:
+            raw = payload.get(key)
+            return datetime.fromisoformat(raw) if raw else None
+
         return NormalizedEvent(
             provider_event_id=payload["event_id"],
             event_type=payload["event_type"],
@@ -94,4 +99,12 @@ class FakeBillingProvider(BillingProvider):
             status=payload.get("status"),
             raw=payload,
             custom_data=payload.get("custom_data"),
+            # Falls back to `event_id` when a synthetic fixture doesn't set
+            # this explicitly, preserving every existing test's payload
+            # shape unchanged - only tests that care about refund/dispute
+            # correlation need to set `transaction_ref` themselves.
+            provider_transaction_ref=payload.get("transaction_ref"),
+            current_period_start=_dt("current_period_start"),
+            current_period_end=_dt("current_period_end"),
+            cancel_at_period_end=payload.get("cancel_at_period_end"),
         )

@@ -44,6 +44,29 @@ class NormalizedEvent:
     # Subscription row exists yet) - e.g. `{"user_id": ..., "product_id":
     # ..., "plan_id": ...}`. `None` if the provider payload carried none.
     custom_data: dict | None = None
+    # Mission 8 (Billing Ownership Transition): the payment PROCESSOR's own
+    # transaction id - for a `transaction.*` event, the transaction itself;
+    # for an `adjustment.*` event (refund/chargeback), the ORIGINAL
+    # transaction being adjusted. Deliberately distinct from
+    # `provider_event_id` (the webhook envelope's own id) - a refund event
+    # naturally references the processor's transaction id, never the id of
+    # the webhook that first reported that transaction, so correlating a
+    # refund back to its `PaymentRecord` requires this field to exist
+    # separately. `None` if the provider payload carried none (never
+    # guessed from `provider_event_id`).
+    provider_transaction_ref: str | None = None
+    # Mission 8: a subscription.* event's own billing-period/cancellation
+    # fields. Before this, NOTHING in this module ever threaded these
+    # through past subscription creation - `subscription_service.
+    # upsert_subscription` always re-used whatever was already on the row,
+    # so an update event could never actually advance the renewal date or
+    # record a scheduled cancellation. `None` means "this event carried no
+    # value for this field," in which case the existing subscription's own
+    # value is preserved unchanged - never reset to empty just because one
+    # event happened not to mention it.
+    current_period_start: datetime | None = None
+    current_period_end: datetime | None = None
+    cancel_at_period_end: bool | None = None
 
 
 class BillingProvider(ABC):

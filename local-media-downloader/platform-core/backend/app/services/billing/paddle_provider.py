@@ -34,6 +34,43 @@ _PADDLE_STATUS_MAP = {
     "canceled": "canceled",
 }
 
+# Paddle Billing reports refunds/chargebacks as `adjustment.created`, with
+# `data.action` naming what kind of adjustment it is - never a dedicated
+# `transaction.refunded` event type. `action="credit"` (a goodwill balance
+# credit, not a refund of a specific transaction) is deliberately excluded:
+# it has no `transaction_id` to correlate against and never affects an
+# entitlement, so it is left unhandled (stored for audit, otherwise
+# ignored) rather than guessed at.
+_ADJUSTMENT_ACTION_MAP = {
+    "refund": "refunded",
+    "chargeback": "disputed",
+}
+
+
+def _parse_paddle_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _adjustment_amount(data: dict) -> tuple[int | None, str | None]:
+    """An adjustment's own `totals.total` (its amount, in the adjustment's
+    own currency) - structurally identical in shape to a transaction's
+    `details.totals.total`, but Paddle documents it at the top level of
+    the adjustment object rather than nested under `details`. `None`/`None`
+    if absent, never fabricated as 0 (mission-brief: "do NOT fabricate
+    unavailable values")."""
+    totals = data.get("totals") if isinstance(data.get("totals"), dict) else None
+    if not totals or totals.get("total") is None:
+        return None, None
+    try:
+        return int(totals["total"]), data.get("currency_code")
+    except (TypeError, ValueError):
+        return None, None
+
 
 class PaddleBillingProvider(BillingProvider):
     name = "paddle"
@@ -75,7 +112,32 @@ class PaddleBillingProvider(BillingProvider):
                 amount_cents = None
             currency = data.get("currency_code")
 
-        status = _PADDLE_STATUS_MAP.get(data.get("status")) if event_type.startswith("subscription.") else data.get("status")
+        current_period_start: datetime | None = None
+        current_period_end: datetime | None = None
+        cancel_at_period_end: bool | None = None
+        provider_transaction_ref: str | None = None
+
+        if event_type.startswith("transaction."):
+            provider_transaction_ref = data.get("id")
+            status = data.get("status")
+        elif event_type.startswith("adjustment."):
+            # Paddle Billing reports refunds/chargebacks as `adjustment.*`,
+            # never a `transaction.refunded` event - see
+            # `_ADJUSTMENT_ACTION_MAP`'s own docstring. `transaction_id` is
+            # the ORIGINAL transaction being adjusted, not this adjustment's
+            # own id - that is exactly what lets a refund be correlated
+            # back to the `PaymentRecord` the original transaction created.
+            provider_transaction_ref = data.get("transaction_id")
+            status = _ADJUSTMENT_ACTION_MAP.get(data.get("action"))
+            amount_cents, currency = _adjustment_amount(data)
+        elif event_type.startswith("subscription."):
+            status = _PADDLE_STATUS_MAP.get(data.get("status"))
+            current_period = data.get("current_billing_period") or {}
+            current_period_start = _parse_paddle_datetime(current_period.get("starts_at"))
+            current_period_end = _parse_paddle_datetime(current_period.get("ends_at"))
+            cancel_at_period_end = (data.get("scheduled_change") or {}).get("action") == "cancel"
+        else:
+            status = data.get("status")
 
         return NormalizedEvent(
             provider_event_id=payload.get("event_id", ""),
@@ -88,6 +150,10 @@ class PaddleBillingProvider(BillingProvider):
             status=status,
             raw=payload,
             custom_data=data.get("custom_data") if isinstance(data.get("custom_data"), dict) else None,
+            provider_transaction_ref=provider_transaction_ref,
+            current_period_start=current_period_start,
+            current_period_end=current_period_end,
+            cancel_at_period_end=cancel_at_period_end,
         )
 
     def create_checkout(self, *, user_id: str, product_id: str, plan_id: str, success_url: str) -> CheckoutSession:

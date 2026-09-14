@@ -45,7 +45,21 @@ def upsert_subscription(
     current_period_end: datetime | None,
     cancel_at_period_end: bool = False,
     price_id: str | None = None,
+    event_occurred_at: datetime | None = None,
 ) -> Subscription:
+    """`event_occurred_at` (mission 8: Billing Ownership Transition) is the
+    triggering webhook's own timestamp, not "now" - a delayed or
+    out-of-order delivery must never let an OLDER event overwrite a
+    NEWER one's status/period/cancellation fields just because it happened
+    to arrive later over the network. The very first event for a
+    subscription always applies regardless of timestamp (there is nothing
+    to be "older than" yet); every event after that only updates the live
+    fields when its `event_occurred_at` is at or after
+    `existing.last_event_occurred_at` - an older event is still recorded
+    (the caller's `BillingWebhookEvent` row and this call both still
+    happen and still return normally) but has NO effect on this
+    subscription's fields, so a duplicate/delayed/out-of-order delivery is
+    provably a no-op rather than a data-corrupting race."""
     from app.services import catalog_service
 
     existing = get_subscription_by_ref(session, provider, provider_subscription_ref)
@@ -61,15 +75,26 @@ def upsert_subscription(
             provider_customer_ref=provider_customer_ref, provider_subscription_ref=provider_subscription_ref,
             status=status, current_period_start=current_period_start, current_period_end=current_period_end,
             cancel_at_period_end=cancel_at_period_end, price_id=price_id, plan_version_id=plan_version_id,
+            last_event_occurred_at=event_occurred_at,
         )
         session.add(existing)
         session.flush()
         session.add(SubscriptionItem(subscription_id=existing.id, plan_id=plan.id, quantity=1))
     else:
+        stale = (
+            event_occurred_at is not None
+            and existing.last_event_occurred_at is not None
+            and event_occurred_at < existing.last_event_occurred_at
+        )
+        if stale:
+            session.flush()
+            return existing
         existing.status = status
         existing.current_period_start = current_period_start
         existing.current_period_end = current_period_end
         existing.cancel_at_period_end = cancel_at_period_end
+        if event_occurred_at is not None:
+            existing.last_event_occurred_at = event_occurred_at
         item = session.execute(
             select(SubscriptionItem).where(SubscriptionItem.subscription_id == existing.id)
         ).scalars().first()

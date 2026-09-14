@@ -90,6 +90,8 @@ class AuditAction(str, Enum):
     WEBHOOK_RECEIVED = "webhook_received"
     WEBHOOK_PROCESSED = "webhook_processed"
     WEBHOOK_REPLAYED = "webhook_replayed"
+    PAYMENT_ADJUSTED = "payment_adjusted"
+    LOADY_PADDLE_RECONCILIATION_IMPORT = "loady_paddle_reconciliation_import"
     GIFT_V2_GRANTED = "gift_v2_granted"
     GIFT_V2_REVOKED = "gift_v2_revoked"
     BUNDLE_CREATED = "bundle_created"
@@ -115,6 +117,12 @@ class PaymentStatus(str, Enum):
     REFUNDED = "refunded"
     PARTIALLY_REFUNDED = "partially_refunded"
     FAILED = "failed"
+    # Mission 8 (Billing Ownership Transition): a chargeback/dispute -
+    # distinct from REFUNDED because the money has not (yet, or ever)
+    # actually been returned via the processor's own refund flow; see
+    # docs/platform/PADDLE_RECONCILIATION_STRATEGY.md for how this differs
+    # from a refund in its effect on the funded entitlement.
+    DISPUTED = "disputed"
 
 
 # --- Mission 6: capability / entitlement-definition registry ---------------

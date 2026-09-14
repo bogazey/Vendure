@@ -553,6 +553,13 @@ class Subscription(Base):
     current_period_end: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     canceled_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    # Mission 8 (Billing Ownership Transition): the `occurred_at` of the
+    # most recent webhook event actually APPLIED to this row's
+    # status/period fields - never advanced by an event whose own
+    # `occurred_at` is older than this (see subscription_service.
+    # upsert_subscription's out-of-order guard). `None` until the first
+    # event is applied, which always wins regardless of timestamp.
+    last_event_occurred_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, onupdate=_now, nullable=False)
 
