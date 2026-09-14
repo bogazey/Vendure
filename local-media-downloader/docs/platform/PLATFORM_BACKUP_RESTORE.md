@@ -139,3 +139,21 @@ mission brief.
   correct for a rehearsal, but a reminder that "committed to git" is
   never an acceptable substitute for real off-site backup storage even
   if it were not explicitly forbidden here.
+
+## Mission 6 addendum (Phase 47)
+
+Every new V2 table (`entitlement_definitions`, `plan_entitlements`,
+`subscriptions`, `subscription_items`, `billing_webhook_events`,
+`gifted_access`, `bundles`, `bundle_product_plans`, `bundle_access`,
+`service_grants`, `outbox_events`) and every new column on `payment_records`/
+`oauth_clients`/`users` requires **no change** to the backup/restore
+mechanism above: `pg_dump -F c` captures the entire database schema and
+every table in it, whatever that schema currently is - there is no
+per-table allowlist anywhere in `backup-before-platform-migration.sh` to
+update. This was verified by reading the script, not by re-running the
+actual rehearsal: **this mission did not re-execute the live
+backup/restore rehearsal against a real Postgres instance** (no
+staging/production database access - mission-brief Phase 56) and does
+not claim to have. Report Phase 47 as **architecturally covered,
+operationally UNTESTED** against the actual V2 schema until someone
+re-runs `PRODUCTION_ROLLBACK_REHEARSAL.md`'s procedure for real.

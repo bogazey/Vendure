@@ -616,6 +616,33 @@ async def configure_client_webhook(client_id: str, payload: dict, db: Session = 
     return {"client_id": client_id, "webhook_url": client.webhook_url, "webhook_signing_secret": raw_secret}
 
 
+@router.get("/system-health", dependencies=[Depends(require_global_admin)])
+async def system_health(db: Session = Depends(get_db)) -> dict:
+    """Grand Admin System Health (mission-brief Phase 48) - operational
+    signals only, never secrets and never a raw exception message. This
+    is deliberately separate from `/ready` (`main.py`): a webhook backlog
+    or a run of failed deliveries is a business-level signal an admin
+    should see, not a reason to fail container orchestration health
+    checks and get restart-looped (see `/ready`'s own docstring for why
+    that distinction matters)."""
+    from app.database.models import BillingWebhookEvent, OutboxEvent
+    from app.security.jwt_keys import signing_key_is_available
+
+    outbox_pending = db.execute(select(func.count(OutboxEvent.id)).where(OutboxEvent.status == "pending")).scalar_one()
+    outbox_failed = db.execute(select(func.count(OutboxEvent.id)).where(OutboxEvent.status == "failed")).scalar_one()
+    webhook_failed = db.execute(select(func.count(BillingWebhookEvent.id)).where(BillingWebhookEvent.status == "failed")).scalar_one()
+    webhook_pending = db.execute(select(func.count(BillingWebhookEvent.id)).where(BillingWebhookEvent.status == "pending")).scalar_one()
+
+    # Reaching this line at all already proves DB connectivity - `get_db`
+    # would have raised before this route body ever ran otherwise.
+    return {
+        "database": True,
+        "signing_key_configured": signing_key_is_available(),
+        "outbox": {"pending": outbox_pending, "failed": outbox_failed},
+        "billing_webhooks": {"pending": webhook_pending, "failed": webhook_failed},
+    }
+
+
 @router.get("/outbox", dependencies=[Depends(require_global_admin)])
 async def list_outbox_events(db: Session = Depends(get_db), status_filter: str | None = Query(default=None, alias="status"), limit: int = Query(default=100, le=500)) -> list[dict]:
     from app.database.models import OutboxEvent

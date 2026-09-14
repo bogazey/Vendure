@@ -160,3 +160,23 @@ def test_admin_can_configure_client_webhook_and_it_actually_delivers(client, db_
     db_session.commit()
     assert captured["url"] == "https://configured.example/hook"
     assert outbox_service.verify_signature(signing_secret, captured["body"], captured["headers"]["X-Platform-Signature"])
+
+
+def test_system_health_reports_outbox_and_webhook_backlog(client, db_session):
+    r = client.post("/api/v1/auth/signup", json={"email": "admin-health@example.com", "password": "correct-horse-battery"})
+    assert r.status_code == 201
+    admin = db_session.query(User).filter_by(email="admin-health@example.com").first()
+    rbac_service.assign_role(db_session, admin, RoleSlug.SUPER_ADMIN, GLOBAL_SCOPE, granted_by=None)
+    db_session.commit()
+
+    product = _product(db_session, "obx-health-product")
+    outbox_service.enqueue(db_session, "entitlement.changed", product.id, {"user_id": "u6"})
+    db_session.commit()
+
+    resp = client.get("/api/v1/admin/system-health")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["database"] is True
+    assert "signing_key_configured" in body
+    assert body["outbox"]["pending"] >= 1
+    assert "billing_webhooks" in body
