@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import secrets
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.config.logging_config import get_logger
@@ -99,6 +99,42 @@ class CommercialSettings(BaseSettings):
     # user in Grand Admin, before the next authenticated request re-checks
     # Platform Core and locally disables the account too.
     session_revalidation_interval_minutes: int = Field(default=5, alias="SESSION_REVALIDATION_INTERVAL_MINUTES")
+
+    # --- Platform Core integration flags (Mission 7, Phase 17) ---
+    # WRAPS, does not replace, the existing PLATFORM_CLIENT_ID-emptiness
+    # dormancy check above: every gate in platform_identity_service.py /
+    # platform_entitlement_service.py already required PLATFORM_CLIENT_ID
+    # (and PLATFORM_CLIENT_SECRET for auth) to be set before doing
+    # anything, and still does - these three flags default to True
+    # specifically so that behavior is unchanged for every existing
+    # deployment/test that only ever configured credentials and never
+    # touched these flags (nothing already proven has to be re-proven).
+    # What they add: a named, documented, credential-independent kill
+    # switch - an operator can force a specific piece of the integration
+    # dormant (e.g. rapid rollback of just entitlements, or of the whole
+    # integration) without touching/rotating PLATFORM_CLIENT_ID/SECRET.
+    platform_auth_enabled: bool = Field(default=True, alias="PLATFORM_AUTH_ENABLED")
+    platform_entitlements_enabled: bool = Field(default=True, alias="PLATFORM_ENTITLEMENTS_ENABLED")
+    # Not yet wired to any call site - Loady's billing integration with
+    # Platform Core doesn't exist yet (see docs/platform/
+    # MISSION_7_ARCHITECTURE_AUDIT.md section 3). Declared now so the
+    # eventual cutover has a named flag to gate behind from day one,
+    # exactly like the other two, rather than inventing one under time
+    # pressure later.
+    platform_billing_enabled: bool = Field(default=True, alias="PLATFORM_BILLING_ENABLED")
+
+    @model_validator(mode="after")
+    def _reject_entitlements_without_auth(self) -> "CommercialSettings":
+        # Entitlements without identity linkage is meaningless - a plan
+        # can only ever apply to a `global_user_id`-linked user, and that
+        # linkage is exactly what PLATFORM_AUTH_ENABLED gates. Fails fast
+        # at startup rather than letting the combination silently no-op.
+        if self.platform_entitlements_enabled and not self.platform_auth_enabled:
+            raise ValueError(
+                "PLATFORM_ENTITLEMENTS_ENABLED=true requires PLATFORM_AUTH_ENABLED=true "
+                "(entitlements without identity linkage is meaningless)."
+            )
+        return self
 
     # --- Paddle ---
     paddle_env: str = Field(default="sandbox", alias="PADDLE_ENV")

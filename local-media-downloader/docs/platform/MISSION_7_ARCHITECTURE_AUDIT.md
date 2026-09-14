@@ -195,22 +195,42 @@ requires an SDK method.
 
 ## 6. Feature flags
 
-Only two real flags exist in code today:
-- `MAINTENANCE_MODE` (`backend/app/config/commercial_settings.py:44`) — real, tested.
-- Implicit dormancy via empty `PLATFORM_CLIENT_ID`
-  (`platform_entitlement_service.py:371`,
-  `platform_identity_service.py` equivalent) — functions as a kill switch
-  but is not a named, documented boolean with its own startup-visibility
-  line or test suite, as Mission 7 Phase 17 requires.
+**RESOLVED this mission** (was "not started" below — kept for the
+historical record).
 
-`PLATFORM_AUTH_ENABLED`, `PLATFORM_ENTITLEMENTS_ENABLED`,
-`PLATFORM_BILLING_ENABLED` as named, independently-testable flags: **not
-started**. Building these is Mission 7 Phase 17's deliverable — see
-separate tracking; implementation should wrap (not replace) the existing
-`platform_client_id`-dormancy behavior so nothing already proven has to be
-re-proven, and should reject the unsafe combination
-`PLATFORM_ENTITLEMENTS_ENABLED=true` with `PLATFORM_AUTH_ENABLED=false`
-(entitlements without identity linkage is meaningless).
+- `MAINTENANCE_MODE` (`backend/app/config/commercial_settings.py:44`) — real, tested. Unchanged.
+- Implicit dormancy via empty `PLATFORM_CLIENT_ID` — still the underlying
+  credential-presence gate, unchanged; every existing call site that
+  checked it still does.
+- `PLATFORM_AUTH_ENABLED`, `PLATFORM_ENTITLEMENTS_ENABLED`,
+  `PLATFORM_BILLING_ENABLED` (`backend/app/config/commercial_settings.py`)
+  — **added**, all default `true` specifically so they *wrap* the
+  existing `platform_client_id`-dormancy check rather than replacing it:
+  every pre-existing test/deployment that only ever configured
+  credentials, never touching these flags, keeps behaving exactly as
+  before (nothing already proven had to be re-proven). What's new is a
+  named, documented, credential-independent kill switch:
+  - `platform_identity_service.is_configured()` now also requires
+    `platform_auth_enabled`.
+  - `get_authoritative_entitlement` / `resolve_effective_plan` /
+    `revalidate_central_status_if_due` now also require
+    `platform_entitlements_enabled` (the latter, being about account-
+    status/session validity rather than plan data, is gated on
+    `platform_auth_enabled` instead — a deliberate distinction).
+  - A `model_validator` on `CommercialSettings` rejects
+    `PLATFORM_ENTITLEMENTS_ENABLED=true` with `PLATFORM_AUTH_ENABLED=false`
+    at startup (fails fast, not a silent no-op).
+  - `platform_billing_enabled` is declared and tested but not yet wired
+    to any call site — Loady's billing integration with Platform Core
+    doesn't exist yet (see section 3); the flag exists now so the
+    eventual cutover has a name to gate behind from day one.
+  - A startup log line (`app/main.py`) now prints the resolved state of
+    all three flags plus whether credentials are configured, so an
+    operator can see the integration's actual state without
+    cross-referencing `.env`.
+  - Tests: `backend/tests/test_platform_feature_flags.py` (the validator,
+    and each kill switch actually forcing dormancy even with valid
+    credentials configured).
 
 ## Summary table (Mission 7 classification of every audited dependency)
 
@@ -223,7 +243,7 @@ re-proven, and should reject the unsafe combination
 | Platform Core `PaddleBillingProvider` | must-build-before-cutover (currently non-functional beyond pure functions) |
 | Ecosystem-wide sign-out (bounded, ~15 min) | acceptable-post-cutover (documented bound, not a blocker) |
 | Combined production Compose | must-build-before-cutover |
-| Named feature flags (`PLATFORM_*_ENABLED`) | must-build-before-cutover |
+| Named feature flags (`PLATFORM_*_ENABLED`) | **RESOLVED this mission** — added, wrap the existing credential-dormancy check, tested |
 | Backup encryption/off-site/retention | must-build-before-cutover (BLOCKER, carried from Mission 5) |
 | Real TLS certificate | CUTOVER-DAY CHECK (needs a real domain, not a code change) |
 | Grand Admin, Account Portal, SDKs | central, no changes needed |

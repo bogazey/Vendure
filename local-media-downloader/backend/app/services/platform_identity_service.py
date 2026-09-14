@@ -31,7 +31,11 @@ _jwks_cache: dict | None = None
 
 def is_configured() -> bool:
     settings = get_commercial_settings()
-    return bool(settings.platform_client_id and settings.platform_client_secret.get_secret_value())
+    return bool(
+        settings.platform_auth_enabled
+        and settings.platform_client_id
+        and settings.platform_client_secret.get_secret_value()
+    )
 
 
 def _server_base_url() -> str:

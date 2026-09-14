@@ -65,6 +65,20 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         ffmpeg_path,
     )
 
+    # Mission 7 (Phase 17): make the Platform Core integration's actual
+    # resolved state visible at boot, not just inferable from whether
+    # PLATFORM_CLIENT_ID happens to be set - an operator reading startup
+    # logs should be able to see at a glance whether auth/entitlements/
+    # billing are live, without cross-referencing .env.
+    settings = get_commercial_settings()
+    logger.info(
+        "Platform Core integration: configured=%s auth_enabled=%s entitlements_enabled=%s billing_enabled=%s",
+        bool(settings.platform_client_id),
+        settings.platform_auth_enabled,
+        settings.platform_entitlements_enabled,
+        settings.platform_billing_enabled,
+    )
+
     cleanup_task = asyncio.create_task(periodic_cleanup())
     try:
         yield

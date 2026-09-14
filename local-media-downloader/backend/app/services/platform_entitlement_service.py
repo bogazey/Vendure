@@ -105,7 +105,7 @@ def get_authoritative_entitlement(session: Session, user: User) -> dict | None:
     configured) - callers must treat `None` as "unknown," never as "not
     entitled."""
     settings = get_commercial_settings()
-    if not settings.platform_client_id:
+    if not settings.platform_entitlements_enabled or not settings.platform_client_id:
         return None
 
     record = session.get(PlatformOidcToken, user.id)
@@ -254,7 +254,10 @@ def revalidate_central_status_if_due(session: Session, user: User) -> None:
     if user.global_user_id is None:
         return
     settings = get_commercial_settings()
-    if not settings.platform_client_id:
+    # Gated on platform_auth_enabled, not platform_entitlements_enabled -
+    # this is about the AUTH linkage's own account-status validity
+    # (central disable propagation), not plan/entitlement data.
+    if not settings.platform_auth_enabled or not settings.platform_client_id:
         return
     record = session.get(PlatformOidcToken, user.id)
     if record is None:
@@ -418,7 +421,7 @@ def resolve_effective_plan(session: Session, user: User, local_plan: Plan) -> tu
     download gate itself only needs the resolved `Plan`.
     """
     settings = get_commercial_settings()
-    if user.global_user_id is None or not settings.platform_client_id:
+    if user.global_user_id is None or not settings.platform_entitlements_enabled or not settings.platform_client_id:
         return local_plan, {"source": "local", "stale": False, "checked_at": None}
 
     result = get_entitlement_hybrid(session, user)
