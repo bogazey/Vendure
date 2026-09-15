@@ -48,48 +48,85 @@ only referenced conceptually above for context.
 ## 4. Dashboard settings / verification steps
 
 - **A real captured Paddle Sandbox `adjustment.created` refund payload -
-  RECEIVED (Mission 9).** A real full refund of a $4.99 Loady Pro Sandbox
-  transaction produced `type: "full"`, `action: "refund"`,
-  `reason: "other"`, `totals.total: "499"`, and **`status:
-  "pending_approval"`** at `adjustment.created` time - confirming
-  `adjustment.created` is not itself proof a refund completed. This was
-  caught in code review, not in production (the event was delivered to
-  Loady's own existing webhook endpoint, which has no `adjustment.*`
-  handling at all; Platform Core's engine has never had real credentials
-  configured and was never invoked). Fixed in `paddle_provider.py`/
-  `webhook_service.py` - see §5.4 of `BILLING_OWNERSHIP_TRANSITION.md` for
-  the full before/after. **Still outstanding**: a real captured
-  `subscription.updated` event (with `current_billing_period` and
-  `scheduled_change` populated), and a real `adjustment.*` event for a
-  **chargeback** specifically (only a refund has been captured so far).
+  RECEIVED (Mission 9)**, and its **`adjustment.updated` (`status:
+  "approved"`) follow-up - RECEIVED (Mission 14)**, both obtained via the
+  operator-run `scripts/paddle-sandbox-evidence/collect_evidence.py`
+  (Mission 13) against their own Sandbox account. Together these cover the
+  full `pending_approval` → `approved` lifecycle for a real $4.99 refund -
+  see `BILLING_OWNERSHIP_TRANSITION.md` §6d for the field-by-field audit.
+  **Zero code mismatches found**; the exactly-once pending→approved
+  behavior is now proven end-to-end against the real shape
+  (`tests/test_real_evidence_adjustment_lifecycle.py`), not just asserted.
+- **A real captured `subscription.updated` event (with
+  `current_billing_period` and `scheduled_change` populated) - RECEIVED
+  (Mission 14)**, via the same collector (a real, reversible scheduled
+  cancel-then-restore against a live Sandbox subscription). Confirmed the
+  exact field names/nesting `paddle_provider.py` was already extracting,
+  built from public docs alone and never verified before this. **Zero
+  mismatches found** - see `BILLING_OWNERSHIP_TRANSITION.md` §6d.
+- **Still outstanding, and now reclassified**: a real chargeback/dispute
+  event. Mission 13's collector confirmed, programmatically and
+  read-only, that **this Sandbox account's own catalog exposes no
+  chargeback- or dispute-named simulation type at all** - not merely
+  untried. Combined with no known test-card mechanism to trigger a
+  genuine dispute in Sandbox, this is no longer classified as "needs more
+  Sandbox effort" - it is a **Live-observation-only limitation** (see the
+  classification table below). Per explicit instruction, no chargeback
+  behavior was inferred or changed from this negative finding; the
+  existing conservative immediate-revoke handling (Mission 10) stands
+  unchanged.
 - **Paddle Billing dashboard access** to add Platform Core's webhook URL
   as an additional destination (Sandbox first, then Live) - see
   `BILLING_CUTOVER_RUNBOOK.md` Stage 2.
 - Confirmation of Paddle's exact **adjustment event shape** for a
   chargeback specifically (this mission assumed `data.action ==
-  "chargeback"` maps to a dispute; Paddle's real API may use a different
-  literal value, or represent a chargeback as a separate event type
-  entirely - only a real Sandbox chargeback can confirm this). Separately,
-  the refund evidence above confirms `data.status` is a real lifecycle
-  field (`pending_approval` verified; `approved`/`rejected` are Paddle's
-  documented values for the same field but not yet independently
-  verified) - whether a chargeback's `status` values differ is still
-  unconfirmed.
+  "chargeback"` maps to a dispute - Paddle's public Adjustments API
+  documentation independently confirms `chargeback` as a real documented
+  action value, alongside `chargeback_warning`/`chargeback_reverse`, so
+  the literal itself is now doc-confirmed, if not yet real-event-confirmed).
+  Whether a chargeback's own `status` values match the refund's
+  (`pending_approval`/`approved`/`rejected`/`reversed` - all four are
+  Paddle's documented values for the adjustment `status` field generally)
+  remains unconfirmed for the chargeback case specifically - see the
+  Live-observation-only item above.
+
+## 4a. Blocker classification (Mission 14)
+
+Every remaining item, reclassified into exactly the five categories
+requested, now that Sandbox evidence covers refund-approval and
+subscription updates:
+
+| Blocker | Classification |
+|---|---|
+| Chargeback/dispute real event shape and lifecycle | **Live-observation-only limitation** - Sandbox cannot originate a genuine card-network dispute, and this account's simulator catalog has no chargeback scenario (confirmed, not assumed). Real evidence may only ever come from observing an actual Live dispute post-cutover. |
+| `PADDLE_WEBHOOK_SECRET`, Platform Core deployed in a real/monitored environment, its own public webhook URL registered | **Credentials/infrastructure blocker** - ordinary ops work, no code or evidence gap. |
+| Read-only snapshot of Loady's production database for Stage 1 | **Credentials/infrastructure blocker** - access provisioning, not a code or evidence question. |
+| Stage 1 dry-run → Stage 5 cutover itself (the runbook's actual execution) | **Production authorization blocker** - requires a human decision to proceed against real data/traffic, rehearsed but not something evidence or code changes can unlock. |
+| Mission 3 identity migration actually run against real production users | **Production authorization blocker** - the tool is built and tested; running it against real users is an authorization + scheduling decision. |
+| Anything in `paddle_provider.py`/`webhook_service.py`/`subscription_service.py`/reconciliation/entitlement resolution for refund or subscription-update handling | **None outstanding** - Mission 14's audit found zero mismatches; this category is empty for the evidence obtained so far. |
+
+No item in the current list is a plain **code blocker** (something known
+to need a code fix but not yet written) or an unaddressed **Sandbox
+evidence blocker** (something more Sandbox automation could still
+produce) - Missions 13/14 closed every Sandbox-reachable evidence gap that
+existed, and every code gap evidence exposed (Missions 9/10/12) is already
+fixed and tested.
 
 ## 5. Business decisions — DECIDED (Mission 11)
 
 All five business decisions below are now final, recorded verbatim in
 `BILLING_OWNERSHIP_TRANSITION.md` §6a. They are no longer open blockers.
 Two follow-on items they created are tracked separately: §2 above
-(Platform Core price IDs, deferred by Decision #6) and §7 below (a real
-audit finding against Decision #5's gift-preservation clause).
+(Platform Core price IDs, deferred by Decision #6) and §6 below (a real
+audit finding against Decision #5's gift-preservation clause - since
+resolved).
 
 1. **Refund/chargeback entitlement policy**: an **approved** full refund
    revokes the affected Paddle-paid entitlement. A **chargeback/dispute**
    suspends it immediately, with no grace period. The user's account is
    never deleted/disabled solely for either. Gifted/internal/lifetime/
    promotion/bundle entitlements must not be removed merely because a
-   Paddle entitlement is revoked (**not yet true today — see §7**).
+   Paddle entitlement is revoked (**RESOLVED, Mission 12 — see §6**).
    Restoration after a reversed/won dispute requires real Paddle evidence,
    never an invented lifecycle.
 2. **Checkout ownership**: Loady's own Paddle checkout remains the

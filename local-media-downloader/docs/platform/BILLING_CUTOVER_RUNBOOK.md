@@ -21,16 +21,22 @@ provide before Stage 2 below can start.
    endpoint, and real monitoring on it (see `PRODUCTION_TOPOLOGY.md`/
    `PRODUCTION_READINESS_CHECKLIST.md` from earlier missions for the
    general shape of this).
-3. **A real Paddle webhook secret and Sandbox-verified event shapes** —
-   this mission's `paddle_provider.py` extraction logic
-   (`current_billing_period`, `scheduled_change`, `adjustment.*`) was
-   built from Paddle's publicly documented API shape. Mission 9 verified
-   the `adjustment.*` refund shape against a real captured Sandbox event
-   (and found/fixed a real mismatch — see `BILLING_OWNERSHIP_TRANSITION.md`
-   §5.4); `current_billing_period`/`scheduled_change` and the chargeback
-   variant of `adjustment.*` remain unverified. See
-   `PADDLE_LIVE_INPUTS_REQUIRED.md` item 4 — this must be confirmed in
-   Sandbox before Stage 3.
+3. ~~A real Paddle webhook secret and Sandbox-verified event shapes~~ —
+   **Sandbox-verified for refunds and subscription updates (Missions 9/14)**:
+   `paddle_provider.py`'s extraction of `current_billing_period`,
+   `scheduled_change`, and `adjustment.*` (`pending_approval` →
+   `approved`) has now been checked field-by-field against real captured
+   Sandbox events (via the operator-run
+   `scripts/paddle-sandbox-evidence/collect_evidence.py`, Mission 13) —
+   zero mismatches found, see `BILLING_OWNERSHIP_TRANSITION.md` §6d. The
+   webhook secret itself is still a real credential to provision (§4a's
+   "Credentials/infrastructure blocker" category in
+   `PADDLE_LIVE_INPUTS_REQUIRED.md`), not an evidence gap. **Still
+   unverified**: the chargeback/dispute variant of `adjustment.*` -
+   reclassified as a **Live-observation-only limitation**, not a Sandbox
+   gap (this account's Sandbox has no chargeback simulation capability at
+   all, confirmed programmatically) - see
+   `PADDLE_LIVE_INPUTS_REQUIRED.md` §4/§4a.
 4. ~~A decision on the refund/chargeback entitlement policy~~ —
    **DECIDED (Mission 11)**: see `BILLING_OWNERSHIP_TRANSITION.md` §6a
    Decision #5. ~~One real gap against that decision remained open~~ —

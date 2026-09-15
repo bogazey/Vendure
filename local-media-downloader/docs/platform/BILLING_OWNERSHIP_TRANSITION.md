@@ -597,6 +597,103 @@ guessed at here.
 Full suites after this work: Platform Core 279 (was 268), Loady backend
 660 (untouched), Loady frontend 187 (untouched).
 
+## 6d. Real Sandbox evidence audit (Mission 14): `subscription.updated` and refund-`approved` — zero code mismatches found
+
+The operator ran `scripts/paddle-sandbox-evidence/collect_evidence.py`
+(Mission 13) against their own real Paddle Sandbox account and captured
+two genuine (`REAL_SANDBOX_EVENT`-labelled) events, field-by-field audited
+against `paddle_provider.py`/`webhook_service.py`/`subscription_service.py`/
+the reconciliation engine/`capability_service.py`:
+
+**1. A real `subscription.updated`** (a scheduled cancellation on an
+otherwise-active subscription):
+
+- `data.current_billing_period.starts_at`/`.ends_at` — exactly the field
+  names/nesting `_parse_paddle_datetime`/`current_period_start`/
+  `current_period_end` extraction already assumed (§5.3, built from public
+  docs alone, never verified until now). **Confirmed correct, no change.**
+- `data.scheduled_change.action == "cancel"` — exactly what
+  `cancel_at_period_end = (data.get("scheduled_change") or {}).get("action")
+  == "cancel"` already checked. **Confirmed correct, no change.**
+- `data.status` stayed `"active"` throughout — confirming a scheduled
+  cancellation does NOT itself change `subscription.status` (access
+  continues until the scheduled effective date, exactly as
+  `_subscription_contributes`'s existing "canceled + period not yet over"
+  logic already assumes for the OTHER case — an already-`canceled`
+  status). No new gap: this event never reaches `canceled` at all until
+  Paddle applies the scheduled change itself, a later event this evidence
+  doesn't cover.
+- `data.subscription_id` is absent on a subscription object (only
+  transaction/adjustment objects reference a subscription by that key) —
+  confirmed the existing fallback (`data.get("subscription_id") or
+  (data.get("id") if event_type.startswith("subscription.") else None)`)
+  correctly resolves to `data.id` for this event type. **No change.**
+
+**2. A real `adjustment.updated`, `status: "approved"`** — the same
+adjustment Mission 9 captured at `pending_approval`, now resolved:
+
+- `data.status == "approved"`, `data.action == "refund"`,
+  `data.transaction_id`, `data.totals.total`/`currency_code` — every field
+  our normalization reads matches exactly, including the top-level
+  (not `details`-nested) `totals` placement `_adjustment_amount`'s own
+  docstring already called out. **Confirmed correct, no change.**
+- One new field observed: a top-level `data.type` (here: `"partial"`),
+  distinct from `data.items[].type` (here: `"full"` for that one item) —
+  Paddle's adjustment `type` describes the adjustment as a whole relative
+  to the original transaction; the item's own `type` describes just that
+  item. Neither is read by `normalize_event` (partial-vs-full is instead
+  derived from cumulative `refunded_amount_cents` vs. the original
+  payment — already covered, and arguably more robust since it survives
+  multiple partial refunds correctly). **No code change** — this is a
+  fixture-fidelity note only; Mission 9's original test fixture had
+  guessed `type: "full"` at the top level, which real evidence now shows
+  was the wrong level for that value (harmless, since it was never read).
+- **The exact question the evidence was captured to answer** — "does
+  pending → approved produce the intended effect exactly once" — is now
+  proven end-to-end with this real shape, not just asserted:
+  `tests/test_real_evidence_adjustment_lifecycle.py` drives the REAL
+  `pending_approval` (Mission 9) then `approved` (Mission 14) payloads
+  through the actual `PaddleBillingProvider` + signature verification +
+  `webhook_service.receive_webhook` pipeline (not `FakeBillingProvider`):
+  the pending event applies nothing, the approved event applies the
+  refund and revokes the entitlement exactly once, and redelivering the
+  exact same approved event a second time never double-refunds.
+
+**Conclusion: zero mismatches found.** Mission 8/9/10's implementation,
+built from Paddle's public documentation, is now independently confirmed
+correct by two real captured events covering the two previously-largest
+unverified pieces (`current_billing_period`/`scheduled_change`, and the
+refund's `pending_approval`→`approved` transition). No production code
+changed as a result of this audit — only test fixtures were corrected
+(the `type` field placement above) and extended with real-shape coverage.
+
+**What this evidence does NOT cover**, left exactly as before, no
+inference drawn from its absence: a chargeback/dispute of any kind. The
+collector also confirmed (read-only, via Paddle's own Simulation Types
+API) that **this Sandbox account's catalog exposes no chargeback- or
+dispute-named simulation type at all** — not merely "untried," a real
+negative finding. Combined with there being no test-card mechanism to
+trigger a genuine dispute in Sandbox (Mission 13's research), a real
+chargeback/dispute event is now understood to be a **Live-observation-only
+limitation**, not a Sandbox-evidence gap that more Sandbox effort could
+close — see `PADDLE_LIVE_INPUTS_REQUIRED.md` for the reclassified blocker
+list. The existing conservative, immediate-revoke chargeback handling
+(§5.5/Mission 10) is unchanged and un-touched by this finding, per
+instruction: absence of Sandbox simulation support is not itself evidence
+of anything about real chargeback behavior, and none was inferred.
+
+**Sanitization statement**: every fixture added this mission
+(`tests/test_paddle_provider_normalization.py`,
+`tests/test_real_evidence_adjustment_lifecycle.py`) preserves the real
+payloads' exact field names/nesting/shape, with every identifying value
+(subscription/customer/transaction/adjustment/product/price ids, the
+linked Platform Core user id, account-specific timestamps) replaced with
+clearly-synthetic placeholders. The raw evidence file itself was never
+committed to this repository.
+
+Full suites after this work: Platform Core 284 (was 279), Loady backend
+660 (untouched), Loady frontend 187 (untouched).
+
 ## 6. The reconciliation engine (summary — full detail in PADDLE_RECONCILIATION_STRATEGY.md)
 
 `app/services/loady_paddle_reconciliation_service.py`: read-only on
