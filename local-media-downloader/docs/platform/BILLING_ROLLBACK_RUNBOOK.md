@@ -87,6 +87,37 @@ that column already means "no guard yet" (the very first event for any
 subscription), so leaving the column in place is always safe even if this
 mission's other changes are rolled back.
 
+## 5a. Rolling back `c2d4e6f8a1b3` (`GiftedAccess.external_ref`, Mission 12)
+
+Also purely additive, also has a real, tested `downgrade()`:
+
+```bash
+python -m alembic downgrade b1c3d5e7f9a0
+```
+
+Drops the column and its unique constraint only - every `GiftedAccess` row
+created before this migration (every admin-granted gift) is completely
+unaffected, since `external_ref` was `NULL` for all of them already. Rows
+materialized via `gift_service.materialize_external_gift` (Loady-native
+gifts) lose only the idempotency key that prevented duplicate re-creation
+on a future migration re-run - the gift GRANT itself (`plan_id`, `status`,
+`expires_at`, etc.) is untouched, so a downgrade never revokes anyone's
+actual access. Re-running the migration/backfill after a later re-upgrade
+would re-materialize the same gifts fresh (by then-current Loady data),
+not resume from the dropped column.
+
+## 5b. Rolling back the `refunded`/`disputed` Subscription statuses (Mission 12)
+
+No schema change to revert (`Subscription.status` was always free-text).
+If `subscription_service.suspend_for_billing_event`'s CALL SITE in
+`webhook_service._apply_adjustment_event` is reverted (see §6 below), any
+`Subscription` row already sitting at `status="refunded"`/`"disputed"`
+simply stops being written by future events but is not itself corrupted -
+`capability_service._subscription_contributes` already treats any
+status outside its recognized active/canceled set as non-contributing, so
+a stray `refunded` row after a code revert still correctly excludes
+itself from `resolve_effective_entitlements`, never silently reactivating.
+
 ## 6. Rolling back the webhook_service.py code changes themselves
 
 If the fixes in §5 of `BILLING_OWNERSHIP_TRANSITION.md` (out-of-order

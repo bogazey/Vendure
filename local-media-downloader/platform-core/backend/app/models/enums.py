@@ -150,6 +150,16 @@ class SubscriptionStatus(str, Enum):
     PAUSED = "paused"
     CANCELED = "canceled"
     EXPIRED = "expired"
+    # Mission 11 (Billing Ownership Transition - entitlement-source
+    # preservation): a Paddle refund/chargeback stops THIS subscription
+    # from contributing to `resolve_effective_entitlements` immediately -
+    # never at period end like an ordinary `CANCELED` (see
+    # `capability_service._subscription_contributes`). Deliberately
+    # distinct from `CANCELED` (which the customer's own choice produces
+    # and which keeps access through the paid period) so the two are never
+    # confused in an audit trail or a report.
+    REFUNDED = "refunded"
+    DISPUTED = "disputed"
 
 
 class WebhookProcessingStatus(str, Enum):

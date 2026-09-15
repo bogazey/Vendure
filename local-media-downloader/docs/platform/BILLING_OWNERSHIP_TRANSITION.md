@@ -444,6 +444,159 @@ Paddle evidence involved - this is pure entitlement-resolution logic):
   specified today, so it has not been implemented in this pass. Flagged as
   its own blocker in `PADDLE_LIVE_INPUTS_REQUIRED.md`.
 
+## 6c. Entitlement-source preservation (Mission 12: §6b's gap, closed)
+
+**Decision (product owner):** persisted shadow/source-record approach, not
+runtime re-derivation from Loady's database. Implemented as a general
+mechanism, not a one-off refund patch.
+
+### Architecture chosen: extend the existing V2 source/ledger model
+
+Audited first, per instruction, whether a source/ledger model already
+existed rather than building a parallel system - it did.
+`capability_service.resolve_effective_entitlements` (Mission 6/7) already
+reads FIVE independent source tables every time it runs - the legacy
+`Entitlement` cache, `Subscription`, `GiftedAccess`, `BundleAccess`,
+`PromotionAccess` - and merges their capabilities with a documented
+tie-break rank. `GiftedAccess` in particular was already built (mission-
+brief Phase 13) explicitly as "a dedicated, append-by-convention history
+table... separate from the single mutable `Entitlement` row" - i.e. the
+exact persisted shadow/source-record model this decision calls for
+already existed for admin-granted gifts. **The actual gap was narrower
+than it first looked**: Loady-native gifts were never being written into
+it at all - `loady_migration_service.py` (Mission 3, which predates
+`GiftedAccess`) only ever wrote the single-row legacy cache. Nothing about
+the resolution engine itself needed to change; only who feeds it a durable
+row for a Loady gift.
+
+A second, independent gap (found auditing what "remove/suspend only that
+source" actually required): a refund/chargeback never updated
+`Subscription.status`, only the legacy cache row - so even with the gift
+correctly preserved, `resolve_effective_entitlements` would still have
+counted the refunded Paddle subscription as active (tie-break rank 100,
+beating a gift's 60), masking the very gift being preserved. Both gaps
+had to close together for the mission's own worked example to actually
+work end-to-end.
+
+### Schema changes
+
+One additive column, one Alembic migration
+(`c2d4e6f8a1b3_mission_11_gifted_access_external_ref.py`, head:
+`b1c3d5e7f9a0`):
+
+```
+gifted_access.external_ref  VARCHAR(200)  NULLABLE  UNIQUE
+```
+
+`NULL` for every gift granted directly in Platform Core (`gift_service.
+grant_gift`, unchanged). Set to `"loady:gift:<loady_subscription_row_id>"`
+only for a gift materialized from an external system - the idempotency
+key that makes repeated migration/backfill runs safe (see below).
+Downgrade drops the column and its unique constraint; no data migration
+needed in either direction since the column is purely additive and
+nothing existing ever populated it.
+
+No new table. `Subscription.status` (already a free-text column, no DB
+enum constraint) gained two new recognized values in the Python-side
+`SubscriptionStatus` enum - `refunded`/`disputed` - not a schema change.
+
+### Service changes
+
+- **`gift_service.materialize_external_gift`** (new): idempotent on
+  `external_ref` - an existing row is returned unchanged, never
+  duplicated. Deliberately does NOT call `grant_gift` or its paid-
+  precedence guard (`ForbiddenError` when the user already holds an
+  active paid entitlement) - that guard is for a live admin action;
+  backfilling a gift's own past grant must succeed regardless of what a
+  Paddle subscription later did, since preserving it independently is the
+  entire point. Never creates a `PaymentRecord` - identical guarantee to
+  `grant_gift`.
+- **`loady_migration_service.py`** (Mission 3, extended): the per-user
+  loop now (a) picks whichever ACTIVE subscription wins the single legacy
+  cache row by a decided provider priority (paddle > gifted, matching the
+  reconciliation engine's own precedent - previously an incidental
+  most-recently-updated tie-break), and (b) INDEPENDENTLY materializes
+  every currently-active `gifted`-provider row into `GiftedAccess` via the
+  function above, regardless of which row won (a). This is what makes
+  re-running `run_migration` for an already-migrated user a safe backfill
+  strategy - see below.
+- **`subscription_service.suspend_for_billing_event`** (new): sets a
+  `Subscription`'s status to `refunded`/`disputed` and nothing else -
+  never touches a `GiftedAccess`/`BundleAccess`/`PromotionAccess` row, or
+  a different `Subscription`. Respects the exact same out-of-order guard
+  as `upsert_subscription` (`last_event_occurred_at`), so a stale/delayed
+  event can never resurrect or incorrectly suspend a subscription a newer
+  event already settled.
+- **`webhook_service._apply_adjustment_event`**: now calls the function
+  above (in addition to, not instead of, the existing legacy-cache
+  `entitlement_service.revoke` call) whenever a refund/chargeback takes
+  effect. The legacy revoke stays purely additive: Loady's own hybrid
+  resolver (`platform_entitlement_service.get_authoritative_entitlement`)
+  already falls back from `/entitlements/me` (legacy-only) to
+  `/api/v1/capabilities/me` (`resolve_effective_entitlements`) whenever the
+  legacy row reports not-entitled - so revoking it can only ever reveal a
+  remaining valid source, never hide one.
+
+### Migration/backfill behavior
+
+Re-running `loady_migration_service.run_migration` - already an
+idempotent, safe-to-repeat operation by design (Mission 3) - is the
+complete backfill strategy for users migrated before this mechanism
+existed: it reads Loady's gift rows fresh every time regardless of
+Platform Core's current state, and `materialize_external_gift`'s
+`external_ref` check means a gift already materialized in a prior run is
+a no-op, never a duplicate. No separate backfill script, no direct table
+edit, no dependency on Loady's database after the (re-)run completes -
+once materialized, `GiftedAccess` is independently authoritative and
+nothing reads Loady again for that gift.
+
+**Known limitation, explicitly not built**: if a Loady-native gift is
+later revoked or changed IN LOADY after being materialized, nothing
+propagates that change into the already-materialized `GiftedAccess` row -
+there is no live sync channel from Loady's gift-admin actions into
+Platform Core (a separate, unaddressed integration question, adjacent to
+Decision #6's "checkout stays on Loady" territory). Not fabricated or
+guessed at here.
+
+### Precedence behavior
+
+- **Legacy single-row cache** (`entitlement_service`, `/entitlements/me`):
+  provider priority paddle > gifted, most-recent tie-break within a
+  provider - one winner only, by design (this row's entire purpose is a
+  fast "is this user entitled at all" answer, not multi-source detail).
+- **Modern resolver** (`capability_service.resolve_effective_entitlements`,
+  `/capabilities/me`): every valid source contributes independently and
+  simultaneously. Boolean capabilities OR together; integer capabilities
+  take the max (this is what makes "the stronger plan's capability wins"
+  true automatically - a Gifted Creator's higher numeric capability beats
+  a coexisting Paddle Pro's lower one with no new ranking system needed,
+  proven by `test_gifted_creator_stronger_than_paddle_pro_stays_effective`);
+  string/enum capabilities use the existing, unchanged, pre-Mission-11
+  source-KIND tie-break (`subscription` > `bundle` > `gifted` > ...) for
+  which single label wins - deliberately not touched, since "which plan's
+  exact string label wins" was already a documented design decision
+  ("chosen so it never surprises a paying user"), not part of this gap.
+
+### Tests
+
+19 new tests, all passing, all against `FakeBillingProvider` (no network):
+
+- `tests/test_loady_migration.py`: gift migration also creates a durable
+  `GiftedAccess` row with correct attribution; re-running migration never
+  duplicates it (2 tests).
+- `tests/test_entitlement_source_preservation.py` (new file, 9 tests): the
+  mission's own worked example end-to-end (Gifted Pro → Paddle Creator →
+  refunded → Gifted Pro effective again, via real webhook events); Gifted
+  Creator remaining effective (and winning the numeric merge) alongside a
+  coexisting Paddle Pro; an expired gift never resurrecting; a revoked
+  gift never resurrecting; product isolation; user isolation; a replayed
+  refund webhook never duplicating a source or double-refunding; an
+  out-of-order reactivation never resurrecting a refunded subscription;
+  the gift re-emerging never fabricating a `PaymentRecord`.
+
+Full suites after this work: Platform Core 279 (was 268), Loady backend
+660 (untouched), Loady frontend 187 (untouched).
+
 ## 6. The reconciliation engine (summary — full detail in PADDLE_RECONCILIATION_STRATEGY.md)
 
 `app/services/loady_paddle_reconciliation_service.py`: read-only on

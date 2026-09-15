@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy import create_engine, select, text
 
-from app.database.models import Entitlement, ProductMembership, RoleAssignment, User
+from app.database.models import Entitlement, GiftedAccess, ProductMembership, RoleAssignment, User
 from app.security.passwords import hash_password
 from app.services.loady_migration_service import run_migration
 
@@ -225,6 +225,68 @@ def test_all_twelve_fixtures_migrate_with_correct_classification(db_session, loa
     # Product membership recorded for every successfully migrated user.
     memberships = db_session.query(ProductMembership).filter_by(product_id="loady").count()
     assert memberships == 11
+
+
+def test_gifted_migration_also_materializes_a_durable_gifted_access_row(db_session, loady_engine, migration_actor):
+    """Mission 11: the legacy `Entitlement` cache row alone is not durable
+    against a later Paddle subscription superseding it (it is a single
+    row per user+product) - a Loady-native gift must also be materialized
+    as a first-class `GiftedAccess` V2 row, independent of that cache.
+    Uses its own isolated fixture (not `_build_all_fixtures`'s shared,
+    fixed-email fixtures) since this file's `platform.db` is shared across
+    every test in the session - see `test_rerunning_migration_...` below
+    for why that matters."""
+    admin_email = f"gift-admin-{_uid()}@example.com"
+    admin_id = _insert_user(loady_engine, email=admin_email, role="admin")
+    gifted_email = f"gift-materialize-{_uid()}@example.com"
+    gifted_id = _insert_user(loady_engine, email=gifted_email)
+    _insert_subscription(loady_engine, user_id=gifted_id, provider="gifted", plan="pro",
+                          granted_by_admin_id=admin_id, granted_reason="beta tester")
+
+    run_migration(db_session, loady_engine, actor=migration_actor, reason="fixture test", dry_run=False)
+    db_session.flush()
+
+    gifted_pro_user = db_session.execute(select(User).where(User.email == gifted_email)).scalars().first()
+    gift = db_session.execute(
+        select(GiftedAccess).where(GiftedAccess.user_id == gifted_pro_user.id, GiftedAccess.product_id == "loady")
+    ).scalars().first()
+    assert gift is not None, "a Loady-native gift must be materialized into GiftedAccess, not just the legacy cache"
+    assert gift.status == "active"
+    assert gift.reason == "beta tester"
+    assert gift.external_ref is not None and gift.external_ref.startswith("loady:gift:")
+
+    admin_global_user = db_session.execute(select(User).where(User.email == admin_email)).scalars().first()
+    assert gift.granted_by == admin_global_user.id
+
+
+def test_rerunning_migration_never_duplicates_the_gifted_access_row(db_session, loady_engine, migration_actor):
+    """The backfill story for users migrated before this mechanism existed
+    is simply "re-run the migration" - it must be safe to do so any number
+    of times without ever creating a second GiftedAccess row for the same
+    underlying Loady gift. Uses its own isolated fixture, not
+    `_build_all_fixtures` - this file's `platform.db` is shared across the
+    whole test session, so reusing `_build_all_fixtures`'s fixed
+    "gifted-pro@example.com" here would link to a DIFFERENT test's
+    already-migrated user and create a second, legitimately-distinct
+    external_ref (a different fake Loady subscription row entirely) -
+    that would be a test-isolation artifact, not evidence of a real
+    duplication bug."""
+    admin_id = _insert_user(loady_engine, email=f"rerun-admin-{_uid()}@example.com", role="admin")
+    gifted_email = f"gift-rerun-{_uid()}@example.com"
+    gifted_id = _insert_user(loady_engine, email=gifted_email)
+    _insert_subscription(loady_engine, user_id=gifted_id, provider="gifted", plan="pro",
+                          granted_by_admin_id=admin_id, granted_reason="beta tester")
+
+    run_migration(db_session, loady_engine, actor=migration_actor, reason="run 1", dry_run=False)
+    db_session.commit()
+    run_migration(db_session, loady_engine, actor=migration_actor, reason="run 2 (backfill re-run)", dry_run=False)
+    db_session.commit()
+
+    gifted_pro_user = db_session.execute(select(User).where(User.email == gifted_email)).scalars().first()
+    gifts = db_session.execute(
+        select(GiftedAccess).where(GiftedAccess.user_id == gifted_pro_user.id, GiftedAccess.product_id == "loady")
+    ).scalars().all()
+    assert len(gifts) == 1, "re-running the migration must never duplicate a gift's GiftedAccess row"
 
 
 def test_migration_never_creates_a_payment_record_for_gifted_users(db_session, loady_engine, migration_actor):

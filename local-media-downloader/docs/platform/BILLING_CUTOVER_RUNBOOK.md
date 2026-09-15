@@ -33,12 +33,13 @@ provide before Stage 2 below can start.
    Sandbox before Stage 3.
 4. ~~A decision on the refund/chargeback entitlement policy~~ —
    **DECIDED (Mission 11)**: see `BILLING_OWNERSHIP_TRANSITION.md` §6a
-   Decision #5. One real gap against that decision remains open and must
-   be closed before Stage 2: gifted/internal/lifetime entitlements are not
-   currently preserved when a Paddle refund/chargeback revokes the same
-   product's entitlement — see `PADDLE_LIVE_INPUTS_REQUIRED.md` §6. This
-   needs no Paddle evidence, just a confirmed restoration mechanism and
-   the fix.
+   Decision #5. ~~One real gap against that decision remained open~~ —
+   **RESOLVED (Mission 12)**: gifted/internal/lifetime entitlements are
+   now independently preserved when a Paddle refund/chargeback revokes
+   the same product's entitlement (`GiftedAccess.external_ref` +
+   `subscription_service.suspend_for_billing_event` - see
+   `BILLING_OWNERSHIP_TRANSITION.md` §6c). No prerequisite blockers remain
+   for this item.
 
 ## Stage 1 — Dry-run reconciliation against a REAL data snapshot (read-only)
 

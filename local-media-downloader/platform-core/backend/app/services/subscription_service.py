@@ -135,6 +135,49 @@ def cancel_subscription(session: Session, subscription: Subscription, at_period_
     return subscription
 
 
+def suspend_for_billing_event(
+    session: Session, subscription: Subscription, status: str, event_occurred_at: datetime | None = None,
+) -> Subscription:
+    """Mission 11 (entitlement-source preservation): a Paddle refund or
+    chargeback must stop THIS subscription from contributing to
+    `capability_service.resolve_effective_entitlements` IMMEDIATELY -
+    never at period end like `cancel_subscription`'s ordinary
+    at-period-end path - while never touching any other entitlement
+    source (a `GiftedAccess`/`BundleAccess`/`PromotionAccess` row, or a
+    different `Subscription`). `status` is expected to be
+    `SubscriptionStatus.REFUNDED`/`DISPUTED` - anything outside
+    `_SUBSCRIPTION_ACTIVE_STATUSES` and not `"canceled"` already makes
+    `_subscription_contributes` return `False` unconditionally, so no
+    change is needed there.
+
+    Respects the exact same out-of-order guard as `upsert_subscription`:
+    an event whose `event_occurred_at` is older than this subscription's
+    `last_event_occurred_at` is a no-op here - the caller's webhook
+    journal row still records the event, but it can never resurrect (or
+    incorrectly suspend) a subscription a NEWER event already settled."""
+    stale = (
+        event_occurred_at is not None
+        and subscription.last_event_occurred_at is not None
+        and event_occurred_at < subscription.last_event_occurred_at
+    )
+    if stale:
+        return subscription
+
+    subscription.status = status
+    if event_occurred_at is not None:
+        subscription.last_event_occurred_at = event_occurred_at
+    session.flush()
+    audit_service.record(
+        session, None, AuditAction.SUBSCRIPTION_CHANGED, "subscription", subscription.id, subscription.product_id,
+        after_state={"status": status},
+    )
+    outbox_service.enqueue(
+        session, "entitlement.changed", subscription.product_id,
+        {"user_id": subscription.user_id, "product_id": subscription.product_id},
+    )
+    return subscription
+
+
 _ACTIVE_LEGACY_STATUSES = {"trialing", "active", "past_due"}
 
 

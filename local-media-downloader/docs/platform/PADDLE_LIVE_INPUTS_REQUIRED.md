@@ -109,24 +109,27 @@ audit finding against Decision #5's gift-preservation clause).
    authoritative. Physical removal is explicitly out of scope for this
    migration.
 
-## 6. New blocker found by this decision (Mission 11 audit, no Paddle evidence needed)
+## 6. Gifted-entitlement preservation gap — RESOLVED (Mission 12)
 
-**Gifted entitlements are not currently preserved when a Paddle refund/
-chargeback revokes the same product's entitlement.** The legacy
-`Entitlement` table is one row per (user, product); when a Paddle
-subscription supersedes an existing gift, the row becomes Paddle-sourced
-and the original gift is only remembered in the reconciliation *report*,
-not in any data `entitlement_service.revoke` can consult. A later refund/
-chargeback therefore leaves the user with nothing, not their pre-existing
-gift — a real violation of Decision #5's gift-preservation clause. See
-`BILLING_OWNERSHIP_TRANSITION.md` §6b for the full trace. This needs no
-Paddle evidence, no further business decision (the policy is decided), and
-no credentials — it is a normal code fix, but the restoration *mechanism*
-(re-derive from Loady's own gift row vs. persist a shadow record in
-Platform Core when paid supersedes gifted) was not specified, so it has
-not been implemented speculatively. Confirm the mechanism, or approve one
-of the two sketched above, and it can be built and tested with zero new
-external inputs.
+Was: "gifted entitlements are not currently preserved when a Paddle
+refund/chargeback revokes the same product's entitlement" (found by
+Mission 11's audit of Decision #5, see `BILLING_OWNERSHIP_TRANSITION.md`
+§6b). The product owner chose the persisted shadow/source-record approach
+(never re-deriving from Loady's database at runtime), implemented as a
+general entitlement-source preservation mechanism - see
+`BILLING_OWNERSHIP_TRANSITION.md` §6c for architecture, schema, migration/
+backfill, and precedence detail. 19 new tests, all passing; full suites
+(Platform Core 279, Loady backend 660, Loady frontend 187) green. No
+Paddle evidence, credentials, or cutover authorization was needed for any
+of it - the entire fix is Platform Core's own entitlement-resolution logic.
+
+**One known limitation, explicitly not built** (see §6c): a Loady-native
+gift's REVOKE, once materialized into `GiftedAccess`, does not propagate
+backward from a later change in Loady itself - there is no live sync
+channel for that. Not a blocker for cutover (Loady's own gift-admin
+actions are out of scope for this migration per Decision #6's spirit), but
+worth knowing if Loady's gift-admin UI is ever used again after a user's
+gift has been migrated.
 
 ## 8. What this mission explicitly did NOT need from you, and why
 

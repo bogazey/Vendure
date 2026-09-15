@@ -47,12 +47,21 @@ from sqlalchemy.orm import Session
 
 from app.database.models import Product, User
 from app.models.enums import AuditAction, EntitlementSource, RoleSlug
-from app.services import audit_service, entitlement_service, product_service, rbac_service
+from app.services import audit_service, entitlement_service, gift_service, product_service, rbac_service
 
 LOADY_PRODUCT_ID = "loady"
 _ACTIVE_SUBSCRIPTION_STATUSES = {"active", "trialing", "past_due"}
 _KNOWN_PROVIDERS = {"paddle": EntitlementSource.PADDLE, "gifted": EntitlementSource.GIFTED}
 _LOADY_PLANS = ("free", "pro", "creator")
+# Mission 11: which provider wins the single legacy Entitlement cache row
+# when a user has more than one simultaneously-active Loady subscription -
+# a real paid subscription always outranks a gift for that ONE fast-path
+# row (matches the reconciliation engine's own decided precedent - see
+# `test_user_with_both_paid_and_gifted_entitlement` -
+# "paid and gifted must never coexist as two separate entitlement rows").
+# This never affects `GiftedAccess` materialization below, which is
+# independent of whichever provider wins here.
+_LEGACY_CACHE_PROVIDER_PRIORITY = {"paddle": 2, "gifted": 1}
 
 
 @dataclass
@@ -100,6 +109,44 @@ def _ensure_loady_product_and_plans(platform_session: Session) -> None:
         )
     for slug in _LOADY_PLANS:
         entitlement_service.get_or_create_plan(platform_session, LOADY_PRODUCT_ID, slug, slug.title())
+
+
+def _materialize_loady_gift(
+    platform_session: Session,
+    actor: User,
+    platform_user: User,
+    gifted_row: dict,
+    loady_id_to_global_id: dict[str, str],
+    reason: str | None,
+) -> None:
+    """Mission 11: independently persists a Loady-native gift as a durable
+    `GiftedAccess` V2 row, regardless of whether this user's legacy
+    `Entitlement` cache row currently reflects THIS gift or a Paddle
+    subscription that has since superseded it there (BILLING_OWNERSHIP_
+    TRANSITION.md §6a Decision #5: a Paddle entitlement becoming effective
+    must never destroy an existing gift). Idempotent via `external_ref`
+    (`gift_service.materialize_external_gift`) - safe to call every time
+    this function runs, including for a user migrated in a previous run,
+    which is exactly what makes re-running `run_migration` a safe backfill
+    strategy for users migrated before this mechanism existed."""
+    plan = entitlement_service.get_plan(platform_session, LOADY_PRODUCT_ID, gifted_row["plan"])
+    granting_admin = actor
+    granted_by_loady_id = gifted_row.get("granted_by_admin_id")
+    granted_by_global_id = loady_id_to_global_id.get(granted_by_loady_id) if granted_by_loady_id else None
+    if granted_by_global_id:
+        granting_admin = platform_session.get(User, granted_by_global_id) or actor
+    gift_reason = gifted_row.get("granted_reason") or reason
+    granted_at = _as_utc(gifted_row.get("created_at")) or datetime.now(timezone.utc)
+    gift_service.materialize_external_gift(
+        platform_session,
+        admin=granting_admin,
+        target=platform_user,
+        plan=plan,
+        external_ref=f"loady:gift:{gifted_row['id']}",
+        reason=gift_reason,
+        granted_at=granted_at,
+        expires_at=_as_utc(gifted_row.get("current_period_end")),
+    )
 
 
 def run_migration(
@@ -212,11 +259,28 @@ def run_migration(
                     select(subscriptions_table)
                     .where(subscriptions_table.c.user_id == loady_id)
                 ).mappings().all()
-                active_sub = next(
-                    (s for s in sorted(sub_row, key=lambda s: s.get("updated_at") or "", reverse=True)
-                     if s["status"] in _ACTIVE_SUBSCRIPTION_STATUSES),
-                    None,
+                active_rows = [s for s in sub_row if s["status"] in _ACTIVE_SUBSCRIPTION_STATUSES]
+                active_sub = max(
+                    active_rows,
+                    key=lambda s: (_LEGACY_CACHE_PROVIDER_PRIORITY.get(s["provider"], 0), s.get("updated_at") or ""),
+                    default=None,
                 )
+
+                # Mission 11: materialize EVERY currently-active gifted row
+                # into GiftedAccess V2, independently of which row above
+                # wins the single legacy cache slot - a gift must survive
+                # in Platform Core's own ledger even when a Paddle
+                # subscription is what `active_sub` resolved to.
+                for gifted_row in (s for s in active_rows if s["provider"] == "gifted"):
+                    try:
+                        _materialize_loady_gift(
+                            platform_session, actor, platform_user, dict(gifted_row), loady_id_to_global_id, reason,
+                        )
+                    except Exception as exc:  # noqa: BLE001 - reported, never silently dropped
+                        report.failed.append({
+                            "loady_user_id": loady_id, "email": loady_row["email"],
+                            "reason": f"gift materialization failed: {_safe_error_reason(exc)}",
+                        })
 
                 granting_admin = actor
                 if active_sub is None:

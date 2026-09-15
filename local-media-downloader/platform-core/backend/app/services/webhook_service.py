@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from app.database.models import BillingWebhookEvent, PaymentRecord, Plan, Subscription, SubscriptionItem, User
-from app.models.enums import AuditAction, PaymentStatus
+from app.models.enums import AuditAction, PaymentStatus, SubscriptionStatus
 from app.services import audit_service, entitlement_service, product_service, subscription_service
 from app.services.billing.base import BillingProvider, NormalizedEvent
 from app.utils.exceptions import InvalidWebhookSignatureError, NotFoundError
@@ -345,8 +345,32 @@ def _apply_adjustment_event(session: Session, provider_name: str, event: Normali
     if new_status in (PaymentStatus.REFUNDED.value, PaymentStatus.DISPUTED.value) and original.subscription_id:
         subscription = session.get(Subscription, original.subscription_id)
         if subscription is not None:
+            # Mission 11 (entitlement-source preservation): suspend ONLY
+            # this Paddle subscription - never any other entitlement
+            # source the same user holds (a GiftedAccess/BundleAccess/
+            # PromotionAccess row, or a different Subscription). This is
+            # what lets `capability_service.resolve_effective_entitlements`
+            # correctly recalculate from whatever sources remain valid,
+            # e.g. a gift that was previously superseded by this same
+            # subscription automatically becoming the winning source again
+            # - see BILLING_OWNERSHIP_TRANSITION.md §6c.
+            subscription_service.suspend_for_billing_event(
+                session, subscription,
+                SubscriptionStatus.DISPUTED.value if new_status == PaymentStatus.DISPUTED.value
+                else SubscriptionStatus.REFUNDED.value,
+                event_occurred_at=event.occurred_at,
+            )
             user = session.get(User, subscription.user_id)
             if user is not None:
+                # Also revoke the legacy single-row cache (the fast path
+                # `/api/v1/entitlements/me` still reads) - purely additive
+                # with the line above: `platform_entitlement_service.
+                # get_authoritative_entitlement` (Loady's own hybrid
+                # resolver) falls back to `/api/v1/capabilities/me` (which
+                # independently reads GiftedAccess/Subscription/etc.)
+                # whenever this legacy row reports not-entitled, so
+                # revoking it here can only ever reveal a remaining valid
+                # source, never hide one.
                 entitlement_service.revoke(
                     session, user, user, subscription.product_id,
                     reason=f"{new_status}:{event.provider_event_id}",

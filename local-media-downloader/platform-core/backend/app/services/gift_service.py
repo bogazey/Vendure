@@ -77,6 +77,74 @@ def grant_gift(
     return gift
 
 
+def materialize_external_gift(
+    session: Session,
+    admin: User,
+    target: User,
+    plan: Plan,
+    external_ref: str,
+    reason: str | None,
+    granted_at: datetime,
+    expires_at: datetime | None,
+) -> GiftedAccess:
+    """Mission 11: idempotently materializes a gift that ORIGINATED in an
+    external system (so far, only Loady's own `Subscription(provider=
+    "gifted")` rows, via `loady_migration_service.py`) as a first-class,
+    durable `GiftedAccess` row - Platform Core's own persisted source
+    record for it, never re-derived from the external system again at
+    read time (see docs/platform/BILLING_OWNERSHIP_TRANSITION.md §6c).
+
+    Deliberately does NOT call `grant_gift` or apply its paid-precedence
+    guard (`ForbiddenError` when the user already holds an active
+    `paddle`-sourced legacy entitlement): that guard exists to stop a
+    HUMAN admin action from silently overwriting or misusing an active
+    paid entitlement in the live product. Materializing a gift's own PAST
+    grant during a migration/backfill must succeed regardless of whatever
+    else the user holds today - preserving exactly that gift, independent
+    of a Paddle subscription superseding it, is the entire point of this
+    mechanism (BILLING_OWNERSHIP_TRANSITION.md §6a Decision #5).
+
+    `external_ref` is the idempotency key: an existing row already
+    carrying it is returned unchanged, never duplicated, so re-running a
+    migration/backfill for an already-processed gift is always a safe
+    no-op. Never creates or references a `PaymentRecord` - identical
+    revenue-neutrality guarantee to `grant_gift`."""
+    existing = session.execute(
+        select(GiftedAccess).where(GiftedAccess.external_ref == external_ref)
+    ).scalars().first()
+    if existing is not None:
+        return existing
+
+    from app.services import catalog_service
+
+    _capabilities, plan_version_id = catalog_service.capabilities_for_grant(session, plan)
+
+    gift = GiftedAccess(
+        user_id=target.id,
+        product_id=plan.product_id,
+        plan_id=plan.id,
+        plan_version_id=plan_version_id,
+        reason=reason,
+        granted_by=admin.id,
+        granted_at=granted_at,
+        starts_at=granted_at,
+        expires_at=expires_at,
+        status="active",
+        external_ref=external_ref,
+    )
+    session.add(gift)
+    session.flush()
+    audit_service.record(
+        session, admin.id, AuditAction.GIFT_V2_GRANTED, "gifted_access", gift.id, plan.product_id,
+        after_state={
+            "plan_id": plan.id, "expires_at": expires_at.isoformat() if expires_at else None,
+            "external_ref": external_ref,
+        },
+        reason=reason,
+    )
+    return gift
+
+
 def revoke_gift(session: Session, admin: User, gift_id: str, reason: str | None) -> GiftedAccess:
     gift = session.get(GiftedAccess, gift_id)
     if gift is None:

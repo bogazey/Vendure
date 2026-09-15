@@ -616,7 +616,18 @@ class GiftedAccess(Base):
     `entitlement_service`'s single-row-per-product cache is updated in
     place. This table never contacts, references, or implies a
     `PaymentRecord` (mission-brief Phase 13: "gift must never contact
-    billing provider")."""
+    billing provider").
+
+    Mission 11: this is also Platform Core's persisted shadow/source
+    record for a gift that ORIGINATED in an external system (so far, only
+    Loady's own `Subscription(provider="gifted")` rows) - `external_ref`
+    (see below) is what makes materializing one idempotent, and once
+    created this row is independently authoritative: nothing reads back
+    from the external system afterward (see docs/platform/
+    BILLING_OWNERSHIP_TRANSITION.md §6c and `gift_service.
+    materialize_external_gift`). `external_ref` is `NULL` for every
+    ordinary admin-granted gift (`grant_gift`), exactly as before this
+    mission."""
 
     __tablename__ = "gifted_access"
 
@@ -635,6 +646,12 @@ class GiftedAccess(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     revoke_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    # Mission 11: a stable identifier for the external record this gift was
+    # materialized from (e.g. "loady:gift:<loady_subscription_id>") - the
+    # idempotency key for `gift_service.materialize_external_gift`, so
+    # repeated migration/backfill runs never create a duplicate. `NULL` for
+    # every gift granted directly in Platform Core.
+    external_ref: Mapped[str | None] = mapped_column(String(200), unique=True, nullable=True)
 
 
 # =============================================================================
