@@ -15,8 +15,8 @@ Platform Core)
 | Variable | Purpose | Where it already exists in code (unset by default) |
 |---|---|---|
 | `PADDLE_WEBHOOK_SECRET` (Platform Core) | Verifies `Paddle-Signature` on Platform Core's own webhook endpoint | `app/services/billing/paddle_provider.py::verify_webhook` reads `get_settings().paddle_webhook_secret` |
-| `PADDLE_API_KEY` (Platform Core, if checkout creation ever moves here) | Server-side Paddle Billing API key | Not yet read anywhere in Platform Core - `PaddleBillingProvider`'s network methods all raise `BillingProviderNotConfiguredError` today |
-| `PADDLE_CLIENT_TOKEN` (Platform Core, if checkout creation ever moves here) | Public Paddle.js token | Not yet read anywhere in Platform Core |
+| ~~`PADDLE_API_KEY` (Platform Core)~~ | **Deferred (Decision #6, Mission 11)** - checkout creation stays on Loady's side for this cutover | `PaddleBillingProvider`'s network methods all raise `BillingProviderNotConfiguredError` - intentionally left that way |
+| ~~`PADDLE_CLIENT_TOKEN` (Platform Core)~~ | **Deferred (Decision #6, Mission 11)** - same reason | Not read anywhere in Platform Core, by design |
 
 Loady's own equivalents (`PADDLE_API_KEY`, `PADDLE_CLIENT_TOKEN`,
 `PADDLE_WEBHOOK_SECRET`, all four price IDs) already exist and are
@@ -25,14 +25,11 @@ only referenced conceptually above for context.
 
 ## 2. IDs and configuration values
 
-- **Paddle price IDs for Platform Core's own catalog**, if/when checkout
-  creation moves to Platform Core (`BILLING_CUTOVER_RUNBOOK.md` Stage 6):
-  the same four IDs Loady already has configured
-  (`PADDLE_PRO_MONTHLY_PRICE_ID`, `PADDLE_PRO_ANNUAL_PRICE_ID`,
-  `PADDLE_CREATOR_MONTHLY_PRICE_ID`, `PADDLE_CREATOR_ANNUAL_PRICE_ID`),
-  mapped into Platform Core's own `Price` table
-  (`provider_price_id`/`interval`/`amount_cents`/`currency` columns
-  already exist in the schema - Mission 6).
+- ~~Paddle price IDs for Platform Core's own catalog~~ — **not needed for
+  this cutover** (Decision #6, Mission 11): checkout creation stays on
+  Loady's side; Platform Core becomes the billing/entitlement authority
+  without ever creating a checkout itself. Deferred to the separate future
+  checkout-centralization migration, if that is ever undertaken.
 - **Platform Core's own public webhook URL** once deployed (e.g.
   `https://platform.loady.cc/api/v1/billing/webhooks/paddle`) - needed to
   register it as an additional Paddle webhook destination.
@@ -79,48 +76,59 @@ only referenced conceptually above for context.
   verified) - whether a chargeback's `status` values differ is still
   unconfirmed.
 
-## 5. Business decisions (not technical, must be made by a human)
+## 5. Business decisions — DECIDED (Mission 11)
 
-1. **Refund/chargeback entitlement policy** (`BILLING_OWNERSHIP_TRANSITION.md`
-   §5.2's default, revised by §5.4/§5.5): a **full refund** revokes only
-   *once Paddle reports the adjustment as approved* (Mission 9 - revised
-   from "immediately on `adjustment.created`" after real Sandbox evidence
-   showed that event fires while the adjustment is still
-   `pending_approval`). A **chargeback/dispute** still revokes immediately
-   on `adjustment.created`, unconditionally (Mission 8's original
-   conservative default, deliberately NOT extended to use the
-   refund-verified approval gate - Mission 10 audit found no real captured
-   chargeback event to justify treating its `status` field the same way,
-   and delaying a chargeback revocation is the riskier direction absent
-   evidence). A **partial** refund never revokes. Confirm this is the
-   intended policy - in particular, whether a chargeback should have a
-   grace period before revoking (since the dispute might be resolved in
-   the merchant's favor) rather than this mission's conservative
-   immediate default, and whether the refund-approval gate should also
-   eventually apply to chargebacks once real evidence exists for it.
-2. **Whether Loady's own Paddle checkout stays on Loady's side
-   indefinitely**, or eventually moves to Platform Core
-   (`BILLING_CUTOVER_RUNBOOK.md` Stage 6) - this mission takes no
-   position and builds no checkout-redirect change either way.
-3. **Whether historical (pre-cutover) Paddle transactions are ever
-   backfilled into Platform Core's `PaymentRecord` ledger.** This mission
-   deliberately does not fabricate one from a subscription's current
-   snapshot alone (there is nothing to derive a historical transaction's
-   amount/currency/date from without calling Paddle's own `GET
-   /transactions` API) - if historical revenue reporting inside Platform
-   Core is ever required, that is a new, explicit, real-API-calling
-   effort, not an extension of this mission's reconciliation tool.
-4. **How long the dual-webhook verification window (Stage 4) should run**
-   before cutting Loady's own endpoint over - this mission suggests "a
-   week" as a starting point, not a fixed requirement.
-5. **Whether Loady's own `Subscription`/`BillingEvent` tables are ever
-   deprioritized or removed** after a successful cutover, or kept
-   indefinitely as an operational fallback - this mission recommends
-   keeping them indefinitely (see `BILLING_OWNERSHIP_TRANSITION.md` §3)
-   but this is ultimately a product/ops decision, not a technical
-   requirement.
+All five business decisions below are now final, recorded verbatim in
+`BILLING_OWNERSHIP_TRANSITION.md` §6a. They are no longer open blockers.
+Two follow-on items they created are tracked separately: §2 above
+(Platform Core price IDs, deferred by Decision #6) and §7 below (a real
+audit finding against Decision #5's gift-preservation clause).
 
-## 6. What this mission explicitly did NOT need from you, and why
+1. **Refund/chargeback entitlement policy**: an **approved** full refund
+   revokes the affected Paddle-paid entitlement. A **chargeback/dispute**
+   suspends it immediately, with no grace period. The user's account is
+   never deleted/disabled solely for either. Gifted/internal/lifetime/
+   promotion/bundle entitlements must not be removed merely because a
+   Paddle entitlement is revoked (**not yet true today — see §7**).
+   Restoration after a reversed/won dispute requires real Paddle evidence,
+   never an invented lifecycle.
+2. **Checkout ownership**: Loady's own Paddle checkout remains the
+   checkout creator for this cutover. Platform Core becomes the
+   centralized billing/entitlement authority first; centralized checkout
+   is a separate future migration.
+3. **Historical backfill**: no attempt to backfill Loady's complete
+   historical Paddle transaction ledger. Only active subscriptions,
+   current entitlements, the Paddle references needed for future
+   reconciliation, and post-cutover events are migrated. Legacy history
+   stays in Loady's own tables.
+4. **Dual-webhook verification window**: 7 days before final cutover
+   (Stage 5), unless a discovered technical reason justifies extending it;
+   zero unexplained entitlement/billing divergence required throughout.
+5. **Loady legacy billing tables**: never deleted during cutover; retained
+   read-only for rollback/audit/reconciliation once Platform Core is
+   authoritative. Physical removal is explicitly out of scope for this
+   migration.
+
+## 6. New blocker found by this decision (Mission 11 audit, no Paddle evidence needed)
+
+**Gifted entitlements are not currently preserved when a Paddle refund/
+chargeback revokes the same product's entitlement.** The legacy
+`Entitlement` table is one row per (user, product); when a Paddle
+subscription supersedes an existing gift, the row becomes Paddle-sourced
+and the original gift is only remembered in the reconciliation *report*,
+not in any data `entitlement_service.revoke` can consult. A later refund/
+chargeback therefore leaves the user with nothing, not their pre-existing
+gift — a real violation of Decision #5's gift-preservation clause. See
+`BILLING_OWNERSHIP_TRANSITION.md` §6b for the full trace. This needs no
+Paddle evidence, no further business decision (the policy is decided), and
+no credentials — it is a normal code fix, but the restoration *mechanism*
+(re-derive from Loady's own gift row vs. persist a shadow record in
+Platform Core when paid supersedes gifted) was not specified, so it has
+not been implemented speculatively. Confirm the mechanism, or approve one
+of the two sketched above, and it can be built and tested with zero new
+external inputs.
+
+## 8. What this mission explicitly did NOT need from you, and why
 
 - No Paddle API key or webhook secret, Sandbox or Live - every test and
   the live local demo used `FakeBillingProvider`'s fixed, non-secret

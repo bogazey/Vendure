@@ -31,11 +31,14 @@ provide before Stage 2 below can start.
    variant of `adjustment.*` remain unverified. See
    `PADDLE_LIVE_INPUTS_REQUIRED.md` item 4 — this must be confirmed in
    Sandbox before Stage 3.
-4. **A decision on the refund/chargeback entitlement policy** (§5.2 of
-   `BILLING_OWNERSHIP_TRANSITION.md`) — this mission implemented a
-   specific default (full refund/chargeback revokes, partial refund does
-   not); confirm this is the intended business policy before it runs
-   against real customers.
+4. ~~A decision on the refund/chargeback entitlement policy~~ —
+   **DECIDED (Mission 11)**: see `BILLING_OWNERSHIP_TRANSITION.md` §6a
+   Decision #5. One real gap against that decision remains open and must
+   be closed before Stage 2: gifted/internal/lifetime entitlements are not
+   currently preserved when a Paddle refund/chargeback revokes the same
+   product's entitlement — see `PADDLE_LIVE_INPUTS_REQUIRED.md` §6. This
+   needs no Paddle evidence, just a confirmed restoration mechanism and
+   the fix.
 
 ## Stage 1 — Dry-run reconciliation against a REAL data snapshot (read-only)
 
@@ -96,13 +99,15 @@ every already-identity-migrated user.
 
 With Platform Core now receiving real Paddle webhooks (Stage 2) and
 having a correct backfilled starting state (Stage 3), let both systems
-run in parallel for a defined period (a week is a reasonable starting
-point). Compare Loady's own `Subscription` state against Platform Core's
-for a sample of users on each new webhook event, using the same
-comparison the reconciliation report already demonstrates
-(`reconciled_with_change`). Any divergence found here is a real bug to
-fix, not a business decision — the two systems processing the same
-Paddle event stream must agree.
+run in parallel for **7 days** (Decision #8, Mission 11 — the default;
+extend only if a discovered technical reason justifies it). Compare
+Loady's own `Subscription` state against Platform Core's for a sample of
+users on each new webhook event, using the same comparison the
+reconciliation report already demonstrates (`reconciled_with_change`).
+**Zero unexplained entitlement/billing divergence is required for the
+full window before proceeding to Stage 5** — any divergence found here is
+a real bug to fix, not a business decision — the two systems processing
+the same Paddle event stream must agree.
 
 ## Stage 5 — Cut Loady's own webhook endpoint over
 
@@ -112,24 +117,25 @@ Once Stage 4 shows sustained agreement:
    Sandbox and Live) — Platform Core is now the only listener.
 2. Loady's own `paddle_service.py`/`routes_billing.py` continue to exist
    and continue to serve reads (checkout initiation, billing history) —
-   this mission does not require retiring them, and doing so is a
-   separate, later decision (see `PADDLE_LIVE_INPUTS_REQUIRED.md`'s
-   business-decision list).
+   consistent with Decision #6 (checkout stays on Loady's side). Retiring
+   that code entirely is not required by this cutover and remains a
+   separate, later decision if/when checkout ownership itself is
+   revisited.
 3. Monitor `BillingWebhookEvent.status = "failed"` rows closely for the
    first real week — this is the number one signal that something in the
    shape-mapping was wrong despite Sandbox testing.
 
-## Stage 6 — Decide what "Loady stops calling Paddle directly" means (out of scope for this mission)
+## Stage 6 — Checkout ownership — DECIDED (Mission 11): out of scope for this cutover
 
-This mission does not build a checkout-redirect change (Loady's frontend
-still calls Loady's own `/api/billing/checkout` today, unchanged). A
-future mission would need to either (a) leave checkout creation on
-Loady's side indefinitely — a real supportable end-state, since checkout
-creation and webhook processing are separable concerns — or (b) move
-checkout creation to Platform Core's own (currently unconfigured, no-live-
-call) `PaddleBillingProvider.create_checkout`. This mission takes no
-position on which; it is listed explicitly as an unresolved business
-decision in the final report.
+**Decided, not deferred-as-unknown**: Loady's frontend keeps calling
+Loady's own `/api/billing/checkout` for this cutover (Decision #6,
+`BILLING_OWNERSHIP_TRANSITION.md` §6a) — checkout creation and webhook
+processing are separable concerns, and Platform Core becomes the
+centralized billing/entitlement authority (Stages 1-5 above) without ever
+creating a checkout itself. Moving checkout creation to Platform Core's
+own (still-unconfigured, no-live-call) `PaddleBillingProvider.
+create_checkout` is explicitly a **separate future migration**, to be
+scoped only after this cutover is stable — not a step of this runbook.
 
 ## Rollback readiness
 

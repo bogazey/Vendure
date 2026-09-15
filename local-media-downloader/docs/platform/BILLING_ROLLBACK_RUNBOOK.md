@@ -111,7 +111,12 @@ because:
 ## 7. What never needs rolling back
 
 - **Loady's own Paddle integration** — untouched this entire mission,
-  always available as the fallback described in §1.
+  always available as the fallback described in §1. This is now decided
+  policy, not just this mission's default: Decision #9
+  (`BILLING_OWNERSHIP_TRANSITION.md` §6a) confirms Loady's `Subscription`/
+  `BillingEvent` tables are never deleted during cutover, retained
+  read-only for exactly this rollback path once Platform Core is
+  authoritative.
 - **Any live Paddle subscription, customer, or charge** — this mission
   made zero live Paddle API calls; there is nothing Paddle-side to undo.
 - **Gifted subscriptions** — the reconciliation engine never writes to a

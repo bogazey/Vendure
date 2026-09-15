@@ -338,6 +338,112 @@ be `action == "chargeback"` on an `adjustment.*` event — never verified)
 and whatever `status` lifecycle it reports, if any. Until that exists, this
 mission will not guess at it. See `PADDLE_LIVE_INPUTS_REQUIRED.md` §4.
 
+## 6a. Decided business policy (Mission 11 — recorded, not yet all implemented/verified)
+
+The following were previously open business decisions in
+`PADDLE_LIVE_INPUTS_REQUIRED.md` §5. They are now decided by the product
+owner. Nothing below authorizes a live cutover by itself — see
+`PADDLE_LIVE_INPUTS_REQUIRED.md`'s blocker list for what still is required.
+
+**Decision #5 — refund/chargeback policy:**
+- An **approved** (authoritative, per §5.4's approval gate) refund revokes
+  the affected Paddle-paid entitlement.
+- An authoritative chargeback/dispute suspends the affected Paddle-paid
+  entitlement **immediately - no grace period** (confirms Mission 8's
+  original conservative default, and confirms §5.5's decision not to
+  extend the refund-approval gate to chargebacks).
+- The user's **account is never deleted or disabled** solely for a refund/
+  chargeback. *Verified already true*: `_apply_adjustment_event` only ever
+  touches `PaymentRecord`/`Entitlement` rows via `entitlement_service.revoke`
+  — no code path from a refund/chargeback event reaches `User.status` or
+  deletes a `User` row anywhere in `webhook_service.py`.
+- Gifted/internal/lifetime/promotion/bundle/independently-sourced
+  entitlements must **not** be removed merely because a Paddle entitlement
+  is revoked. **Audit finding, NOT yet true today** — see §6b below. This
+  is a real gap against the now-decided policy, found by code inspection
+  alone (no Paddle evidence needed), and is flagged as its own blocker
+  rather than silently fixed in this pass.
+- Restoration after a reversed/won dispute requires **authoritative Paddle
+  evidence/reconciliation** - no invented lifecycle. *Already true*: this
+  codebase has no auto-restore path at all for any adjustment outcome;
+  restoring access after a reversal would require a real captured Paddle
+  event for that transition, which does not exist, so no such path was
+  built (consistent with §5.4/§5.5's "do not guess" stance).
+
+**Decision #6 — checkout ownership:** Loady's own Paddle checkout remains
+the checkout creator for this cutover. Platform Core does **not** take over
+checkout creation in this cutover; it becomes the centralized billing/
+entitlement *authority* first (webhook processing, `Subscription`/
+`PaymentRecord` state, entitlement resolution). Centralized checkout is
+explicitly deferred to a separate future migration. *Already true*: no
+code in this codebase creates a real Paddle checkout from Platform Core -
+`PaddleBillingProvider.create_checkout` raises
+`BillingProviderNotConfiguredError` unconditionally, and Loady's own
+`/api/billing/checkout` is untouched. This decision **removes**
+`PADDLE_LIVE_INPUTS_REQUIRED.md` §2's "Platform Core's own price IDs" from
+this cutover's blocker list - deferred to the future checkout migration.
+
+**Decision #7 — historical backfill:** no attempt to backfill Loady's
+complete historical Paddle transaction ledger for this cutover.
+Reconcile/migrate only: active subscriptions, current entitlements, the
+Paddle references needed for future reconciliation
+(`provider_subscription_ref`/`provider_reference`), and events from
+cutover onward. Legacy history is preserved in Loady's own tables, never
+fabricated into Platform Core. *Already true*: this is exactly what
+`loady_paddle_reconciliation_service.py` already does - it builds one
+bootstrap event per *currently paid* subscription from that row's live
+snapshot; `PADDLE_LIVE_INPUTS_REQUIRED.md` §5 already documented this as
+the mission's deliberate choice, not a gap. This decision simply confirms
+it as final policy rather than an open question.
+
+**Decision #8 — dual-webhook verification window:** 7 days before final
+cutover (Stage 5), unless a discovered technical reason justifies
+extending it. Zero unexplained entitlement/billing divergence between
+Loady and Platform Core is required before proceeding, for the full
+window. See `BILLING_CUTOVER_RUNBOOK.md` Stage 4, updated below.
+
+**Decision #9 — Loady legacy billing tables:** `Subscription`/
+`BillingEvent` are never deleted during cutover. Once Platform Core is
+authoritative, they are retained **read-only** for rollback/audit/
+reconciliation. Physical removal is explicitly out of scope for this
+migration. *Already true*: nothing in this codebase writes to or deletes
+Loady's own tables at any point - the reconciliation engine is read-only
+on Loady's database by construction (see `BILLING_ROLLBACK_RUNBOOK.md` §2).
+This decision confirms the *retention* policy going forward; enforcing
+"read-only" in practice (e.g. revoking write grants on those tables once
+Platform Core is authoritative) is an operational step for cutover time,
+not something this codebase can enforce from here.
+
+## 6b. Audit finding: gifted entitlements are not currently preserved across a Paddle revoke
+
+Checking decision #5's gift-preservation clause against actual code (no
+Paddle evidence involved - this is pure entitlement-resolution logic):
+
+- The legacy `Entitlement` table (`app/services/entitlement_service.py`) is
+  **one row per (user, product)**, not one row per source. When a Paddle
+  subscription becomes active for a user who was previously gifted the
+  same product, reconciliation's own test
+  (`test_user_with_both_paid_and_gifted_entitlement`) explicitly proves
+  "paid and gifted must never coexist as two separate entitlement rows" -
+  the single row is overwritten to `source=paddle`. The original gift is
+  only remembered in the reconciliation *report* (`gifted_preserved`), not
+  in any data `entitlement_service.revoke` can consult later.
+- When that Paddle subscription is later refunded/charged back,
+  `_apply_adjustment_event` calls `entitlement_service.revoke(session,
+  user, user, subscription.product_id, ...)`, which sets that **same
+  single row** to `REVOKED` - regardless of the fact that a gift once
+  existed underneath it. The user is left with no entitlement at all,
+  not their pre-existing gift.
+- This is a real, verifiable gap against the just-decided policy, not a
+  hypothetical - it needs no Paddle evidence to confirm or fix (it never
+  touches Paddle's wire format), but it does need a real design choice
+  (how to detect/restore "the gift underneath" - e.g. re-querying Loady's
+  own still-existing `Subscription(provider="gifted")` row for that user
+  via the same reconciliation-adjacent logic, versus persisting a shadow
+  record in Platform Core when paid supersedes gifted) that was not
+  specified today, so it has not been implemented in this pass. Flagged as
+  its own blocker in `PADDLE_LIVE_INPUTS_REQUIRED.md`.
+
 ## 6. The reconciliation engine (summary — full detail in PADDLE_RECONCILIATION_STRATEGY.md)
 
 `app/services/loady_paddle_reconciliation_service.py`: read-only on
