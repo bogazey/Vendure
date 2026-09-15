@@ -82,15 +82,22 @@ only referenced conceptually above for context.
 ## 5. Business decisions (not technical, must be made by a human)
 
 1. **Refund/chargeback entitlement policy** (`BILLING_OWNERSHIP_TRANSITION.md`
-   §5.2's default): full refund and chargeback both revoke immediately
-   *once Paddle reports the adjustment as approved* (§5.4, Mission 9 -
-   revised from "immediately on `adjustment.created`" after real Sandbox
-   evidence showed that event fires while the adjustment is still
-   `pending_approval`); partial refund never revokes. Confirm this is the
+   §5.2's default, revised by §5.4/§5.5): a **full refund** revokes only
+   *once Paddle reports the adjustment as approved* (Mission 9 - revised
+   from "immediately on `adjustment.created`" after real Sandbox evidence
+   showed that event fires while the adjustment is still
+   `pending_approval`). A **chargeback/dispute** still revokes immediately
+   on `adjustment.created`, unconditionally (Mission 8's original
+   conservative default, deliberately NOT extended to use the
+   refund-verified approval gate - Mission 10 audit found no real captured
+   chargeback event to justify treating its `status` field the same way,
+   and delaying a chargeback revocation is the riskier direction absent
+   evidence). A **partial** refund never revokes. Confirm this is the
    intended policy - in particular, whether a chargeback should have a
    grace period before revoking (since the dispute might be resolved in
    the merchant's favor) rather than this mission's conservative
-   immediate-on-approval default.
+   immediate default, and whether the refund-approval gate should also
+   eventually apply to chargebacks once real evidence exists for it.
 2. **Whether Loady's own Paddle checkout stays on Loady's side
    indefinitely**, or eventually moves to Platform Core
    (`BILLING_CUTOVER_RUNBOOK.md` Stage 6) - this mission takes no

@@ -250,7 +250,7 @@ event could never change anything either — fixed by honoring a
 `custom_data.plan_slug` on any follow-up event, not just the first.
 
 All three fixes are covered by dedicated regression tests
-(`tests/test_billing_out_of_order_and_refunds.py`, 15 tests) and
+(`tests/test_billing_out_of_order_and_refunds.py`, 16 tests) and
 exercised again end-to-end through the reconciliation engine itself
 (`tests/test_loady_paddle_reconciliation.py`, 25 tests). The full
 Platform Core suite (260 tests) passes with all three fixes applied.
@@ -300,6 +300,43 @@ unit tests of the normalization itself) and three new cases in
 **Still unverified**: the chargeback/dispute side of this same lifecycle —
 this evidence only covers a refund. `PADDLE_LIVE_INPUTS_REQUIRED.md` §3
 remains open for that case.
+
+### 5.5 (Mission 10 audit) The §5.4 fix over-generalized to chargebacks — corrected
+
+Re-auditing §5.4's own fix against "what is proven vs. assumed" found a
+second, self-inflicted issue: `_apply_adjustment_event`'s new
+`adjustment_status` gate was written to apply to *any* adjustment event
+(`event.status in ("refunded", "disputed")`), not just refunds. That
+silently extended the refund-verified `pending_approval`/`rejected`
+vocabulary to chargebacks too, with **zero real evidence** that Paddle's
+chargeback/dispute lifecycle uses the same `status` values, or a `status`
+field with the same meaning at all — the repository contains no real
+captured chargeback event of any kind (confirmed by search: no
+chargeback/dispute payload file exists anywhere in this codebase). This
+would have been inventing a lifecycle transition for chargebacks that
+nothing proves.
+
+The direction matters, too: for a refund, waiting for approval protects
+the customer from a premature revocation (the proven bug). For a
+chargeback, waiting is the risky direction for the business — the money is
+already gone/disputed, and Mission 8's original design explicitly chose
+"revoke immediately" as the conservative default for exactly that reason.
+Letting an unverified status value silently suppress that would have
+undone Mission 8's own stated protection without any evidence to justify
+it.
+
+**Fix**: the `pending_approval`/`rejected` gate now applies only when
+`event.status == "refunded"`. A `disputed` (chargeback) event ignores
+`adjustment_status` entirely and keeps revoking immediately on
+`adjustment.created`, exactly as Mission 8 originally shipped — this is a
+revert-to-conservative, not a new behavior. Covered by
+`test_chargeback_with_unverified_status_still_revokes_immediately`.
+
+**What would change this**: a real captured Paddle Sandbox chargeback/
+dispute event, showing both its true `action`/event-type (still assumed to
+be `action == "chargeback"` on an `adjustment.*` event — never verified)
+and whatever `status` lifecycle it reports, if any. Until that exists, this
+mission will not guess at it. See `PADDLE_LIVE_INPUTS_REQUIRED.md` §4.
 
 ## 6. The reconciliation engine (summary — full detail in PADDLE_RECONCILIATION_STRATEGY.md)
 

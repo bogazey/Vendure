@@ -114,9 +114,10 @@ exercised and asserted correctly in this mission's tests.
 
 All 21 required cases plus data-anomaly and idempotency proofs, in
 `tests/test_loady_paddle_reconciliation.py` (25 tests) and
-`tests/test_billing_out_of_order_and_refunds.py` (15 tests, at the
+`tests/test_billing_out_of_order_and_refunds.py` (16 tests, at the
 `webhook_service` layer directly - includes Mission 9's `pending_approval`/
-`approved`/`rejected` adjustment-lifecycle cases):
+`approved`/`rejected` adjustment-lifecycle cases and Mission 10's proof
+that a chargeback ignores that vocabulary and still revokes immediately):
 
 | Case | Test |
 |---|---|

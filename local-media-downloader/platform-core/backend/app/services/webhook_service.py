@@ -256,15 +256,30 @@ def _apply_adjustment_event(session: Session, provider_name: str, event: Normali
     other/unrecognized adjustment action is stored for audit but otherwise
     ignored here, never guessed at.
 
-    Mission 9: a real captured Paddle Sandbox refund proved
+    Mission 9: a real captured Paddle Sandbox REFUND proved
     `adjustment.created` is NOT proof the refund is complete - the
-    adjustment's own `status` was `pending_approval` at that point. This
-    function must not apply any financial/entitlement effect until Paddle
-    reports the adjustment as approved. `event.adjustment_status` carries
-    that raw lifecycle value (`None` for a provider that doesn't report one,
-    e.g. `FakeBillingProvider`'s synthetic test events - treated as final
-    immediately, preserving prior behavior for every existing test/fixture
-    that predates this distinction).
+    adjustment's own `status` was `pending_approval` at that point. A
+    refund (`event.status == "refunded"`) must not apply any financial/
+    entitlement effect until Paddle reports the adjustment as approved.
+    `event.adjustment_status` carries that raw lifecycle value (`None` for
+    a provider that doesn't report one, e.g. `FakeBillingProvider`'s
+    synthetic test events - treated as final immediately, preserving prior
+    behavior for every existing test/fixture that predates this
+    distinction).
+
+    Mission 10 audit: this gate is deliberately scoped to refunds only.
+    There is still no real captured Paddle chargeback/dispute event of any
+    kind - not its `action` literal, and not its `status` lifecycle values.
+    Applying the refund-verified `pending_approval`/`rejected` vocabulary to
+    a chargeback as well would be inventing an unverified lifecycle
+    transition for it, and in the wrong direction: for a refund, waiting
+    for approval protects the customer from a premature revocation; for a
+    chargeback, WAITING is the risky direction (the money is already
+    disputed/gone) - so absent real evidence, a chargeback keeps Mission 8's
+    original conservative default of revoking immediately on any recognized
+    `disputed`-classified event, ignoring `adjustment_status` entirely. See
+    `PADDLE_LIVE_INPUTS_REQUIRED.md` §4 for exactly what real evidence would
+    be needed to change this.
 
     Policy (see docs/platform/BILLING_OWNERSHIP_TRANSITION.md's refund/
     chargeback section for the business rationale):
@@ -284,10 +299,13 @@ def _apply_adjustment_event(session: Session, provider_name: str, event: Normali
     if event.status not in ("refunded", "disputed"):
         return  # unrecognized/unhandled adjustment action - not guessed at
 
-    if event.adjustment_status == "pending_approval":
-        return  # not yet approved by Paddle - wait for a later adjustment.updated
-    if event.adjustment_status == "rejected":
-        return  # Paddle rejected the adjustment - it never took effect
+    if event.status == "refunded":
+        if event.adjustment_status == "pending_approval":
+            return  # not yet approved by Paddle - wait for a later adjustment.updated
+        if event.adjustment_status == "rejected":
+            return  # Paddle rejected the adjustment - it never took effect
+    # event.status == "disputed": adjustment_status is deliberately NOT
+    # consulted here - see the docstring above.
 
     if not event.provider_transaction_ref:
         raise NotFoundError("Adjustment event carried no original transaction reference.")

@@ -427,6 +427,29 @@ class TestRefundsAndChargebacks:
         assert payment.status == "completed"
         assert entitlement_service.get_active_entitlement(db_session, user.id, product.id) is not None
 
+    def test_chargeback_with_unverified_status_still_revokes_immediately(self, db_session):
+        """Mission 10 audit: there is no real captured Paddle chargeback
+        event, so the refund-verified `pending_approval`/`rejected`
+        vocabulary must NOT be applied to chargebacks - that would be
+        inventing an unproven lifecycle transition, and in the wrong
+        (customer-favoring, revenue-risking) direction. A chargeback must
+        keep revoking immediately regardless of any `adjustment_status`
+        value a real payload might one day carry."""
+        provider, user, product, sub_ref, txn_ref = self._paid_subscription(db_session, "chargeback-pending-product")
+
+        _send(db_session, provider, _adjustment_event(
+            str(uuid.uuid4()), txn_ref, "disputed", adjustment_status="pending_approval",
+        ))
+        db_session.commit()
+
+        payment = db_session.execute(
+            select(PaymentRecord).where(PaymentRecord.provider_reference == txn_ref)
+        ).scalars().first()
+        assert payment.status == "disputed", (
+            "a chargeback must not be held back by a status vocabulary only ever proven for refunds"
+        )
+        assert entitlement_service.get_active_entitlement(db_session, user.id, product.id) is None
+
     def test_refund_referencing_unknown_transaction_fails_safely(self, db_session):
         provider = FakeBillingProvider()
         journal = _send(db_session, provider, _adjustment_event(str(uuid.uuid4()), "txn_never_existed", "refunded", 100))
