@@ -104,6 +104,33 @@ genuinely alertable today vs. log-only.
   follow-up gap in `ENTITLEMENT_AVAILABILITY.md` — the account page
   still reads only the local `Subscription` row).
 
+## Mission 15 addendum: webhook failures and outbox backlog
+
+Phase 41 of the final pre-production mission asks these two signals be
+explicit. Both are relevant only if the *separate* billing cutover
+(`BILLING_CUTOVER_RUNBOOK.md`) is also in scope for a given deployment —
+for an identity-only cutover, Platform Core's billing webhook endpoint
+receives no real traffic yet and both counts should stay at zero
+throughout every window above:
+
+- **Webhook failures**: `SELECT count(*) FROM billing_webhook_events WHERE
+  status = 'failed';` on Platform Core, trended across the same windows —
+  a rising count is the sharpest signal that `paddle_provider.py`'s
+  shape-mapping encountered something Sandbox testing didn't, per
+  `BILLING_CUTOVER_RUNBOOK.md` Stage 5's own explicit monitoring
+  instruction ("the number one signal that something in the shape-mapping
+  was wrong despite Sandbox testing").
+- **Outbox backlog**: `SELECT count(*) FROM outbox_events WHERE
+  delivered_at IS NULL;` on Platform Core — a growing backlog indicates
+  downstream delivery (to Loady or any other product) is failing or
+  falling behind; `outbox_max_attempts`/`outbox_delivery_timeout_seconds`
+  (`PRODUCTION_ENVIRONMENT_INVENTORY.md`) bound how long a single event
+  retries before being marked failed, so a backlog that isn't shrinking
+  over the retry window is real, not transient.
+
+See `ALERT_THRESHOLDS.md` for where these cross from "log-only" to
+"page someone."
+
 ## What existing production monitoring (Better Stack, per the user) can consume today
 
 - Both services' structured stdout logs (already the existing pattern —

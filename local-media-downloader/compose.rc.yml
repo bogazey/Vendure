@@ -54,6 +54,11 @@ services:
       platform-core-admin-frontend:
         condition: service_started
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       default:
       platform-net:
@@ -95,6 +100,11 @@ services:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       default:
       platform-net:
@@ -125,6 +135,11 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]
@@ -156,6 +171,11 @@ services:
     volumes:
       - platform-postgres-data:/var/lib/postgresql/data
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks: [platform-net]
     security_opt:
       - no-new-privileges:true
@@ -186,6 +206,11 @@ services:
       platform-core-postgres:
         condition: service_healthy
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks: [platform-net]
     security_opt:
       - no-new-privileges:true
@@ -213,6 +238,11 @@ services:
       platform-core-backend:
         condition: service_healthy
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks: [platform-net]
     read_only: true
     tmpfs:
@@ -239,6 +269,11 @@ services:
       platform-core-backend:
         condition: service_healthy
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks: [platform-net]
     read_only: true
     tmpfs:

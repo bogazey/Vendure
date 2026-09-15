@@ -90,6 +90,47 @@ for c in "$LOADY_PG_CONTAINER" "$LOADY_BACKEND_CONTAINER"; do
   docker inspect -f '{{.State.Running}}' "$c" >/dev/null 2>&1 || { echo "NO-GO: container '$c' is not running." >&2; exit 1; }
 done
 
+# Mission 15, Phase 20: backup-space preflight - MUST run before a single
+# byte is written, so an undersized target volume is never discovered
+# mid-backup (which would leave a truncated, unusable archive AND risk
+# filling the disk Loady itself runs on, taking it down). The estimate
+# sums each real source's current size (Postgres via pg_database_size,
+# SQLite via a plain file stat) and applies a safety factor - the
+# encrypted output is comparable in size to the plaintext it replaces
+# in place (encrypt_in_place deletes the plaintext immediately after
+# encrypting each artifact, so peak extra usage at any instant is at
+# most one artifact's size, never the full sum), but inventory files,
+# filesystem block overhead, and any estimation error all need margin.
+REQUIRED_BYTES=0
+LOADY_DB_BYTES="$(docker exec "$LOADY_PG_CONTAINER" psql -U "$LOADY_PG_USER" -d "$LOADY_PG_DB" -tAc "SELECT pg_database_size('$LOADY_PG_DB');" 2>/dev/null | tr -d '[:space:]')"
+REQUIRED_BYTES=$((REQUIRED_BYTES + ${LOADY_DB_BYTES:-0}))
+
+APP_DB_BYTES="$(docker exec "$LOADY_BACKEND_CONTAINER" stat -c%s /var/lib/loady/data/app.db 2>/dev/null || echo 0)"
+REQUIRED_BYTES=$((REQUIRED_BYTES + ${APP_DB_BYTES:-0}))
+
+if [[ -n "$PLATFORM_PG_CONTAINER" ]] && docker inspect -f '{{.State.Running}}' "$PLATFORM_PG_CONTAINER" >/dev/null 2>&1; then
+  PLATFORM_DB_BYTES="$(docker exec "$PLATFORM_PG_CONTAINER" psql -U "$PLATFORM_PG_USER" -d "$PLATFORM_PG_DB" -tAc "SELECT pg_database_size('$PLATFORM_PG_DB');" 2>/dev/null | tr -d '[:space:]')"
+  REQUIRED_BYTES=$((REQUIRED_BYTES + ${PLATFORM_DB_BYTES:-0}))
+fi
+
+# 1.5x safety factor + a fixed 200 MiB floor for inventory/checksum files
+# and filesystem overhead.
+REQUIRED_BYTES=$(( (REQUIRED_BYTES * 3 / 2) + (200 * 1024 * 1024) ))
+
+# df the nearest existing ancestor of OUT_DIR, since OUT_DIR itself may
+# not exist yet.
+DF_TARGET="$OUT_DIR"
+while [[ ! -d "$DF_TARGET" && "$DF_TARGET" != "/" ]]; do
+  DF_TARGET="$(dirname "$DF_TARGET")"
+done
+AVAILABLE_BYTES="$(df -Pk "$DF_TARGET" | awk 'NR==2 {print $4 * 1024}')"
+
+echo "==> Backup space preflight: need ~$((REQUIRED_BYTES / 1024 / 1024)) MiB (with safety margin), have $((AVAILABLE_BYTES / 1024 / 1024)) MiB free on $DF_TARGET." >&2
+if (( AVAILABLE_BYTES < REQUIRED_BYTES )); then
+  echo "NO-GO: insufficient free disk space for a safe backup. Free up space or point --out at a volume with more headroom before retrying - never proceed with a backup that might fill the disk Loady itself runs on." >&2
+  exit 1
+fi
+
 mkdir -p "$OUT_DIR"
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 RUN_DIR="$OUT_DIR/${ENV}-${TIMESTAMP}"
