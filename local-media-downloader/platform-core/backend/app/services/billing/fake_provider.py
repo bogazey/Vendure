@@ -107,4 +107,10 @@ class FakeBillingProvider(BillingProvider):
             current_period_start=_dt("current_period_start"),
             current_period_end=_dt("current_period_end"),
             cancel_at_period_end=payload.get("cancel_at_period_end"),
+            # Mission 9: lets a synthetic fixture opt into exercising the
+            # pending/approved/rejected adjustment-lifecycle gate in
+            # `webhook_service._apply_adjustment_event`. Absent (`None`) for
+            # every pre-existing fixture, which preserves their original
+            # immediate-apply behavior unchanged.
+            adjustment_status=payload.get("adjustment_status"),
         )

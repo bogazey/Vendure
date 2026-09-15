@@ -55,14 +55,18 @@ def _transaction_event(event_id, sub_ref, amount_cents, currency, *, transaction
     return json.dumps(payload).encode("utf-8")
 
 
-def _adjustment_event(event_id, transaction_ref, action_status, amount_cents=None, *, occurred_at="2026-01-03T00:00:00+00:00"):
+def _adjustment_event(event_id, transaction_ref, action_status, amount_cents=None, *,
+                       occurred_at="2026-01-03T00:00:00+00:00", event_type="adjustment.created",
+                       adjustment_status=None):
     payload = {
-        "event_id": event_id, "event_type": "adjustment.created", "occurred_at": occurred_at,
+        "event_id": event_id, "event_type": event_type, "occurred_at": occurred_at,
         "transaction_ref": transaction_ref, "status": action_status,
     }
     if amount_cents is not None:
         payload["amount_cents"] = amount_cents
         payload["currency"] = "USD"
+    if adjustment_status is not None:
+        payload["adjustment_status"] = adjustment_status
     return json.dumps(payload).encode("utf-8")
 
 
@@ -356,6 +360,65 @@ class TestRefundsAndChargebacks:
         # "credit" (a goodwill balance credit) has no entitlement effect
         # and is deliberately unhandled - see paddle_provider's docstring.
         _send(db_session, provider, _adjustment_event(str(uuid.uuid4()), txn_ref, None))
+        db_session.commit()
+
+        payment = db_session.execute(
+            select(PaymentRecord).where(PaymentRecord.provider_reference == txn_ref)
+        ).scalars().first()
+        assert payment.status == "completed"
+        assert entitlement_service.get_active_entitlement(db_session, user.id, product.id) is not None
+
+    def test_pending_approval_refund_does_not_yet_apply(self, db_session):
+        """Mission 9: a real captured Paddle Sandbox refund reported
+        `status: "pending_approval"` on `adjustment.created` - proof that
+        `adjustment.created` is not itself confirmation the refund happened.
+        Until a later event reports approval, the payment/entitlement must
+        be untouched."""
+        provider, user, product, sub_ref, txn_ref = self._paid_subscription(db_session, "refund-pending-product")
+
+        _send(db_session, provider, _adjustment_event(
+            str(uuid.uuid4()), txn_ref, "refunded", 2000, adjustment_status="pending_approval",
+        ))
+        db_session.commit()
+
+        payment = db_session.execute(
+            select(PaymentRecord).where(PaymentRecord.provider_reference == txn_ref)
+        ).scalars().first()
+        assert payment.status == "completed", "a pending_approval adjustment must not mark the payment refunded"
+        assert payment.refunded_amount_cents is None
+        assert entitlement_service.get_active_entitlement(db_session, user.id, product.id) is not None, (
+            "a pending_approval adjustment must not revoke entitlement before Paddle approves it"
+        )
+
+    def test_approved_refund_after_pending_applies_effect(self, db_session):
+        """The natural follow-up to the pending case above: once Paddle
+        reports the adjustment as approved (via `adjustment.updated` in
+        real Paddle), the refund/revocation applies exactly then."""
+        provider, user, product, sub_ref, txn_ref = self._paid_subscription(db_session, "refund-approved-product")
+
+        _send(db_session, provider, _adjustment_event(
+            str(uuid.uuid4()), txn_ref, "refunded", 2000, adjustment_status="pending_approval",
+        ))
+        db_session.commit()
+        _send(db_session, provider, _adjustment_event(
+            str(uuid.uuid4()), txn_ref, "refunded", 2000,
+            event_type="adjustment.updated", adjustment_status="approved",
+        ))
+        db_session.commit()
+
+        payment = db_session.execute(
+            select(PaymentRecord).where(PaymentRecord.provider_reference == txn_ref)
+        ).scalars().first()
+        assert payment.status == "refunded"
+        assert payment.refunded_amount_cents == 2000
+        assert entitlement_service.get_active_entitlement(db_session, user.id, product.id) is None
+
+    def test_rejected_adjustment_never_applies(self, db_session):
+        provider, user, product, sub_ref, txn_ref = self._paid_subscription(db_session, "refund-rejected-product")
+
+        _send(db_session, provider, _adjustment_event(
+            str(uuid.uuid4()), txn_ref, "refunded", 2000, adjustment_status="rejected",
+        ))
         db_session.commit()
 
         payment = db_session.execute(

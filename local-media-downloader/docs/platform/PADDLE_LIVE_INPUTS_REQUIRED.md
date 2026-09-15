@@ -50,15 +50,21 @@ only referenced conceptually above for context.
 
 ## 4. Dashboard settings / verification steps
 
-- **A real captured Paddle Sandbox webhook payload** for at least one
+- **A real captured Paddle Sandbox `adjustment.created` refund payload -
+  RECEIVED (Mission 9).** A real full refund of a $4.99 Loady Pro Sandbox
+  transaction produced `type: "full"`, `action: "refund"`,
+  `reason: "other"`, `totals.total: "499"`, and **`status:
+  "pending_approval"`** at `adjustment.created` time - confirming
+  `adjustment.created` is not itself proof a refund completed. This was
+  caught in code review, not in production (the event was delivered to
+  Loady's own existing webhook endpoint, which has no `adjustment.*`
+  handling at all; Platform Core's engine has never had real credentials
+  configured and was never invoked). Fixed in `paddle_provider.py`/
+  `webhook_service.py` - see §5.4 of `BILLING_OWNERSHIP_TRANSITION.md` for
+  the full before/after. **Still outstanding**: a real captured
   `subscription.updated` event (with `current_billing_period` and
-  `scheduled_change` populated) and one `adjustment.created` event (a
-  refund and, separately, a chargeback/dispute if Sandbox can simulate
-  one). This mission's `paddle_provider.py` extraction logic for these
-  fields (§5.3 and §5.2 of `BILLING_OWNERSHIP_TRANSITION.md`) was built
-  from Paddle's publicly documented API shape, **not verified against a
-  real captured event** - this is the single most important
-  Sandbox-validation step before any Live traffic touches this code path.
+  `scheduled_change` populated), and a real `adjustment.*` event for a
+  **chargeback** specifically (only a refund has been captured so far).
 - **Paddle Billing dashboard access** to add Platform Core's webhook URL
   as an additional destination (Sandbox first, then Live) - see
   `BILLING_CUTOVER_RUNBOOK.md` Stage 2.
@@ -66,16 +72,25 @@ only referenced conceptually above for context.
   chargeback specifically (this mission assumed `data.action ==
   "chargeback"` maps to a dispute; Paddle's real API may use a different
   literal value, or represent a chargeback as a separate event type
-  entirely - only a real Sandbox chargeback can confirm this).
+  entirely - only a real Sandbox chargeback can confirm this). Separately,
+  the refund evidence above confirms `data.status` is a real lifecycle
+  field (`pending_approval` verified; `approved`/`rejected` are Paddle's
+  documented values for the same field but not yet independently
+  verified) - whether a chargeback's `status` values differ is still
+  unconfirmed.
 
 ## 5. Business decisions (not technical, must be made by a human)
 
 1. **Refund/chargeback entitlement policy** (`BILLING_OWNERSHIP_TRANSITION.md`
-   §5.2's default): full refund and chargeback both revoke immediately;
-   partial refund never revokes. Confirm this is the intended policy -
-   in particular, whether a chargeback should have a grace period before
-   revoking (since the dispute might be resolved in the merchant's favor)
-   rather than this mission's conservative immediate-revoke default.
+   §5.2's default): full refund and chargeback both revoke immediately
+   *once Paddle reports the adjustment as approved* (§5.4, Mission 9 -
+   revised from "immediately on `adjustment.created`" after real Sandbox
+   evidence showed that event fires while the adjustment is still
+   `pending_approval`); partial refund never revokes. Confirm this is the
+   intended policy - in particular, whether a chargeback should have a
+   grace period before revoking (since the dispute might be resolved in
+   the merchant's favor) rather than this mission's conservative
+   immediate-on-approval default.
 2. **Whether Loady's own Paddle checkout stays on Loady's side
    indefinitely**, or eventually moves to Platform Core
    (`BILLING_CUTOVER_RUNBOOK.md` Stage 6) - this mission takes no

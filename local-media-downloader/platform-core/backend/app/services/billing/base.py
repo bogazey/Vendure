@@ -67,6 +67,16 @@ class NormalizedEvent:
     current_period_start: datetime | None = None
     current_period_end: datetime | None = None
     cancel_at_period_end: bool | None = None
+    # Mission 9: Paddle's own adjustment lifecycle status (verified against a
+    # real captured Sandbox `adjustment.created` refund: `pending_approval`
+    # at creation - NOT already completed). Distinct from `status` above,
+    # which for an adjustment.* event is the ACTION classification
+    # ("refunded"/"disputed") rather than the approval state. `None` means
+    # either "not an adjustment event" or "this provider doesn't report a
+    # lifecycle status" (e.g. FakeBillingProvider's synthetic test events) -
+    # in that case the event is treated as final/authoritative immediately,
+    # preserving every existing test's behavior unchanged.
+    adjustment_status: str | None = None
 
 
 class BillingProvider(ABC):

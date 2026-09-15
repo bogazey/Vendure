@@ -256,6 +256,16 @@ def _apply_adjustment_event(session: Session, provider_name: str, event: Normali
     other/unrecognized adjustment action is stored for audit but otherwise
     ignored here, never guessed at.
 
+    Mission 9: a real captured Paddle Sandbox refund proved
+    `adjustment.created` is NOT proof the refund is complete - the
+    adjustment's own `status` was `pending_approval` at that point. This
+    function must not apply any financial/entitlement effect until Paddle
+    reports the adjustment as approved. `event.adjustment_status` carries
+    that raw lifecycle value (`None` for a provider that doesn't report one,
+    e.g. `FakeBillingProvider`'s synthetic test events - treated as final
+    immediately, preserving prior behavior for every existing test/fixture
+    that predates this distinction).
+
     Policy (see docs/platform/BILLING_OWNERSHIP_TRANSITION.md's refund/
     chargeback section for the business rationale):
     - A refund that brings the cumulative refunded amount up to (or past)
@@ -273,6 +283,11 @@ def _apply_adjustment_event(session: Session, provider_name: str, event: Normali
     """
     if event.status not in ("refunded", "disputed"):
         return  # unrecognized/unhandled adjustment action - not guessed at
+
+    if event.adjustment_status == "pending_approval":
+        return  # not yet approved by Paddle - wait for a later adjustment.updated
+    if event.adjustment_status == "rejected":
+        return  # Paddle rejected the adjustment - it never took effect
 
     if not event.provider_transaction_ref:
         raise NotFoundError("Adjustment event carried no original transaction reference.")

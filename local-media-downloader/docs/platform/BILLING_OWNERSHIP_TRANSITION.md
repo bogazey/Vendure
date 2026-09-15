@@ -250,10 +250,56 @@ event could never change anything either — fixed by honoring a
 `custom_data.plan_slug` on any follow-up event, not just the first.
 
 All three fixes are covered by dedicated regression tests
-(`tests/test_billing_out_of_order_and_refunds.py`, 12 tests) and
+(`tests/test_billing_out_of_order_and_refunds.py`, 15 tests) and
 exercised again end-to-end through the reconciliation engine itself
 (`tests/test_loady_paddle_reconciliation.py`, 25 tests). The full
 Platform Core suite (260 tests) passes with all three fixes applied.
+
+### 5.4 (Mission 9) `adjustment.created` is not proof a refund is complete — found via a real Sandbox event
+
+A real captured Paddle Sandbox event (a full refund of a $4.99 Loady Pro
+transaction, delivered successfully to Loady's own existing webhook
+endpoint) confirmed: `type: "full"`, `action: "refund"`, `reason: "other"`,
+`totals.total: "499"` — and, critically, **`status: "pending_approval"`**
+at the moment `adjustment.created` fired. §5.2 above (as shipped in
+Mission 8) mapped `action="refund"` directly to `status="refunded"` and
+applied the financial/entitlement effect immediately on `adjustment.created`,
+with no reference at all to Paddle's own adjustment `status` field — i.e.
+it would have revoked entitlement and marked the payment refunded before
+Paddle had actually approved the refund.
+
+Two things worth separating: **no live incident occurred** — this event
+was delivered to Loady's own original webhook handler
+(`paddle_service.process_webhook_event`), which has no `adjustment.*`
+branch at all and simply records it as `BillingEventStatus.IGNORED`;
+Platform Core's engine has never had real Sandbox credentials configured
+and was never actually invoked with this event. This was a real-payload
+mismatch caught in code review before Platform Core ever goes live, not a
+production bug.
+
+**Fix**: `NormalizedEvent` gained a new field, `adjustment_status`, distinct
+from `status` — `status` remains the *action* classification
+(`"refunded"`/`"disputed"`, from §5.2), while `adjustment_status` carries
+Paddle's own approval lifecycle value verbatim (`pending_approval` is now
+verified real; `approved`/`rejected` are Paddle's documented values for the
+same field, not yet independently verified against a real captured event).
+`_apply_adjustment_event` now returns without effect when
+`adjustment_status` is `"pending_approval"` or `"rejected"` — the financial/
+entitlement effect only applies once an event (in practice, a later
+`adjustment.updated`) reports `adjustment_status="approved"` (or a provider
+that reports no lifecycle status at all, e.g. `FakeBillingProvider`'s
+synthetic test events, in which case the event is treated as final
+immediately — preserving every pre-Mission-9 test's behavior unchanged).
+Covered by `tests/test_paddle_provider_normalization.py` (real-payload-shaped
+unit tests of the normalization itself) and three new cases in
+`tests/test_billing_out_of_order_and_refunds.py`
+(`test_pending_approval_refund_does_not_yet_apply`,
+`test_approved_refund_after_pending_applies_effect`,
+`test_rejected_adjustment_never_applies`).
+
+**Still unverified**: the chargeback/dispute side of this same lifecycle —
+this evidence only covers a refund. `PADDLE_LIVE_INPUTS_REQUIRED.md` §3
+remains open for that case.
 
 ## 6. The reconciliation engine (summary — full detail in PADDLE_RECONCILIATION_STRATEGY.md)
 

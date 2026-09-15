@@ -23,9 +23,12 @@ provide before Stage 2 below can start.
    general shape of this).
 3. **A real Paddle webhook secret and Sandbox-verified event shapes** —
    this mission's `paddle_provider.py` extraction logic
-   (`current_billing_period`, `scheduled_change`, `adjustment.*`) is
-   built from Paddle's publicly documented API shape, not verified
-   against a real captured Paddle event. See
+   (`current_billing_period`, `scheduled_change`, `adjustment.*`) was
+   built from Paddle's publicly documented API shape. Mission 9 verified
+   the `adjustment.*` refund shape against a real captured Sandbox event
+   (and found/fixed a real mismatch — see `BILLING_OWNERSHIP_TRANSITION.md`
+   §5.4); `current_billing_period`/`scheduled_change` and the chargeback
+   variant of `adjustment.*` remain unverified. See
    `PADDLE_LIVE_INPUTS_REQUIRED.md` item 4 — this must be confirmed in
    Sandbox before Stage 3.
 4. **A decision on the refund/chargeback entitlement policy** (§5.2 of

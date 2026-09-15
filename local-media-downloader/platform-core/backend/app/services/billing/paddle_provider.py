@@ -116,6 +116,7 @@ class PaddleBillingProvider(BillingProvider):
         current_period_end: datetime | None = None
         cancel_at_period_end: bool | None = None
         provider_transaction_ref: str | None = None
+        adjustment_status: str | None = None
 
         if event_type.startswith("transaction."):
             provider_transaction_ref = data.get("id")
@@ -127,8 +128,18 @@ class PaddleBillingProvider(BillingProvider):
             # the ORIGINAL transaction being adjusted, not this adjustment's
             # own id - that is exactly what lets a refund be correlated
             # back to the `PaymentRecord` the original transaction created.
+            #
+            # `data.status` is Paddle's own approval lifecycle for the
+            # adjustment itself (verified against a real captured Sandbox
+            # event: a fresh `adjustment.created` refund reported
+            # `status: "pending_approval"`, NOT an already-completed refund).
+            # This is kept separate from `status` below (the action
+            # classification "refunded"/"disputed") precisely so
+            # `webhook_service` can tell "recorded but not yet approved"
+            # apart from "confirmed" - see `_apply_adjustment_event`.
             provider_transaction_ref = data.get("transaction_id")
             status = _ADJUSTMENT_ACTION_MAP.get(data.get("action"))
+            adjustment_status = data.get("status")
             amount_cents, currency = _adjustment_amount(data)
         elif event_type.startswith("subscription."):
             status = _PADDLE_STATUS_MAP.get(data.get("status"))
@@ -154,6 +165,7 @@ class PaddleBillingProvider(BillingProvider):
             current_period_start=current_period_start,
             current_period_end=current_period_end,
             cancel_at_period_end=cancel_at_period_end,
+            adjustment_status=adjustment_status,
         )
 
     def create_checkout(self, *, user_id: str, product_id: str, plan_id: str, success_url: str) -> CheckoutSession:
