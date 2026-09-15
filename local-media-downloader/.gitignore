@@ -60,3 +60,13 @@ platform-core/sdk/react/*.tsbuildinfo
 # scripts/docs describing the procedure are tracked; the evidence a given
 # run produces stays local. See docs/platform/PRODUCTION_REHEARSAL_PLAN.md.
 docs/platform/rehearsal-artifacts/
+
+# Mission 13: the operator-side Paddle Sandbox evidence collector's own
+# local credential file (`.env` above already covers this by pattern, but
+# stated explicitly here since it's Paddle API key material) and its
+# captured-evidence output - real Sandbox subscription/adjustment IDs and
+# payloads, never secrets, but not something to commit either.
+scripts/paddle-sandbox-evidence/.env
+scripts/paddle-sandbox-evidence/evidence/
+scripts/paddle-sandbox-evidence/__pycache__/
+scripts/paddle-sandbox-evidence/.pytest_cache/
