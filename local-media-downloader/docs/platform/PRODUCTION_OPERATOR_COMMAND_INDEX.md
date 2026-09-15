@@ -5,6 +5,31 @@ exact rationale and stop conditions, in the runbook it links to. This
 index never duplicates or restates logic that could drift out of sync
 with its source of truth.
 
+**Mission 16 update**: every command below now has a corresponding
+`scripts/platform/platform-production.sh <command> --environment
+production` equivalent that additionally persists state, enforces
+ordering, and requires deliberate confirmation for the two dangerous
+ones (`migrate`, `rollback`) — see `PRODUCTION_CONTROLLER.md` and
+`PRODUCTION_ONE_PAGE_GUIDE.md`. The controller is the **preferred**
+interface; the raw commands below remain a fully-supported, documented
+fallback (e.g. if the controller's own state directory is unavailable or
+its behavior needs independent verification), never removed.
+
+| Controller command | Equivalent raw command(s) below |
+|---|---|
+| `inspect` | (new — git/environment facts, no raw equivalent) |
+| `preflight` | PRECHECK |
+| `backup` / `verify-backup` | BACKUP |
+| `platform-deploy` | PLATFORM START |
+| `platform-verify` | HEALTH |
+| `migration-dry-run` | DRY RUN |
+| `cutover-check` | GATE |
+| `maintenance-on` / `maintenance-off` | MAINTENANCE |
+| `migrate` | MIGRATE |
+| `reconcile` / `verify` | VERIFY |
+| `rollback-plan` / `rollback` | ROLLBACK |
+| `collect-diagnostics` | (new — no raw equivalent) |
+
 ## PRECHECK
 
 ```bash
@@ -17,7 +42,7 @@ scripts/platform/production-preflight-inspection.sh --env production
 ```bash
 BACKUP_ENCRYPTION_PASSPHRASE=... PLATFORM_MIGRATION_CONFIRM=I_UNDERSTAND_THIS_IS_PRODUCTION \
   scripts/platform/backup-before-platform-migration.sh --env production --out <dir> --retention-days 30
-scripts/platform/verify-backup-restorable.sh --backup-dir <run-dir>
+scripts/platform/verify-backup-restorable.sh <run-dir>
 ```
 → `PRODUCTION_BACKUP_PACKAGE.md`, `FINAL_PRODUCTION_CUTOVER_RUNBOOK.md` (FINAL BACKUP / BACKUP VERIFICATION)
 

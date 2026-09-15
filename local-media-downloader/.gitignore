@@ -70,3 +70,9 @@ scripts/paddle-sandbox-evidence/.env
 scripts/paddle-sandbox-evidence/evidence/
 scripts/paddle-sandbox-evidence/__pycache__/
 scripts/paddle-sandbox-evidence/.pytest_cache/
+
+# Mission 16: platform-production.sh's own operator state (deployment
+# state.json per attempt, structured logs, diagnostic bundles, lock
+# files) - local operator working data, never synthetic-vs-real
+# distinguishable by content alone, and never something to version.
+.platform-production-state/

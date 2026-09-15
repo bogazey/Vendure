@@ -18,6 +18,20 @@ calling shell's mode (per Phase 27, below) and that the operator has read
 `FINAL_PRODUCTION_ROLLBACK_RUNBOOK.md` (Phase 38) before starting, not partway
 through.
 
+**Mission 16 update**: `scripts/platform/platform-production.sh` (see
+`PRODUCTION_CONTROLLER.md`) now orchestrates every stage below as a named
+command with persisted state, enforced ordering, and deliberate
+confirmation for `migrate`/`rollback` — it is the **preferred** way to
+actually execute this sequence, since it survives a terminal disconnect
+and refuses to skip a prerequisite. This runbook's own per-step detail
+(PURPOSE/COMMAND/EXPECTED RESULT/STOP CONDITION/ROLLBACK IMPLICATION)
+remains the authoritative explanation of *why* each step exists and
+what "correct" looks like — read it once before a real cutover either
+way. `PRODUCTION_ONE_PAGE_GUIDE.md` is the day-of quick reference for the
+controller's own command sequence. The manual commands below remain a
+valid, fully-documented fallback if the controller is ever unavailable or
+its behavior is in doubt — nothing here was removed.
+
 ## T-24H
 
 - **PURPOSE**: give the business, support, and on-call operator enough
@@ -129,7 +143,7 @@ rather than skip — state may have changed.)*
 - **PURPOSE**: never trust a backup that hasn't been proven restorable.
 - **COMMAND**:
   ```bash
-  scripts/platform/verify-backup-restorable.sh --backup-dir <run-dir-from-previous-step>
+  scripts/platform/verify-backup-restorable.sh <run-dir-from-previous-step>
   ```
 - **EXPECTED RESULT**: restores into an isolated container, confirms row
   counts/schema version match, exit 0.

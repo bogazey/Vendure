@@ -9,6 +9,18 @@ runbook for the identity-migration cutover
 mechanism — every layer below cites the document/script that already
 built and, where noted, measured it.
 
+**Mission 16 update**: `scripts/platform/platform-production.sh rollback`
+(see `PRODUCTION_CONTROLLER.md`, `PRODUCTION_CONTROLLER_RECOVERY.md`)
+now wraps the decision-and-execute sequence below with persisted state
+(so `rollback-plan` can show exactly what a rollback would restore,
+using the deployment's own recorded backup ID) and two-stage deliberate
+confirmation (`--confirm 'ROLLBACK <id>'`, plus `--confirm-restore
+'RESTORE-DATABASE <id>'` when a database restore is required) — this is
+the **preferred** way to actually run a rollback. The layer-by-layer
+detail below remains the authoritative explanation of what each layer
+does and when to choose it; use it directly if the controller is ever
+unavailable.
+
 ## Decision point: which layer
 
 | Symptom | Layer | Why |
