@@ -13,6 +13,7 @@ function renderWithAuth(authValue: Partial<ReturnType<typeof useAuth>>) {
     signup: vi.fn(),
     login: vi.fn(),
     logout: vi.fn(),
+      logoutAll: vi.fn(),
     refresh: vi.fn(),
     ...authValue,
   });

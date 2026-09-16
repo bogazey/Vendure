@@ -14,7 +14,7 @@ describe("Account Portal internationalization", () => {
   });
 
   it("switches document direction to rtl for Arabic and renders Arabic copy", async () => {
-    vi.mocked(useAuth).mockReturnValue({ user: null, loading: false, signup: vi.fn(), login: vi.fn(), logout: vi.fn(), refresh: vi.fn() });
+    vi.mocked(useAuth).mockReturnValue({ user: null, loading: false, signup: vi.fn(), login: vi.fn(), logout: vi.fn(), logoutAll: vi.fn(), refresh: vi.fn() });
     await i18n.changeLanguage("ar");
     expect(document.documentElement.dir).toBe("rtl");
 

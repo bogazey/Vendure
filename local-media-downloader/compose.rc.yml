@@ -107,6 +107,8 @@ services:
         max-file: "3"
     networks:
       default:
+        aliases:
+          - loady-backend
       platform-net:
     security_opt:
       - no-new-privileges:true
