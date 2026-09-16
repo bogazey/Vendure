@@ -191,7 +191,7 @@ if [[ "$HAS_W" == "1" ]]; then
   exit 0
 fi
 case "$URL" in
-  */ready) [[ "${FAKE_READY_BAD:-0}" == "1" ]] && echo '{"signing_key":false}' || echo '{"signing_key":true}' ;;
+  */ready) [[ "${FAKE_READY_BAD:-0}" == "1" ]] && echo '{"status":"not_ready","checks":{"database":true,"signing_key":false}}' || echo '{"status":"ok","checks":{"database":true,"signing_key":true}}' ;;
   */jwks.json) [[ "${FAKE_JWKS_BAD:-0}" == "1" ]] && echo '{"keys":[]}' || echo '{"keys":[{"kid":"test"}]}' ;;
   *) echo '{}' ;;
 esac

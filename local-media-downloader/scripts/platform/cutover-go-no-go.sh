@@ -87,7 +87,12 @@ if [[ -z "$LATEST_BACKUP" ]]; then
 elif [[ ! -f "$LATEST_BACKUP/CHECKSUMS.sha256" ]]; then
   set_result "BACKUPS" "NO-GO" "Latest backup ($LATEST_BACKUP) has no CHECKSUMS.sha256 - never trust an unchecksummed backup."
 else
-  BACKUP_AGE_SECONDS=$(( $(date +%s) - $(stat -c %Y "$LATEST_BACKUP" 2>/dev/null || echo 0) ))
+  # GNU stat (`-c`, real production's Linux) vs BSD stat (`-f`, only
+  # reachable here for a rehearsal on a Mac) - falling back to `echo 0`
+  # when `-c` silently doesn't exist on Darwin would make every backup
+  # look ~55 years old, always NO-GO regardless of real freshness.
+  BACKUP_MTIME="$(stat -c %Y "$LATEST_BACKUP" 2>/dev/null || stat -f %m "$LATEST_BACKUP" 2>/dev/null || echo 0)"
+  BACKUP_AGE_SECONDS=$(( $(date +%s) - BACKUP_MTIME ))
   if (( BACKUP_AGE_SECONDS > 86400 )); then
     set_result "BACKUPS" "NO-GO" "Latest backup ($LATEST_BACKUP) is more than 24 hours old ($((BACKUP_AGE_SECONDS / 3600))h) - take a fresh one before cutover."
   else

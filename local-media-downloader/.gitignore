@@ -17,6 +17,7 @@ downloads/*
 .env.production
 .env.staging
 .env.rc
+.env.rehearsal
 secrets/
 
 # unified-platform-v1 (Platform Core + Grand Admin + demo products) - same

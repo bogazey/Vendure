@@ -162,15 +162,28 @@ else
   : "${LOADY_PG_DB:=loady_rehearsal}"
   : "${LOADY_PG_USER:=loady_rehearsal}"
   : "${LOADY_BACKEND_CONTAINER:=loady-rehearsal-backend-1}"
-  : "${PLATFORM_PG_CONTAINER:=platform-rehearsal-postgres-1}"
+  # Mission 16 was built and rehearsed with no real Docker daemon
+  # available (docs/platform/PRODUCTION_CONTROLLER_REHEARSAL.md's "FULL
+  # DOCKER REHEARSAL PENDING"), so these container-name/port defaults
+  # were never checked against Mission 15's actual rehearsal compose
+  # stack (compose.rc.yml + .env.rc, COMPOSE_PROJECT_NAME=loady-rehearsal)
+  # and had drifted from it: the platform-core service names it as
+  # "platform-core-postgres"/"platform-core-backend" (giving container
+  # names "loady-rehearsal-platform-core-postgres-1"/"...-backend-1"
+  # under that project), never "platform-rehearsal-*", and .env.rc's own
+  # established convention is RC_HTTP_PORT=8280/RC_HTTPS_PORT=8543, never
+  # 18280/18443. Corrected here against the real, running stack during
+  # this mission's first genuine Docker rehearsal - see
+  # PRODUCTION_CONTROLLER_REHEARSAL.md's "Full Docker rehearsal" update.
+  : "${PLATFORM_PG_CONTAINER:=loady-rehearsal-platform-core-postgres-1}"
   : "${PLATFORM_PG_DB:=platform_core_rehearsal}"
   : "${PLATFORM_PG_USER:=platform_core_rehearsal}"
-  : "${PLATFORM_BACKEND_CONTAINER:=platform-rehearsal-backend-1}"
+  : "${PLATFORM_BACKEND_CONTAINER:=loady-rehearsal-platform-core-backend-1}"
   : "${REVERSE_PROXY_CONTAINER:=loady-rehearsal-reverse-proxy-1}"
   : "${SIGNING_KEY_PATH:=$STATE_ROOT/rehearsal-fixtures/signing-key.pem}"
   : "${TLS_DIR:=$STATE_ROOT/rehearsal-fixtures/tls}"
-  : "${RC_HTTP_PORT:=18280}"
-  : "${RC_HTTPS_PORT:=18443}"
+  : "${RC_HTTP_PORT:=8280}"
+  : "${RC_HTTPS_PORT:=8543}"
   : "${COMPOSE_PROJECT_NAME:=loady-rehearsal}"
   export COMPOSE_PROJECT_NAME RC_HTTP_PORT RC_HTTPS_PORT
 
@@ -627,7 +640,13 @@ cmd_platform_verify() {
   ready_body="$(curl -sk "$base_url/ready" || echo '{}')"
   jwks_body="$(curl -sk "$base_url/.well-known/jwks.json" || echo '{}')"
   [[ "$health" == "200" ]] || { ok=0; log_error "health check returned $health"; }
-  echo "$ready_body" | jq -e '.signing_key == true' >/dev/null 2>&1 || { ok=0; log_error "ready did not report signing_key:true"; }
+  # Platform Core's real /ready endpoint (main.py) nests this under
+  # "checks" (`{"status":"ok","checks":{"database":true,"signing_key":true}}`),
+  # never as a top-level field - confirmed against the real endpoint during
+  # this mission's first genuine Docker rehearsal (previously only ever
+  # checked against a stub that had independently guessed the wrong shape;
+  # see test-platform-production.sh's matching correction).
+  echo "$ready_body" | jq -e '.checks.signing_key == true' >/dev/null 2>&1 || { ok=0; log_error "ready did not report checks.signing_key:true"; }
   echo "$jwks_body" | jq -e '.keys | length > 0' >/dev/null 2>&1 || { ok=0; log_error "jwks.json has no keys"; }
 
   echo "Health:  $health"
@@ -869,7 +888,22 @@ cmd_rollback() {
   # kill switch always runs first, regardless of restore need
   local rc=0
   [[ -n "${LOADY_ENV_FILE:-}" ]] || die "Set LOADY_ENV_FILE for the kill-switch layer."
-  "$SCRIPT_DIR/rollback-platform-migration.sh" --env production --layer kill-switch --env-file "$LOADY_ENV_FILE" \
+  # rollback-platform-migration.sh's own production-mode gate requires
+  # PLATFORM_MIGRATION_CONFIRM explicitly (identical convention to
+  # backup-before-platform-migration.sh, which cmd_backup above already
+  # sets) - without it every rollback call unconditionally refuses with
+  # its own NO-GO, in any environment, never actually reaching the
+  # kill-switch. COMPOSE_FILE is that script's other undefaulted
+  # requirement in production mode; compose.rc.yml is the same file
+  # cmd_platform_deploy already uses, so this is not a new assumption.
+  # --compose-env-file: compose.rc.yml's own ${RC_...} interpolation (the
+  # reverse-proxy's hostnames) needs .env.rc, never Loady's own
+  # application env file (LOADY_ENV_FILE) - see rollback-platform-
+  # migration.sh's matching comment. Same file cmd_platform_deploy
+  # already uses.
+  PLATFORM_MIGRATION_CONFIRM=I_UNDERSTAND_THIS_IS_PRODUCTION COMPOSE_FILE="${COMPOSE_FILE:-$REPO_ROOT/compose.rc.yml}" \
+    "$SCRIPT_DIR/rollback-platform-migration.sh" --env production --layer kill-switch --env-file "$LOADY_ENV_FILE" \
+    --compose-env-file "${COMPOSE_ENV_FILE:-$REPO_ROOT/.env.rc}" \
     > >(tee -a "$DEPLOY_DIR/log.txt" | redact) 2>&1 || rc=$?
   [[ $rc -eq 0 ]] || { record_stage "rollback" "failed" "kill-switch exit=$rc"; die "Kill-switch layer failed (exit $rc)."; }
 
@@ -879,8 +913,10 @@ cmd_rollback() {
     [[ "$got2" == "RESTORE-DATABASE $DEPLOYMENT_ID" ]] || die "Restore confirmation text did not match exactly."
     [[ -n "${BACKUP_ENCRYPTION_PASSPHRASE:-}" ]] || die "BACKUP_ENCRYPTION_PASSPHRASE required to decrypt the backup for restore."
     rc=0
-    "$SCRIPT_DIR/rollback-platform-migration.sh" --env production --layer full-restore \
+    PLATFORM_MIGRATION_CONFIRM=I_UNDERSTAND_THIS_IS_PRODUCTION COMPOSE_FILE="${COMPOSE_FILE:-$REPO_ROOT/compose.rc.yml}" \
+      "$SCRIPT_DIR/rollback-platform-migration.sh" --env production --layer full-restore \
       --backup-dir "$backup_dir" --env-file "$LOADY_ENV_FILE" \
+      --compose-env-file "${COMPOSE_ENV_FILE:-$REPO_ROOT/.env.rc}" \
       > >(tee -a "$DEPLOY_DIR/log.txt" | redact) 2>&1 || rc=$?
     [[ $rc -eq 0 ]] || { record_stage "rollback" "failed" "full-restore exit=$rc"; die "Full-restore layer failed (exit $rc). Diagnostics were NOT deleted - collect-diagnostics before retrying."; }
   fi
@@ -914,7 +950,12 @@ cmd_collect_diagnostics() {
     echo
     echo "## Resource snapshot"
     df -Pm "$REPO_ROOT" 2>&1
-    free -m 2>&1 || true
+    if command -v free >/dev/null 2>&1; then
+      free -m 2>&1 || true
+    elif [[ "$(uname -s)" == "Darwin" ]]; then
+      vm_stat 2>&1 || true
+      sysctl -n vm.swapusage 2>&1 || true
+    fi
     echo
     echo "## Recent log tail (already redacted at write time)"
     tail -n 100 "$DEPLOY_DIR/log.txt" 2>/dev/null || echo "(no log yet)"

@@ -42,9 +42,10 @@ ENV=""
 LAYER=""
 BACKUP_DIR=""
 ENV_FILE=""
+COMPOSE_ENV_FILE=""
 
 usage() {
-  echo "Usage: $0 --env staging|production --layer kill-switch|full-restore [--backup-dir <dir>] [--env-file <path>]" >&2
+  echo "Usage: $0 --env staging|production --layer kill-switch|full-restore [--backup-dir <dir>] [--env-file <path>] [--compose-env-file <path>]" >&2
   exit 2
 }
 
@@ -54,6 +55,17 @@ while [[ $# -gt 0 ]]; do
     --layer) LAYER="${2:-}"; shift 2 ;;
     --backup-dir) BACKUP_DIR="${2:-}"; shift 2 ;;
     --env-file) ENV_FILE="${2:-}"; shift 2 ;;
+    # Optional, only needed for a compose file whose OWN interpolation
+    # needs variables that don't live in Loady's application --env-file
+    # (compose.rc.yml's reverse-proxy needs RC_LOADY_HOSTNAME etc., which
+    # live in .env.rc, never in Loady's own .env.production/.env.rehearsal
+    # - those two files serve different purposes: this script's existing
+    # --env-file is what LOADY_ENV_FILE sed-edits and what compose.rc.yml's
+    # `backend` service loads as its OWN env_file, not what docker compose
+    # itself uses to resolve ${RC_...} placeholders). Defaults to the
+    # existing --env-file for exact backward compatibility with a simpler
+    # compose file (e.g. compose.staging.yml) that needs no such split.
+    --compose-env-file) COMPOSE_ENV_FILE="${2:-}"; shift 2 ;;
     *) usage ;;
   esac
 done
@@ -93,6 +105,14 @@ else
 fi
 
 [[ -f "$LOADY_ENV_FILE" ]] || { echo "NO-GO: env file '$LOADY_ENV_FILE' not found." >&2; exit 1; }
+COMPOSE_ENV_FILE="${COMPOSE_ENV_FILE:-$LOADY_ENV_FILE}"
+[[ -f "$COMPOSE_ENV_FILE" ]] || { echo "NO-GO: compose env file '$COMPOSE_ENV_FILE' not found." >&2; exit 1; }
+# Exported (not just a local shell var) so docker compose's own
+# ${LOADY_ENV_FILE:-.env.production} interpolation (compose.rc.yml's
+# `backend` service env_file) resolves to the SAME file this script just
+# sed-edited, regardless of what COMPOSE_ENV_FILE otherwise supplies -
+# shell environment always wins over an --env-file value in compose.
+export LOADY_ENV_FILE
 
 START_TS=$(date +%s)
 echo "=== Rollback started ($(date -u -r "$START_TS" 2>/dev/null || date -u)) - layer: $LAYER ==="
@@ -101,7 +121,7 @@ echo "--> Layer 1: disabling Platform Core integration (kill-switch)..."
 tmp_env="$(mktemp)"
 sed -E 's/^(PLATFORM_CLIENT_ID)=.*/\1=/; s/^(PLATFORM_CLIENT_SECRET)=.*/\1=/' "$LOADY_ENV_FILE" > "$tmp_env"
 mv "$tmp_env" "$LOADY_ENV_FILE"
-docker compose -f "$COMPOSE_FILE" --env-file "$LOADY_ENV_FILE" up -d backend
+docker compose -f "$COMPOSE_FILE" --env-file "$COMPOSE_ENV_FILE" up -d backend
 for _ in $(seq 1 30); do
   docker exec "$LOADY_BACKEND_CONTAINER" true >/dev/null 2>&1 && break
   sleep 1
@@ -121,9 +141,17 @@ if [[ "$LAYER" == "full-restore" ]]; then
     -in "$BACKUP_DIR/loady_postgres.dump.enc" -out "$decrypt_tmp" -pass env:BACKUP_ENCRYPTION_PASSPHRASE
 
   echo "--> Layer 2: restoring Loady Postgres from backup..."
-  docker compose -f "$COMPOSE_FILE" --env-file "$LOADY_ENV_FILE" stop backend
+  docker compose -f "$COMPOSE_FILE" --env-file "$COMPOSE_ENV_FILE" stop backend
   docker cp "$decrypt_tmp" "$LOADY_PG_CONTAINER:/tmp/rollback_restore.dump"
   rm -f "$decrypt_tmp"
+  # `docker cp` always writes as root inside the container; this compose
+  # file (compose.rc.yml) runs Postgres as a bare numeric UID (`user:
+  # "70:70"`, no matching /etc/passwd entry - same reason production-
+  # preflight-inspection.sh needed a similar fix), which cannot read a
+  # root-owned file without this. `--user 0:0` (numeric, since this image
+  # has no named "root" passwd entry either) grants exactly the one chmod
+  # needed, nothing more.
+  docker exec --user 0:0 "$LOADY_PG_CONTAINER" chmod 644 /tmp/rollback_restore.dump
   docker exec "$LOADY_PG_CONTAINER" psql -U "$LOADY_PG_USER" -d postgres -v ON_ERROR_STOP=1 -c \
     "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='$LOADY_PG_DB' AND pid != pg_backend_pid();"
   docker exec "$LOADY_PG_CONTAINER" dropdb -U "$LOADY_PG_USER" "$LOADY_PG_DB"
@@ -132,7 +160,7 @@ if [[ "$LAYER" == "full-restore" ]]; then
   DB_RESTORE_TS=$(date +%s)
   echo "    Database restored in $((DB_RESTORE_TS - LAYER1_TS))s."
 
-  docker compose -f "$COMPOSE_FILE" --env-file "$LOADY_ENV_FILE" up -d backend
+  docker compose -f "$COMPOSE_FILE" --env-file "$COMPOSE_ENV_FILE" up -d backend
   for _ in $(seq 1 30); do
     docker exec "$LOADY_BACKEND_CONTAINER" true >/dev/null 2>&1 && break
     sleep 1
