@@ -73,7 +73,9 @@ export interface ProductOut {
   icon_ref: string | null;
   description: string | null;
   is_discoverable: boolean;
+  is_active: boolean;
   created_at: string;
+  updated_at: string;
 }
 
 export interface OAuthClientOut {
@@ -82,6 +84,11 @@ export interface OAuthClientOut {
   product_id: string | null;
   redirect_uris: string[];
   is_active: boolean;
+}
+
+export interface OAuthClientInventoryOut extends OAuthClientOut {
+  post_logout_redirect_uris: string[];
+  created_at: string;
 }
 
 export interface ProductOnboardRequest {
@@ -290,6 +297,15 @@ export const paymentsApi = {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]).toString();
     return request<Array<{ id: string; user_id: string; product_id: string; provider: string; amount_cents: number; currency: string; status: string; refunded_amount_cents: number | null; created_at: string }>>(`/api/v1/admin/payments${qs ? `?${qs}` : ""}`);
   },
+};
+
+export const oauthClientsApi = {
+  list: () => request<OAuthClientInventoryOut[]>("/api/v1/admin/oauth-clients"),
+  setActive: (clientId: string, isActive: boolean) =>
+    request<{ client_id: string; is_active: boolean }>(`/api/v1/admin/clients/${clientId}/active`, {
+      method: "POST",
+      body: JSON.stringify({ is_active: isActive }),
+    }),
 };
 
 export const billingEventsApi = {

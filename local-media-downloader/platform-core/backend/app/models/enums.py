@@ -107,6 +107,14 @@ class AuditAction(str, Enum):
     EMAIL_CHANGE_REQUESTED = "email_change_requested"
     EMAIL_CHANGED = "email_changed"
 
+    # Mission 17 (multi-product expansion prep)
+    PRODUCT_UPDATED = "product_updated"
+    PRODUCT_DISABLED = "product_disabled"
+    PRODUCT_ENABLED = "product_enabled"
+    CLIENT_DISABLED = "client_disabled"
+    CLIENT_ENABLED = "client_enabled"
+    CLIENT_LOGOUT_REDIRECT_URIS_UPDATED = "client_logout_redirect_uris_updated"
+
 
 class PaymentStatus(str, Enum):
     """A PaymentRecord is the ONLY thing that may ever be counted as

@@ -27,6 +27,8 @@ from app.api.deps import (
     require_client_admin,
     require_global_admin,
     require_global_admin_or_any_product_admin,
+    require_global_admin_or_any_product_finance,
+    require_global_admin_or_any_product_support,
     require_plan_admin,
     require_product_admin,
     require_super_admin,
@@ -44,11 +46,13 @@ from app.database.models import (
     Subscription,
     User,
 )
-from app.models.enums import AuditAction, CapabilityValueType, EntitlementSource, EntitlementStatus, RoleSlug
+from app.models.enums import GLOBAL_SCOPE, AuditAction, CapabilityValueType, EntitlementSource, EntitlementStatus, RoleSlug
 from app.models.schemas import (
     AdminCreateProductRequest,
     AdminOverviewOut,
+    AdminSetActiveRequest,
     AdminSetStatusRequest,
+    AdminUpdateProductRequest,
     AdminUserOut,
     AssignRoleRequest,
     AuditLogOut,
@@ -57,10 +61,12 @@ from app.models.schemas import (
     ProductOnboardRequest,
     ProductOnboardResponse,
     ProductOut,
+    ProductVerifyOut,
     RegisterClientRequest,
     RegisterClientResponse,
     RevokeEntitlementRequest,
     RoleAssignmentOut,
+    SetPostLogoutRedirectUrisRequest,
 )
 from app.services import (
     audit_service,
@@ -315,6 +321,82 @@ async def onboard_product(
     )
 
 
+@router.get("/products/{product_id}", response_model=ProductOut, dependencies=[Depends(require_product_admin)])
+async def get_product(product_id: str, db: Session = Depends(get_db)) -> ProductOut:
+    product = product_service.get_product(db, product_id)
+    return ProductOut.model_validate(product, from_attributes=True)
+
+
+@router.patch(
+    "/products/{product_id}", response_model=ProductOut,
+    dependencies=[Depends(require_product_admin), Depends(rate_limit_admin_mutation)],
+)
+async def update_product(
+    product_id: str, payload: AdminUpdateProductRequest,
+    db: Session = Depends(get_db), admin: User = Depends(get_current_user),
+) -> ProductOut:
+    """Partial update - only fields present in the request body are
+    changed (`exclude_unset`, not merely "not None"), so a caller can
+    explicitly clear `icon_ref`/`description` by sending `null` without
+    that being indistinguishable from "field omitted entirely". `id` is
+    never accepted here - only the path parameter says which product, and
+    a product's id is immutable once created."""
+    before = product_service.get_product(db, product_id)
+    before_state = {"name": before.name, "domain": before.domain, "status": before.status}
+    fields = payload.model_dump(exclude_unset=True)
+    if "status" in fields and fields["status"] is not None:
+        fields["status"] = fields["status"].value if hasattr(fields["status"], "value") else fields["status"]
+    update_kwargs: dict = {}
+    if "name" in fields:
+        update_kwargs["name"] = fields["name"]
+    if "domain" in fields:
+        update_kwargs["domain"] = fields["domain"]
+    if "status" in fields:
+        update_kwargs["status"] = fields["status"]
+    if "icon_ref" in fields:
+        update_kwargs["icon_ref"] = fields["icon_ref"]
+    if "description" in fields:
+        update_kwargs["description"] = fields["description"]
+    if "is_discoverable" in fields:
+        update_kwargs["is_discoverable"] = fields["is_discoverable"]
+    product = product_service.update_product(db, product_id, **update_kwargs)
+    audit_service.record(
+        db, admin.id, AuditAction.PRODUCT_UPDATED, "product", product.id, product.id,
+        before_state=before_state, after_state=fields,
+    )
+    return ProductOut.model_validate(product, from_attributes=True)
+
+
+@router.get("/products/{product_id}/verify", response_model=ProductVerifyOut, dependencies=[Depends(require_product_admin)])
+async def verify_product(product_id: str, db: Session = Depends(get_db)) -> ProductVerifyOut:
+    return ProductVerifyOut(**product_service.verify_product(db, product_id))
+
+
+@router.post(
+    "/products/{product_id}/active", response_model=ProductOut,
+    dependencies=[Depends(require_global_admin), Depends(rate_limit_admin_mutation)],
+)
+async def set_product_active(
+    product_id: str, payload: AdminSetActiveRequest,
+    db: Session = Depends(get_db), admin: User = Depends(require_global_admin),
+) -> ProductOut:
+    """Global-admin-only (unlike the client-level toggle below, which a
+    product's own admin may also flip) - disabling a product blocks
+    sign-in through EVERY one of its OAuth clients at once
+    (`oidc_service._client_and_product_active`), which is a bigger blast
+    radius than any single product-scoped admin action elsewhere in this
+    file."""
+    before = product_service.get_product(db, product_id)
+    was_active = before.is_active
+    product = product_service.set_product_active(db, product_id, payload.is_active)
+    audit_service.record(
+        db, admin.id, AuditAction.PRODUCT_ENABLED if payload.is_active else AuditAction.PRODUCT_DISABLED,
+        "product", product.id, product.id,
+        before_state={"is_active": was_active}, after_state={"is_active": payload.is_active},
+    )
+    return ProductOut.model_validate(product, from_attributes=True)
+
+
 @router.get("/products/{product_id}/plans", response_model=list[PlanOut], dependencies=[Depends(require_product_admin)])
 async def list_plans(product_id: str, db: Session = Depends(get_db)) -> list[PlanOut]:
     plans = db.execute(select(Plan).where(Plan.product_id == product_id)).scalars().all()
@@ -432,6 +514,30 @@ async def list_clients(db: Session = Depends(get_db)) -> list[dict]:
     clients = db.execute(select(OAuthClient)).scalars().all()
     return [
         {"client_id": c.client_id, "name": c.name, "product_id": c.product_id, "redirect_uris": c.redirect_uris, "is_active": c.is_active}
+        for c in clients
+    ]
+
+
+@router.get("/oauth-clients", dependencies=[Depends(require_global_admin_or_any_product_admin)])
+async def list_oauth_clients_inventory(db: Session = Depends(get_db), admin: User = Depends(get_current_user)) -> list[dict]:
+    """Mission 17: the Grand Admin "OAuth Clients" inventory page's data
+    source - unlike `GET /clients` above (registration-adjacent, kept
+    super_admin-only, unchanged by this mission), this is a READ-ONLY
+    view scoped exactly like `GET /products`: a global admin sees every
+    client, a product-scoped admin sees only their own product's - never
+    a secret, never a hash, only what's already visible elsewhere in
+    Grand Admin (name, redirect URIs, active flag, logout redirect
+    URIs)."""
+    visible = rbac_service.admin_visible_product_ids(db, admin.id)
+    clients = db.execute(select(OAuthClient).order_by(OAuthClient.created_at.desc())).scalars().all()
+    if visible is not None:
+        clients = [c for c in clients if c.product_id in visible]
+    return [
+        {
+            "client_id": c.client_id, "name": c.name, "product_id": c.product_id,
+            "redirect_uris": c.redirect_uris, "post_logout_redirect_uris": c.post_logout_redirect_uris,
+            "is_active": c.is_active, "created_at": c.created_at.isoformat(),
+        }
         for c in clients
     ]
 
@@ -630,9 +736,13 @@ async def list_user_bundle_access(user_id: str, db: Session = Depends(get_db)) -
 # =============================================================================
 
 
-@router.get("/subscriptions", dependencies=[Depends(require_global_admin_or_any_product_admin)])
+@router.get("/subscriptions", dependencies=[Depends(require_global_admin_or_any_product_support)])
 async def list_subscriptions(db: Session = Depends(get_db), admin: User = Depends(get_current_user), user_id: str | None = Query(default=None), limit: int = Query(default=100, le=500)) -> list[dict]:
-    visible = rbac_service.admin_visible_product_ids(db, admin.id)
+    """Mission 17: also readable by a `support` role (global or product-
+    scoped), not only `admin` - a "Gamey support" account sees only
+    Gamey's subscriptions here, exactly like a Gamey-scoped admin would,
+    and never Loady's (see `test_support_finance_rbac.py`)."""
+    visible = rbac_service.support_visible_product_ids(db, admin.id)
     query = select(Subscription).order_by(Subscription.created_at.desc()).limit(limit)
     if user_id:
         query = query.where(Subscription.user_id == user_id)
@@ -647,7 +757,7 @@ async def list_subscriptions(db: Session = Depends(get_db), admin: User = Depend
     ]
 
 
-@router.get("/payments", dependencies=[Depends(require_global_admin_or_any_product_admin)])
+@router.get("/payments", dependencies=[Depends(require_global_admin_or_any_product_finance)])
 async def list_payments(db: Session = Depends(get_db), admin: User = Depends(get_current_user), user_id: str | None = Query(default=None), limit: int = Query(default=100, le=500)) -> list[dict]:
     """Every row here is real (mission-brief Phase 12/36): only
     `webhook_service._apply_transaction_event` ever inserts a
@@ -656,8 +766,9 @@ async def list_payments(db: Session = Depends(get_db), admin: User = Depends(get
     ever estimated or fabricated. A product-scoped admin (mission 6
     continuation) sees only their own product's payments - "Filey admin
     must not see Loady's payments" applies here exactly as much as to
-    prices/plans."""
-    visible = rbac_service.admin_visible_product_ids(db, admin.id)
+    prices/plans. Mission 17: also readable by a `finance` role (global
+    or product-scoped), same product filtering."""
+    visible = rbac_service.finance_visible_product_ids(db, admin.id)
     query = select(PaymentRecord).order_by(PaymentRecord.created_at.desc()).limit(limit)
     if user_id:
         query = query.where(PaymentRecord.user_id == user_id)
@@ -728,6 +839,37 @@ async def rotate_client_secret(client_id: str, db: Session = Depends(get_db), ad
     return {"client_id": client_id, "client_secret": raw_secret}
 
 
+@router.post("/clients/{client_id}/active", dependencies=[Depends(rate_limit_admin_mutation)])
+async def set_client_active(
+    client_id: str, payload: AdminSetActiveRequest,
+    db: Session = Depends(get_db), admin: User = Depends(require_client_admin),
+) -> dict:
+    """Product-scoped (a product's own admin, or a global admin) unlike
+    the product-level toggle above - disabling one client only blocks sign-
+    in through that specific client, not the whole product, so it carries
+    the same bar as the existing webhook-config route on this same
+    resource (`require_client_admin`)."""
+    client = db.get(OAuthClient, client_id)
+    if client is None:
+        raise NotFoundError("Client not found.")
+    service_auth.set_client_active(db, admin, client, payload.is_active)
+    return {"client_id": client_id, "is_active": client.is_active}
+
+
+@router.post("/clients/{client_id}/post-logout-redirect-uris", dependencies=[Depends(rate_limit_admin_mutation)])
+async def set_client_post_logout_redirect_uris(
+    client_id: str, payload: SetPostLogoutRedirectUrisRequest,
+    db: Session = Depends(get_db), admin: User = Depends(require_client_admin),
+) -> dict:
+    """Product-scoped (a product's own admin, or global admin) - same bar
+    as the existing webhook-config route on this same resource."""
+    client = db.get(OAuthClient, client_id)
+    if client is None:
+        raise NotFoundError("Client not found.")
+    service_auth.set_post_logout_redirect_uris(db, admin, client, payload.post_logout_redirect_uris)
+    return {"client_id": client_id, "post_logout_redirect_uris": client.post_logout_redirect_uris}
+
+
 @router.post("/clients/{client_id}/webhook", dependencies=[Depends(rate_limit_admin_mutation)])
 async def configure_client_webhook(client_id: str, payload: dict, db: Session = Depends(get_db), admin: User = Depends(require_client_admin)) -> dict:
     """Opts a product's registered client into outbound Platform Core
@@ -768,7 +910,7 @@ async def system_health(db: Session = Depends(get_db)) -> dict:
     }
 
 
-@router.get("/revenue/metrics", dependencies=[Depends(require_global_admin_or_any_product_admin)])
+@router.get("/revenue/metrics", dependencies=[Depends(require_global_admin_or_any_product_finance)])
 async def revenue_metrics(
     db: Session = Depends(get_db), admin: User = Depends(get_current_user),
     product_id: str | None = Query(default=None), plan_id: str | None = Query(default=None),
@@ -777,11 +919,15 @@ async def revenue_metrics(
     """Mission-brief Phase 12. A product-scoped admin MUST pass their own
     product_id - a global-metrics query (no product_id) is global-admin
     only, since it would otherwise aggregate every product's revenue,
-    including ones the caller has no access to."""
+    including ones the caller has no access to. Mission 17: a `finance`
+    role (global or product-scoped) passes the same two checks a
+    product-scoped/global admin would."""
     if product_id is not None:
-        if not rbac_service.is_global_or_product_admin(db, admin.id, product_id):
+        if not rbac_service.is_global_or_product_finance_or_admin(db, admin.id, product_id):
             raise ForbiddenError(f"You do not have admin access to product '{product_id}'.")
-    elif not rbac_service.is_global_admin(db, admin.id):
+    elif not rbac_service.is_global_admin(db, admin.id) and not rbac_service.has_role(
+        db, admin.id, RoleSlug.FINANCE, GLOBAL_SCOPE
+    ):
         raise ForbiddenError("An ecosystem-wide (no product_id) metrics query requires global admin.")
 
     metrics = revenue_service.compute_metrics(

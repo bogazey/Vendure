@@ -155,6 +155,38 @@ def require_global_admin_or_any_product_admin(
     raise ForbiddenError("Admin access required.")
 
 
+def require_global_admin_or_any_product_support(
+    user: User = Depends(get_current_user), db: Session = Depends(get_db)
+) -> User:
+    """Mission 17: gate for the `/subscriptions` listing - admin (global
+    or product-scoped) still passes, and a `support` role (global or
+    product-scoped) additionally passes; the route body filters rows with
+    `rbac_service.support_visible_product_ids`. A plain `support`-less
+    user, or a `support` role that doesn't exist yet on this account,
+    still 403s exactly like before this mission."""
+    if rbac_service.is_global_admin(db, user.id):
+        return user
+    visible = rbac_service.support_visible_product_ids(db, user.id)
+    if visible is None or visible:
+        return user
+    raise ForbiddenError("Admin or support access required.")
+
+
+def require_global_admin_or_any_product_finance(
+    user: User = Depends(get_current_user), db: Session = Depends(get_db)
+) -> User:
+    """Mission 17: gate for the `/payments` and `/revenue/metrics`
+    listings - admin still passes, and a `finance` role (global or
+    product-scoped) additionally passes; the route body filters rows with
+    `rbac_service.finance_visible_product_ids`."""
+    if rbac_service.is_global_admin(db, user.id):
+        return user
+    visible = rbac_service.finance_visible_product_ids(db, user.id)
+    if visible is None or visible:
+        return user
+    raise ForbiddenError("Admin or finance access required.")
+
+
 def require_client_admin(
     client_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> User:

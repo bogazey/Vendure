@@ -32,7 +32,7 @@ describe("Products onboarding", () => {
 
   it("reveals the client secret exactly once, with the required warning, on success", async () => {
     vi.mocked(api.onboardProduct).mockResolvedValue({
-      product: { id: "filey", name: "Filey", domain: "filey.cc", status: "planned", icon_ref: null, description: null, is_discoverable: true, created_at: "2026-01-01T00:00:00Z" },
+      product: { id: "filey", name: "Filey", domain: "filey.cc", status: "planned", icon_ref: null, description: null, is_discoverable: true, is_active: true, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" },
       client_id: "filey-client",
       client_secret: "super-secret-plaintext-value",
     });
@@ -63,7 +63,7 @@ describe("Products onboarding", () => {
   it("never writes the onboarded secret to localStorage or sessionStorage", async () => {
     const localSetItem = vi.spyOn(Storage.prototype, "setItem");
     vi.mocked(api.onboardProduct).mockResolvedValue({
-      product: { id: "filey", name: "Filey", domain: "filey.cc", status: "planned", icon_ref: null, description: null, is_discoverable: true, created_at: "2026-01-01T00:00:00Z" },
+      product: { id: "filey", name: "Filey", domain: "filey.cc", status: "planned", icon_ref: null, description: null, is_discoverable: true, is_active: true, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" },
       client_id: "filey-client",
       client_secret: "super-secret-plaintext-value",
     });

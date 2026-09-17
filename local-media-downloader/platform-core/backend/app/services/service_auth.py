@@ -75,6 +75,42 @@ def rotate_client_secret(session: Session, admin: User, client: OAuthClient) -> 
     return raw_secret
 
 
+def set_client_active(session: Session, admin: User, client: OAuthClient, is_active: bool) -> OAuthClient:
+    """Disabling a client immediately blocks new sign-ins and token
+    refreshes through it (`oidc_service._client_and_product_active`) - it
+    does not revoke tokens already issued before the flip, matching how
+    `OAuthClient.is_active` was already enforced at `deps.py`'s bearer/
+    service-token resolution before this mission (mission 17: this was
+    previously write-once at registration time, never flipped after)."""
+    before = client.is_active
+    client.is_active = is_active
+    session.flush()
+    audit_service.record(
+        session, admin.id, AuditAction.CLIENT_ENABLED if is_active else AuditAction.CLIENT_DISABLED,
+        "oauth_client", client.client_id, client.product_id,
+        before_state={"is_active": before}, after_state={"is_active": is_active},
+    )
+    return client
+
+
+def set_post_logout_redirect_uris(
+    session: Session, admin: User, client: OAuthClient, uris: list[str]
+) -> OAuthClient:
+    """RP-Initiated-Logout target allowlist (mission 17) - exact-match
+    only, identical validation posture to `redirect_uris` (both close the
+    same open-redirect class of bug: `/oauth/logout` only ever redirects
+    to a URI this call explicitly registered, never to whatever a caller
+    happens to pass)."""
+    before = list(client.post_logout_redirect_uris)
+    client.post_logout_redirect_uris = uris
+    session.flush()
+    audit_service.record(
+        session, admin.id, AuditAction.CLIENT_LOGOUT_REDIRECT_URIS_UPDATED, "oauth_client", client.client_id,
+        client.product_id, before_state={"post_logout_redirect_uris": before}, after_state={"post_logout_redirect_uris": uris},
+    )
+    return client
+
+
 def configure_webhook(session: Session, admin: User, client: OAuthClient, webhook_url: str) -> str:
     """Opt a client into outbound product webhooks (mission-brief Phase
     41) - generates a fresh signing secret every call (re-configuring the

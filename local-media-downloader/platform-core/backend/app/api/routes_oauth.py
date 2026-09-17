@@ -7,14 +7,22 @@ from __future__ import annotations
 
 from urllib.parse import quote, urlencode
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Cookie, Depends, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.api.deps import BearerPrincipal, get_bearer_principal, get_db, get_optional_user
+from app.api.deps import (
+    SESSION_ACCESS_COOKIE,
+    SESSION_REFRESH_COOKIE,
+    BearerPrincipal,
+    get_bearer_principal,
+    get_db,
+    get_optional_user,
+)
 from app.config.settings import get_settings
 from app.database.models import User
 from app.security.jwt_keys import get_jwks
+from app.services.auth_service import auth_service
 from app.services import oidc_service, service_auth
 from app.services.rate_limit_service import oauth_token_limiter
 from app.utils.exceptions import AppError, InvalidClientError, InvalidGrantError, InvalidRedirectUriError, RateLimitedError
@@ -129,6 +137,80 @@ async def token(request: Request, db: Session = Depends(get_db)) -> dict:
     raise InvalidGrantError("Unsupported grant_type.")
 
 
+def _clear_central_session_cookies(response: Response) -> None:
+    """Mirrors `routes_auth.py::_clear_session_cookies` exactly (same
+    cookie names, paths, and domain) - kept local to this module rather
+    than imported to avoid a cross-route-module private-function
+    dependency; both must be updated together if the cookie shape ever
+    changes."""
+    settings = get_settings()
+    response.delete_cookie(SESSION_ACCESS_COOKIE, path="/", domain=settings.cookie_domain)
+    response.delete_cookie(SESSION_REFRESH_COOKIE, path="/api/v1/auth", domain=settings.cookie_domain)
+
+
+@router.get("/oauth/logout")
+async def rp_initiated_logout(
+    db: Session = Depends(get_db),
+    client_id: str | None = Query(default=None),
+    post_logout_redirect_uri: str | None = Query(default=None),
+    state: str | None = Query(default=None),
+    session_refresh: str | None = Cookie(default=None, alias=SESSION_REFRESH_COOKIE),
+):
+    """Minimal RP-Initiated-Logout (mission 17) - a product redirects its
+    end user here to end their PLATFORM CORE central session (not just
+    the product's own local session) before optionally sending them back.
+    Deliberately simplified vs. the full OIDC spec: identifies the client
+    by `client_id` directly rather than decoding an `id_token_hint` JWT -
+    sufficient for "validate the redirect target against an allowlist,"
+    which is the actual security property this endpoint exists to
+    provide, without adding a JWT-parsing dependency for a hint this
+    service already has a simpler way to get.
+
+    Ending the session is unconditional and always safe to call, even
+    with no session cookie present (a no-op logout, not an error) - this
+    is what makes "logout-all downstream products, cleanly, even if some
+    were never actually signed in" possible.
+
+    Builds the actual response object first and clears cookies directly
+    on IT, rather than on an injected `Response` dependency - FastAPI
+    only merges an injected `Response`'s headers into the final response
+    when the endpoint returns a plain value; an endpoint that returns its
+    own `Response` subclass (as every branch here does, to get an HTML
+    page or a redirect) bypasses that merge entirely, so cookie-clearing
+    on the dependency would otherwise silently never reach the client."""
+    if session_refresh:
+        auth_service.logout(db, session_refresh)
+
+    if post_logout_redirect_uri is None:
+        result = HTMLResponse(
+            """<!doctype html><html><head><meta charset="utf-8">
+            <title>Signed out</title>
+            <style>body{background:#0b0f1a;color:#e2e8f0;font-family:system-ui,sans-serif;
+            display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+            .card{background:#111827;border:1px solid rgba(255,255,255,.08);border-radius:16px;
+            padding:32px 40px;max-width:440px;text-align:center}
+            h1{font-size:18px;margin:0}</style></head>
+            <body><div class="card"><h1>You have been signed out.</h1></div></body></html>"""
+        )
+    elif client_id is None:
+        result = _error_page("Logout request rejected", "A post_logout_redirect_uri requires client_id.")
+    else:
+        client = oidc_service.get_client(db, client_id)
+        if client is None or post_logout_redirect_uri not in client.post_logout_redirect_uris:
+            # Deliberately NOT a redirect - identical open-redirect
+            # reasoning to /oauth/authorize's own redirect_uri validation.
+            result = _error_page("Logout redirect rejected", "post_logout_redirect_uri is not registered for this client.")
+        else:
+            params = {}
+            if state is not None:
+                params["state"] = state
+            url = f"{post_logout_redirect_uri}?{urlencode(params)}" if params else post_logout_redirect_uri
+            result = RedirectResponse(url=url, status_code=302)
+
+    _clear_central_session_cookies(result)
+    return result
+
+
 @router.get("/oauth/userinfo")
 async def userinfo(principal: BearerPrincipal = Depends(get_bearer_principal)) -> dict:
     return {
@@ -152,6 +234,7 @@ async def openid_configuration() -> dict:
         "authorization_endpoint": f"{base}/oauth/authorize",
         "token_endpoint": f"{base}/oauth/token",
         "userinfo_endpoint": f"{base}/oauth/userinfo",
+        "end_session_endpoint": f"{base}/oauth/logout",
         "jwks_uri": f"{base}/.well-known/jwks.json",
         "response_types_supported": ["code"],
         "grant_types_supported": ["authorization_code", "refresh_token", "client_credentials"],

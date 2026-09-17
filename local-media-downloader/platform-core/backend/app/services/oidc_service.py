@@ -29,7 +29,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config.settings import get_settings
-from app.database.models import AuthorizationCode, OAuthClient, OAuthRefreshToken, User, generate_client_secret
+from app.database.models import AuthorizationCode, OAuthClient, OAuthRefreshToken, Product, User, generate_client_secret
 from app.models.enums import AuditAction
 from app.security import passwords
 from app.security.jwt_tokens import create_oidc_tokens
@@ -66,9 +66,23 @@ def get_client(session: Session, client_id: str) -> OAuthClient | None:
     return session.get(OAuthClient, client_id)
 
 
+def _client_and_product_active(session: Session, client: OAuthClient | None) -> bool:
+    """A client is usable only if it is itself active AND (when it belongs
+    to a product) that product is also active — a disabled product must
+    block sign-in through every one of its clients without requiring an
+    admin to separately disable each client too (mission 17)."""
+    if client is None or not client.is_active:
+        return False
+    if client.product_id is not None:
+        product = session.get(Product, client.product_id)
+        if product is None or not product.is_active:
+            return False
+    return True
+
+
 def validate_authorize_request(session: Session, client_id: str, redirect_uri: str, code_challenge_method: str) -> OAuthClient:
     client = get_client(session, client_id)
-    if client is None or not client.is_active:
+    if not _client_and_product_active(session, client):
         raise InvalidClientError("Unknown or inactive client.")
     if redirect_uri not in client.redirect_uris:
         raise InvalidRedirectUriError("redirect_uri is not registered for this client.")
@@ -117,7 +131,7 @@ def exchange_authorization_code(
 ) -> tuple[str, str, str, User]:
     """Returns (access_token, id_token, oauth_refresh_token_raw, user)."""
     client = get_client(session, client_id)
-    if client is None or not client.is_active or client.client_secret_hash is None:
+    if not _client_and_product_active(session, client) or client.client_secret_hash is None:
         raise InvalidClientError("Unknown or inactive client.")
     if not passwords.verify_password(client_secret, client.client_secret_hash):
         raise InvalidClientError("Invalid client credentials.")
@@ -170,7 +184,7 @@ def refresh_oidc_token(session: Session, client_id: str, client_secret: str, ref
     the client-side counterpart to Loady's own refresh-token rotation, but
     scoped to a single product client rather than the central session."""
     client = get_client(session, client_id)
-    if client is None or not client.is_active or client.client_secret_hash is None:
+    if not _client_and_product_active(session, client) or client.client_secret_hash is None:
         raise InvalidClientError("Unknown or inactive client.")
     if not passwords.verify_password(client_secret, client.client_secret_hash):
         raise InvalidClientError("Invalid client credentials.")

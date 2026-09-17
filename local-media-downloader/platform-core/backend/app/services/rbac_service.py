@@ -106,3 +106,64 @@ def admin_visible_product_ids(session: Session, user_id: str) -> set[str] | None
         )
     ).scalars().all()
     return {row.scope.removeprefix("product:") for row in rows}
+
+
+# --- Mission 17: support/finance RBAC enforcement ---------------------------
+#
+# `support`/`finance` were seeded roles with no enforcement anywhere before
+# this mission (see docs/platform/RBAC_MATRIX.md). Deliberately minimal:
+# each is wired into exactly the read-only listing(s) its name implies
+# ("support" -> `/subscriptions`; "finance" -> `/payments`,
+# `/revenue/metrics`) and nowhere else - no new mutation authority, and no
+# access to the global (non-product-filtered) `/users` listing, since a
+# product-scoped role there would otherwise leak every OTHER product's
+# users, and there is no product_id column on `User` to filter by. Mirrors
+# `is_product_admin`/`admin_visible_product_ids` exactly, one role
+# swapped in, so the same "no code path can return True for any other
+# product_id" guarantee applies here too.
+
+def is_product_support(session: Session, user_id: str, product_id: str) -> bool:
+    return has_role(session, user_id, RoleSlug.SUPPORT, product_scope(product_id))
+
+
+def is_product_finance(session: Session, user_id: str, product_id: str) -> bool:
+    return has_role(session, user_id, RoleSlug.FINANCE, product_scope(product_id))
+
+
+def _visible_product_ids_for(session: Session, user_id: str, extra_role: RoleSlug) -> set[str] | None:
+    if is_global_admin(session, user_id):
+        return None
+    if has_role(session, user_id, extra_role, GLOBAL_SCOPE):
+        return None
+    rows = session.execute(
+        select(RoleAssignment).where(
+            RoleAssignment.user_id == user_id,
+            RoleAssignment.role_slug.in_([RoleSlug.ADMIN.value, extra_role.value]),
+            RoleAssignment.scope.like("product:%"),
+        )
+    ).scalars().all()
+    return {row.scope.removeprefix("product:") for row in rows}
+
+
+def support_visible_product_ids(session: Session, user_id: str) -> set[str] | None:
+    """Same contract as `admin_visible_product_ids`, but a product-scoped
+    (or global) `support` role additionally counts - used by the
+    `/subscriptions` listing only."""
+    return _visible_product_ids_for(session, user_id, RoleSlug.SUPPORT)
+
+
+def finance_visible_product_ids(session: Session, user_id: str) -> set[str] | None:
+    """Same contract as `admin_visible_product_ids`, but a product-scoped
+    (or global) `finance` role additionally counts - used by the
+    `/payments` and `/revenue/metrics` listings only."""
+    return _visible_product_ids_for(session, user_id, RoleSlug.FINANCE)
+
+
+def is_global_or_product_finance_or_admin(session: Session, user_id: str, product_id: str) -> bool:
+    if is_global_admin(session, user_id):
+        return True
+    if is_product_admin(session, user_id, product_id):
+        return True
+    if has_role(session, user_id, RoleSlug.FINANCE, GLOBAL_SCOPE):
+        return True
+    return is_product_finance(session, user_id, product_id)

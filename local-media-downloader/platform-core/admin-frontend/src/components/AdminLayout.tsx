@@ -6,6 +6,7 @@ const TABS = [
   { to: "/", key: "overview", end: true },
   { to: "/users", key: "users", end: false },
   { to: "/products", key: "products", end: false },
+  { to: "/oauth-clients", key: "oauthClients", end: false },
   { to: "/bundles", key: "bundles", end: false },
   { to: "/revenue", key: "revenue", end: false },
   { to: "/billing-events", key: "billingEvents", end: false },

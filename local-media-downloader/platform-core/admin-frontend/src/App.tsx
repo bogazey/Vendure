@@ -8,6 +8,7 @@ import Users from "./pages/Users";
 import Products from "./pages/Products";
 import ProductDetail from "./pages/ProductDetail";
 import Bundles from "./pages/Bundles";
+import OAuthClients from "./pages/OAuthClients";
 import Revenue from "./pages/Revenue";
 import BillingEvents from "./pages/BillingEvents";
 import SystemHealth from "./pages/SystemHealth";
@@ -31,6 +32,7 @@ export default function App() {
             <Route path="/users" element={<Users />} />
             <Route path="/products" element={<Products />} />
             <Route path="/products/:productId" element={<ProductDetail />} />
+            <Route path="/oauth-clients" element={<OAuthClients />} />
             <Route path="/bundles" element={<Bundles />} />
             <Route path="/revenue" element={<Revenue />} />
             <Route path="/billing-events" element={<BillingEvents />} />

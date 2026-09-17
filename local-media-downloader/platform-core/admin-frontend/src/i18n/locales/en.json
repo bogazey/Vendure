@@ -27,6 +27,7 @@
     "overview": "Overview",
     "users": "Users",
     "products": "Products",
+    "oauthClients": "OAuth Clients",
     "entitlements": "Entitlements",
     "giftedAccess": "Gifted Access",
     "auditLog": "Audit Logs",
@@ -173,6 +174,16 @@
       "date": "Date",
       "empty": "No payments yet."
     }
+  },
+  "oauthClients": {
+    "subtitle": "Every OAuth client across the ecosystem - a global admin sees all products' clients here; a product-scoped admin sees only their own.",
+    "product": "Product",
+    "postLogoutRedirectUris": "Logout redirect URIs",
+    "enable": "Enable",
+    "disable": "Disable",
+    "enableConfirm": "Re-activate client {{clientId}}? Sign-in through it will resume immediately.",
+    "disableConfirm": "Disable client {{clientId}}? Sign-in and token refresh through it will stop immediately.",
+    "empty": "No OAuth clients registered yet."
   },
   "bundles": {
     "name": "Name",

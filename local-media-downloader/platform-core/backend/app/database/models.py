@@ -161,7 +161,16 @@ class Product(Base):
     # discoverable while still "building", e.g. a public beta waitlist).
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     is_discoverable: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Mission 17 (multi-product expansion prep): a global admin kill switch,
+    # independent of `status` (which describes the product's *lifecycle*,
+    # e.g. "planned"/"building"/"live" — a live product can still be
+    # temporarily disabled without lying about its lifecycle stage). Wired
+    # into `/oauth/authorize` alongside `OAuthClient.is_active` so a
+    # disabled product can't be used to sign in even if its OAuth client
+    # is separately still active.
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, onupdate=_now, nullable=False)
 
 
 class ProductMembership(Base):
@@ -196,6 +205,12 @@ class OAuthClient(Base):
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     client_secret_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     redirect_uris: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    # Mission 17: RP-Initiated-Logout target allowlist, exact-match only,
+    # mirroring `redirect_uris` above for the same open-redirect reasons.
+    # Empty list (the default) means this client has not registered any
+    # post-logout redirect target yet — `/oauth/logout` then never
+    # redirects for it, it only ends the central session.
+    post_logout_redirect_uris: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 

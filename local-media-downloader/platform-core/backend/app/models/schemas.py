@@ -89,10 +89,29 @@ class ProductOut(BaseModel):
     icon_ref: Optional[str]
     description: Optional[str] = None
     is_discoverable: bool = True
+    is_active: bool = True
     created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class AdminUpdateProductRequest(BaseModel):
+    """All fields optional - only what's supplied is changed. `id` is
+    deliberately never a field here; the product id in the URL path is the
+    only way to say which product, and it can never itself be edited."""
+
+    name: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    domain: Optional[str] = Field(default=None, min_length=3, max_length=255)
+    status: Optional[ProductStatus] = None
+    icon_ref: Optional[str] = Field(default=None, max_length=80)
+    description: Optional[str] = Field(default=None, max_length=500)
+    is_discoverable: Optional[bool] = None
+
+
+class AdminSetActiveRequest(BaseModel):
+    is_active: bool
 
 
 class ProductMembershipOut(BaseModel):
@@ -227,6 +246,10 @@ class RegisterClientResponse(BaseModel):
     client_secret: str
 
 
+class SetPostLogoutRedirectUrisRequest(BaseModel):
+    post_logout_redirect_uris: list[str] = Field(default_factory=list, max_length=10)
+
+
 # --- Product onboarding (Grand Admin UI; super_admin only) -----------------
 # Combines product registration + its initial OAuth client registration
 # into one super_admin-gated action - see routes_admin.py::onboard_product.
@@ -250,3 +273,20 @@ class ProductOnboardResponse(BaseModel):
     # Plaintext, present only in this one response - never retrievable
     # again afterward (see routes_admin.py::onboard_product's docstring).
     client_secret: str
+
+
+# --- Product verification (mission 17) -------------------------------------
+
+class ProductVerifyOut(BaseModel):
+    """Everything a "did I actually finish onboarding this product"
+    question needs, in one call, replacing the fully-manual checklist in
+    `NEW_PRODUCT_ONBOARDING.md` step 9 - never mutates anything, safe to
+    call repeatedly while wiring up a new product."""
+
+    product_id: str
+    product_is_active: bool
+    oauth_client_count: int
+    active_oauth_client_count: int
+    plan_count: int
+    has_free_plan: bool
+    checks: dict[str, bool]
