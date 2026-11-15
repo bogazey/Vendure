@@ -22,9 +22,26 @@ Edit `js/collection.js`. Each item needs a title, a type and an ID:
 - Optional: `note` (short description) and `image` (the tile's logo: a file you put in `images/logos/`, or a web address).
   The 74 shipped logos are the channels' own YouTube profile pictures, saved inside the app.
 
-The library ships with 74 hand-picked channels in six rows (Podcasts, TV Shows, Documentaries,
+The YouTube part of the library ships with 74 hand-picked channels in six rows (Podcasts, TV Shows, Documentaries,
 Science & Learning, Tech & Engineering, Food & Travel). Every ID was checked against YouTube's
 feed in November 2026. If a channel is later removed, the app says so on that item's episode screen.
+
+## Independent shows (play inside the app)
+
+The first two rows are independent shows that publish their own episode feed. The app reads the
+feed, lists the newest 50 episodes and plays the video or audio file itself — YouTube is not involved.
+
+To add one, find the show's podcast feed (RSS) address on its website and add:
+
+```js
+{ title: 'My show', type: 'feed', url: 'https://example.com/feed.xml', image: 'images/logos/my-show.jpg' },
+```
+
+Player remote keys: OK or Play/Pause pauses and resumes, LEFT goes back 10 s, RIGHT forward 30 s,
+Rewind / Fast-forward jump a minute, BACK or Stop leaves. An episode resumes where you left it.
+
+Only shows that offer a feed with direct media files work. Shows that only embed a player on
+their web page cannot be added this way.
 
 ## Install on the TV
 
@@ -50,6 +67,8 @@ browser blocks the cross-site feed request; the TV app is allowed to make it.
 ## Not yet verified on a real TV
 
 The app was tested in a desktop browser with a simulated remote, feed and Tizen API.
+The built-in player was tested with real feeds but stand-in media files; the shows' actual
+MP4 / MP3 files are standard formats Samsung TVs play, but were not played on a TV.
 Opening a specific video relies on the YouTube TV app accepting a `v=<id>` / `list=<id>`
 deep link; Samsung does not document this officially. If your TV's YouTube app ignores it,
 YouTube still opens, but on its home screen. The launch code is in `js/youtube.js`.

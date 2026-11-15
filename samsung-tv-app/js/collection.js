@@ -6,7 +6,10 @@
  *   title  Name shown under the tile.
  *   type   'channel'  -> id is a YouTube channel ID (starts with "UC", 24 characters)
  *          'playlist' -> id is a YouTube playlist ID (starts with "PL", "UU", "OL"...)
+ *          'feed'     -> an independent show; url is its podcast feed (RSS) address.
+ *                        These play inside the app, not in YouTube.
  *   id     The channel or playlist ID (see README.md for how to find it).
+ *   url    For 'feed' items only: the feed address from the show's website.
  *   note   Optional short description shown on the episodes screen.
  *   image  Optional logo for the tile: a file in images/logos/ or a web address.
  *          Without it the tile shows the initials.
@@ -16,6 +19,27 @@
  * Every ID below was checked against YouTube's feed when the list was put together.
  */
 var COLLECTION = [
+    {
+        title: 'Independent Shows · plays in the app',
+        items: [
+            { title: 'This Week in Tech', type: 'feed', url: 'https://feeds.twit.tv/twit_video_hd.xml', image: 'images/logos/twit.jpg', note: 'Leo Laporte and guests on the week\'s tech news. Video.' },
+            { title: 'Security Now', type: 'feed', url: 'https://feeds.twit.tv/sn_video_hd.xml', image: 'images/logos/security-now.jpg', note: 'Steve Gibson on security and privacy, in depth. Video.' },
+            { title: 'Intelligent Machines', type: 'feed', url: 'https://feeds.twit.tv/twig_video_hd.xml', image: 'images/logos/intelligent-machines.jpg', note: 'The weekly conversation about AI. Video.' },
+            { title: 'MacBreak Weekly', type: 'feed', url: 'https://feeds.twit.tv/mbw_video_hd.xml', image: 'images/logos/macbreak-weekly.jpg', note: 'Everything Apple. Video.' },
+            { title: 'Windows Weekly', type: 'feed', url: 'https://feeds.twit.tv/ww_video_hd.xml', image: 'images/logos/windows-weekly.jpg', note: 'Microsoft and Windows news. Video.' },
+            { title: 'Democracy Now!', type: 'feed', url: 'https://www.democracynow.org/podcast-video.xml', image: 'images/logos/democracy-now.jpg', note: 'Independent daily news hour. Video.' }
+        ]
+    },
+    {
+        title: 'Independent Podcasts · plays in the app',
+        items: [
+            { title: 'Hardcore History', type: 'feed', url: 'https://feeds.feedburner.com/dancarlin/history', note: 'Dan Carlin\'s epic history series. Audio.' },
+            { title: 'Acquired', type: 'feed', url: 'https://feeds.transistor.fm/acquired', image: 'images/logos/acquired.jpg', note: 'The stories behind great companies. Audio.' },
+            { title: '99% Invisible', type: 'feed', url: 'https://feeds.simplecast.com/BqbsxVfO', image: 'images/logos/99-percent-invisible.jpg', note: 'Design and architecture stories. Audio.' },
+            { title: 'The Rest Is History', type: 'feed', url: 'https://feeds.megaphone.fm/GLT4787413333', image: 'images/logos/rest-is-history.jpg', note: 'Tom Holland and Dominic Sandbrook. Audio.' },
+            { title: 'EconTalk', type: 'feed', url: 'https://feeds.simplecast.com/wgl4xEgL', image: 'images/logos/econtalk.jpg', note: 'Russ Roberts in conversation about ideas. Audio.' }
+        ]
+    },
     {
         title: 'Podcasts',
         items: [

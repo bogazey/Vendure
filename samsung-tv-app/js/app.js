@@ -136,6 +136,13 @@
         return d.getDate() + ' ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear();
     }
 
+    function isFeed(item) { return item.type === 'feed'; }
+
+    function formatLength(seconds) {
+        var minutes = Math.round(seconds / 60);
+        return minutes < 60 ? minutes + ' min' : Math.floor(minutes / 60) + ' h ' + (minutes % 60) + ' min';
+    }
+
     function openDetail() {
         var section = sections[home.row];
         var item = section.items[home.cols[home.row]];
@@ -150,14 +157,19 @@
         $('detail-note').textContent = item.note || '';
         $('grid').innerHTML = '';
         $('status').textContent = 'Loading episodes…';
+        $('open-btn').textContent = isFeed(item) ? 'Play latest episode' : 'Open in YouTube';
 
         screen = 'detail';
         $('home').className = 'screen hidden';
         $('detail').className = 'screen';
         renderDetail();
 
-        YT.loadEpisodes(item, function (err, episodes) {
+        (isFeed(item) ? Feeds : YT).loadEpisodes(item, function (err, episodes) {
             if (token !== detail.token) { return; }   // user already left this screen
+            if (err && isFeed(item)) {
+                $('status').textContent = 'Could not load this show\'s episode list. Check the TV\'s internet connection and try again.';
+                return;
+            }
             if (err === 'not-found') {
                 $('status').textContent = 'YouTube has no ' + item.type + ' with the ID "' + item.id + '". Check it in js/collection.js.';
                 return;
@@ -167,7 +179,7 @@
                 return;
             }
             if (!episodes.length) {
-                $('status').textContent = 'No episodes found yet. Use "Open in YouTube" to browse.';
+                $('status').textContent = isFeed(item) ? 'This show has no playable episodes yet.' : 'No episodes found yet. Use "Open in YouTube" to browse.';
                 return;
             }
             $('status').textContent = '';
@@ -187,11 +199,11 @@
             var thumb = el('div', 'ep-thumb');
             var img = el('img');
             img.onerror = (function (image) { return function () { image.style.display = 'none'; }; })(img);
-            img.src = ep.thumb;
+            img.src = ep.thumb || detail.item.image || '';
             thumb.appendChild(img);
             node.appendChild(thumb);
             node.appendChild(el('div', 'ep-title', ep.title));
-            node.appendChild(el('div', 'ep-date', formatDate(ep.published)));
+            node.appendChild(el('div', 'ep-date', formatDate(ep.published) + (ep.duration ? '  ·  ' + formatLength(ep.duration) : '')));
             node.onclick = (function (index) {
                 return function () { detail.focus = index; renderDetail(); playFocused(); };
             })(i);
@@ -222,7 +234,22 @@
         if (err) { toast('Could not open YouTube. Is the YouTube app installed on this TV?'); }
     }
 
+    // Independent shows play inside the app.
+    function playInApp(episode) {
+        screen = 'player';
+        Player.open(episode, detail.item, function (reason) {
+            screen = 'detail';
+            renderDetail();
+            if (reason === 'error') { toast('This episode could not be played on this TV.'); }
+        });
+    }
+
     function playFocused() {
+        if (isFeed(detail.item)) {
+            var episode = detail.episodes[detail.focus === -1 ? 0 : detail.focus];
+            if (episode) { playInApp(episode); }
+            return;
+        }
         if (detail.focus === -1) {
             toast('Opening ' + detail.item.title + ' in YouTube…');
             YT.openItem(detail.item, launched);
@@ -273,6 +300,7 @@
 
     document.addEventListener('keydown', function (e) {
         var code = e.keyCode;
+        if (screen === 'player') { e.preventDefault(); Player.key(code); return; }
         var isBack = code === KEY.BACK || code === KEY.ESC || code === KEY.BACKSPACE;
         if (isBack) {
             e.preventDefault();

@@ -100,3 +100,33 @@ html, body {
     font-size: 28px; background: #2a2f3d; color: #fff; z-index: 10;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
 }
+
+/* ---------- built-in player ---------- */
+#player { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; background: #000; z-index: 8; }
+#media { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; background: #000; }
+#player-art {
+    position: absolute; top: 150px; left: 710px; width: 500px; height: 500px;
+    border-radius: 24px; overflow: hidden; background: #1b1e27;
+    box-shadow: 0 20px 80px rgba(0, 0, 0, 0.8);
+}
+#player-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+#player-status {
+    position: absolute; top: 40px; right: 90px; font-size: 28px; color: #f2f3f5;
+    text-shadow: 0 2px 8px #000;
+}
+#player-bar {
+    position: absolute; left: 0; right: 0; bottom: 0; padding: 120px 90px 60px;
+    background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.92) 55%);
+    transition: opacity 0.4s;
+}
+#player-bar.faded { opacity: 0; }
+#player-show { font-size: 24px; letter-spacing: 3px; text-transform: uppercase; color: #ff5a5a; }
+#player-title {
+    margin-top: 8px; font-size: 40px; font-weight: 700;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#player-track { margin-top: 26px; height: 10px; border-radius: 5px; background: rgba(255, 255, 255, 0.25); overflow: hidden; }
+#player-fill { height: 100%; width: 0; background: #ff3b3b; }
+#player-meta { margin-top: 14px; font-size: 26px; color: #c9ced8; overflow: hidden; }
+#player-state { float: left; }
+#player-time { float: right; }
