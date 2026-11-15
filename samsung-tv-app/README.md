@@ -19,7 +19,8 @@ Edit `js/collection.js`. Each item needs a title, a type and an ID:
 - **Playlist ID**: open the playlist on youtube.com; it is the part after `list=` in the address.
 - **Channel ID**: open the channel page on a computer, choose *More / About → Share channel → Copy channel ID*.
   It starts with `UC`. (A `@handle` will not work.)
-- Optional: `note` (short description) and `image` (picture URL for the tile).
+- Optional: `note` (short description) and `image` (the tile's logo: a file you put in `images/logos/`, or a web address).
+  The 74 shipped logos are the channels' own YouTube profile pictures, saved inside the app.
 
 The library ships with 74 hand-picked channels in six rows (Podcasts, TV Shows, Documentaries,
 Science & Learning, Tech & Engineering, Food & Travel). Every ID was checked against YouTube's

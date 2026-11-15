@@ -54,6 +54,8 @@
         var h = hue(item.title);
         tile.innerHTML = '';
         tile.style.background = 'linear-gradient(135deg, hsl(' + h + ',55%,42%), hsl(' + ((h + 40) % 360) + ',60%,24%))';
+        tile.style.webkitBackgroundClip = 'padding-box';   // keep the colour out of the focus border
+        tile.style.backgroundClip = 'padding-box';
         tile.appendChild(document.createTextNode(initials(item.title)));
         if (item.image) {
             var img = el('img');
