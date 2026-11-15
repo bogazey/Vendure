@@ -1,0 +1,102 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    background: #0d0f14;
+    color: #f2f3f5;
+    font-family: "SamsungOne", "Samsung Sharp Sans", "Helvetica Neue", Arial, sans-serif;
+}
+
+#app { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+.hidden { display: none !important; }
+
+/* ---------- header ---------- */
+#header {
+    position: absolute; top: 0; left: 0; right: 0; height: 120px;
+    padding: 0 90px; z-index: 5;
+    background: linear-gradient(#0d0f14 60%, rgba(13, 15, 20, 0));
+}
+#brand { float: left; line-height: 120px; font-size: 40px; font-weight: 700; letter-spacing: 1px; }
+#brand .dot {
+    display: inline-block; width: 22px; height: 22px; margin-right: 18px;
+    border-radius: 50%; background: #ff3b3b;
+}
+#clock { float: right; line-height: 120px; font-size: 34px; color: #a9afbb; }
+
+.screen { position: absolute; top: 120px; left: 0; width: 1920px; height: 960px; overflow: hidden; }
+
+/* ---------- home ---------- */
+#rows { position: absolute; top: 0; left: 0; width: 1920px; transition: transform 0.25s ease-out; }
+.row { height: 430px; padding-top: 20px; }
+.row-title { height: 60px; padding-left: 90px; font-size: 34px; font-weight: 600; color: #a9afbb; }
+.row.active .row-title { color: #fff; }
+.row-clip { width: 1920px; height: 350px; overflow: hidden; }
+.row-track { white-space: nowrap; padding: 20px 90px; transition: transform 0.25s ease-out; }
+
+.card {
+    display: inline-block; vertical-align: top;
+    width: 260px; margin-right: 30px;
+    transition: transform 0.15s ease-out;
+}
+.tile {
+    position: relative; width: 260px; height: 260px; border-radius: 18px;
+    overflow: hidden; text-align: center; line-height: 260px;
+    font-size: 96px; font-weight: 700; color: rgba(255, 255, 255, 0.92);
+    border: 5px solid transparent;
+}
+.tile img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+.card-title {
+    margin-top: 12px; font-size: 26px; color: #a9afbb;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;
+}
+.card.focused { transform: scale(1.08); }
+.card.focused .tile { border-color: #fff; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7); }
+.card.focused .card-title { color: #fff; }
+
+/* ---------- detail ---------- */
+#detail-side { position: absolute; top: 20px; left: 90px; width: 380px; }
+#detail-side .tile { width: 300px; height: 300px; line-height: 300px; font-size: 110px; }
+#detail-kind { margin-top: 30px; font-size: 24px; letter-spacing: 3px; text-transform: uppercase; color: #ff5a5a; }
+#detail-title { margin-top: 8px; font-size: 44px; font-weight: 700; line-height: 1.15; }
+#detail-note { margin-top: 14px; font-size: 26px; line-height: 1.35; color: #a9afbb; }
+.btn {
+    display: inline-block; margin-top: 34px; padding: 18px 34px;
+    font-size: 28px; font-weight: 600; border-radius: 12px;
+    background: #232733; color: #f2f3f5; border: 4px solid transparent;
+}
+.btn.focused { background: #ff3b3b; color: #fff; border-color: #fff; }
+.hint { margin-top: 30px; font-size: 22px; color: #6d7482; }
+
+#detail-main { position: absolute; top: 20px; left: 520px; width: 1400px; height: 940px; }
+#detail-heading { height: 60px; font-size: 34px; font-weight: 600; padding-left: 20px; }
+#status { padding: 40px 20px; font-size: 30px; line-height: 1.4; color: #a9afbb; width: 1200px; }
+#grid-clip { position: absolute; top: 60px; left: 0; width: 1400px; height: 880px; overflow: hidden; }
+#grid { padding: 16px 20px; transition: transform 0.25s ease-out; }
+
+.ep {
+    display: inline-block; vertical-align: top;
+    width: 310px; height: 280px; margin: 0 20px 20px 0;
+    transition: transform 0.15s ease-out;
+}
+.ep-thumb {
+    position: relative; width: 310px; height: 174px; border-radius: 12px; overflow: hidden;
+    background: #1b1e27; border: 4px solid transparent;
+}
+.ep-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ep-title {
+    margin-top: 10px; font-size: 22px; line-height: 1.25; height: 55px; overflow: hidden;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.ep-date { margin-top: 4px; font-size: 19px; color: #6d7482; }
+.ep.focused { transform: scale(1.06); }
+.ep.focused .ep-thumb { border-color: #fff; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7); }
+
+/* ---------- toast ---------- */
+#toast {
+    position: absolute; bottom: 60px; left: 50%; width: 900px; margin-left: -450px;
+    padding: 22px 30px; border-radius: 14px; text-align: center;
+    font-size: 28px; background: #2a2f3d; color: #fff; z-index: 10;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+}

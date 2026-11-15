@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets" id="http://example.org/WatchlistTV" version="1.0.0" viewmodes="maximized">
+    <tizen:application id="wAtChLsTv1.WatchlistTV" package="wAtChLsTv1" required_version="2.3"/>
+    <tizen:profile name="tv"/>
+    <name>Watchlist TV</name>
+    <description>Your podcasts, TV shows and YouTube channels in one place. Pick an episode and it opens in YouTube.</description>
+    <author>Watchlist TV</author>
+    <content src="index.html"/>
+    <icon src="icon.png"/>
+    <feature name="http://tizen.org/feature/screen.size.normal.1080.1920"/>
+    <access origin="*" subdomains="true"/>
+    <tizen:privilege name="http://tizen.org/privilege/internet"/>
+    <tizen:privilege name="http://tizen.org/privilege/application.launch"/>
+    <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable" encryption="disable" install-location="auto" hwkey-event="enable"/>
+    <tizen:metadata key="http://samsung.com/tv/metadata/prelaunch.support" value="false"/>
+</widget>

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=1920, user-scalable=no">
+    <title>Watchlist TV</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="app">
+        <div id="header">
+            <div id="brand"><span class="dot"></span>Watchlist TV</div>
+            <div id="clock"></div>
+        </div>
+
+        <div id="home" class="screen">
+            <div id="rows"></div>
+        </div>
+
+        <div id="detail" class="screen hidden">
+            <div id="detail-side">
+                <div id="detail-tile" class="tile"></div>
+                <div id="detail-kind"></div>
+                <div id="detail-title"></div>
+                <div id="detail-note"></div>
+                <div id="open-btn" class="btn">Open in YouTube</div>
+                <div class="hint">BACK to return</div>
+            </div>
+            <div id="detail-main">
+                <div id="detail-heading">Latest episodes</div>
+                <div id="status"></div>
+                <div id="grid-clip"><div id="grid"></div></div>
+            </div>
+        </div>
+
+        <div id="toast" class="hidden"></div>
+    </div>
+
+    <script src="js/collection.js"></script>
+    <script src="js/youtube.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
