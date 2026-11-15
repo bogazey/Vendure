@@ -21,8 +21,9 @@ Edit `js/collection.js`. Each item needs a title, a type and an ID:
   It starts with `UC`. (A `@handle` will not work.)
 - Optional: `note` (short description) and `image` (picture URL for the tile).
 
-The IDs shipped as examples were written from memory and not checked against YouTube.
-If one is wrong, the app tells you on that item's episode screen.
+The library ships with 74 hand-picked channels in six rows (Podcasts, TV Shows, Documentaries,
+Science & Learning, Tech & Engineering, Food & Travel). Every ID was checked against YouTube's
+feed in November 2026. If a channel is later removed, the app says so on that item's episode screen.
 
 ## Install on the TV
 
