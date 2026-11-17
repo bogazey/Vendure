@@ -87,6 +87,43 @@ var YT = (function () {
 
     /* ---------- opening the YouTube app ---------- */
 
+    /*
+     * Method 1: the TV's casting service (DIAL), the same path a phone uses to cast a video.
+     * POST "v=VIDEO_ID" to the TV's own YouTube endpoint on port 8080; 201 means YouTube took it.
+     */
+    function tvAddresses() {
+        var hosts = [];
+        try {
+            var ip = webapis.network.getIp();
+            if (ip) { hosts.push(ip); }
+        } catch (e) { /* Samsung web APIs not available */ }
+        hosts.push('127.0.0.1');
+        return hosts;
+    }
+
+    function dial(query, cb) {
+        var hosts = tvAddresses();
+        var i = 0;
+        function next() {
+            if (i >= hosts.length) { cb(false); return; }
+            var xhr = new XMLHttpRequest();
+            var done = false;
+            function finish(ok) { if (done) { return; } done = true; if (ok) { cb(true); } else { next(); } }
+            try {
+                xhr.open('POST', 'http://' + hosts[i++] + ':8080/ws/apps/YouTube', true);
+                xhr.timeout = 4000;
+                xhr.setRequestHeader('Content-Type', 'text/plain; charset=utf-8');
+                xhr.onload = function () { finish(xhr.status === 200 || xhr.status === 201); };
+                xhr.onerror = function () { finish(false); };
+                xhr.ontimeout = function () { finish(false); };
+                xhr.send(query);
+            } catch (e) {
+                finish(false);
+            }
+        }
+        next();
+    }
+
     // The YouTube TV app takes its deep link as a query string, e.g. "v=VIDEO_ID" or "list=PLAYLIST_ID".
     function launch(query, webUrl, cb) {
         cb = cb || function () {};
@@ -98,6 +135,13 @@ var YT = (function () {
             return;
         }
 
+        dial(query, function (ok) {
+            if (ok) { cb(null, 'dial'); } else { appControl(query, cb); }
+        });
+    }
+
+    // Method 2: Tizen app control with the query as payload. On some TVs YouTube ignores it and opens its home screen.
+    function appControl(query, cb) {
         var data = [new tizen.ApplicationControlData('PAYLOAD', [JSON.stringify({ values: query })])];
         var control = new tizen.ApplicationControl('http://tizen.org/appcontrol/operation/view', null, null, null, data);
         var attempt = 0;
@@ -106,7 +150,7 @@ var YT = (function () {
             if (attempt >= APP_IDS.length) { plainLaunch(0); return; }
             var appId = APP_IDS[attempt++];
             try {
-                tizen.application.launchAppControl(control, appId, function () { cb(null); }, next);
+                tizen.application.launchAppControl(control, appId, function () { cb(null, 'appcontrol'); }, next);
             } catch (e) {
                 next();
             }
@@ -116,7 +160,7 @@ var YT = (function () {
         function plainLaunch(i) {
             if (i >= APP_IDS.length) { cb('no-youtube'); return; }
             try {
-                tizen.application.launch(APP_IDS[i], function () { cb(null); }, function () { plainLaunch(i + 1); });
+                tizen.application.launch(APP_IDS[i], function () { cb(null, 'plain'); }, function () { plainLaunch(i + 1); });
             } catch (e) {
                 plainLaunch(i + 1);
             }
@@ -126,7 +170,7 @@ var YT = (function () {
     }
 
     function openVideo(videoId, cb) {
-        launch('v=' + videoId, 'https://www.youtube.com/watch?v=' + videoId, cb);
+        launch('v=' + videoId + '&t=0', 'https://www.youtube.com/watch?v=' + videoId, cb);
     }
 
     function openItem(item, cb) {

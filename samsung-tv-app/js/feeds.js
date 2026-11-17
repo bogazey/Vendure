@@ -38,6 +38,14 @@ var Feeds = (function () {
             if (!url) { continue; }
             var type = attr(node, 'enclosure', 'type');
             var isVideo = type.indexOf('video') === 0 || /\.(mp4|m4v|mov)(\?|$)/i.test(url);
+            var captions = '';
+            var transcripts = node.getElementsByTagName('podcast:transcript');
+            for (var t = 0; t < transcripts.length && !captions; t++) {
+                var tType = transcripts[t].getAttribute('type') || '';
+                if (tType === 'text/vtt' || tType === 'application/x-subrip' || tType === 'application/srt') {
+                    captions = transcripts[t].getAttribute('url') || '';
+                }
+            }
             out.push({
                 id: text(node, 'guid') || url,
                 title: text(node, 'title'),
@@ -46,6 +54,7 @@ var Feeds = (function () {
                 video: isVideo,
                 // Audio shows often ship huge square artwork per episode; the show logo is used for those instead.
                 thumb: isVideo ? (attr(node, 'media:thumbnail', 'url') || attr(node, 'itunes:image', 'href')) : '',
+                captions: captions,
                 duration: seconds(text(node, 'itunes:duration') || attr(node, 'media:content', 'duration'))
             });
         }
@@ -65,7 +74,7 @@ var Feeds = (function () {
     }
 
     function loadEpisodes(item, cb) {
-        var key = 'rss:' + item.url;
+        var key = 'rss2:' + item.url;
         var cached = readCache(key);
         if (cached) { cb(null, cached); return; }
 

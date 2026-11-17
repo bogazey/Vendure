@@ -40,6 +40,16 @@ To add one, find the show's podcast feed (RSS) address on its website and add:
 Player remote keys: OK or Play/Pause pauses and resumes, LEFT goes back 10 s, RIGHT forward 30 s,
 Rewind / Fast-forward jump a minute, BACK or Stop leaves. An episode resumes where you left it.
 
+### Captions and Arabic
+
+Press UP in the player to switch captions: Off → English → العربية. The choice is remembered.
+Captions only exist where the show publishes them in its feed (`podcast:transcript`, WebVTT or SRT);
+for other episodes the player says "No captions for this episode".
+
+Arabic is machine-translated from the English captions as the episode plays, using the Google Cloud
+Translation API. It needs your own API key: copy `js/local-config.example.js` to `js/local-config.js`
+(not committed) and paste the key in. The first 500,000 characters a month are free.
+
 Only shows that offer a feed with direct media files work. Shows that only embed a player on
 their web page cannot be added this way.
 

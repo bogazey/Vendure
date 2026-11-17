@@ -130,3 +130,16 @@ html, body {
 #player-meta { margin-top: 14px; font-size: 26px; color: #c9ced8; overflow: hidden; }
 #player-state { float: left; }
 #player-time { float: right; }
+
+/* ---------- captions ---------- */
+#player-captions {
+    position: absolute; left: 160px; right: 160px; bottom: 250px; text-align: center; z-index: 2;
+}
+#player-captions.low { bottom: 70px; }
+#player-caption-text {
+    display: inline-block; padding: 10px 22px; border-radius: 8px;
+    font-size: 44px; line-height: 1.35; color: #fff; background: rgba(0, 0, 0, 0.78);
+    white-space: pre-line;
+}
+#player-captions.rtl #player-caption-text { direction: rtl; font-family: "SamsungOneArabic", "Noto Naskh Arabic", "Geeza Pro", Arial, sans-serif; }
+#player-cc { float: right; margin-right: 40px; color: #ffcf4a; }

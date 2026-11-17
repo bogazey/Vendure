@@ -5,19 +5,26 @@
  *   Player.key(code)                      remote-control key while the player is open
  *
  * Remote: OK / Play-Pause = pause or resume, LEFT = back 10 s, RIGHT = forward 30 s,
- *         Rewind / Fast-forward = 1 minute, BACK or Stop = leave the player.
+ *         Rewind / Fast-forward = 1 minute, UP = captions (Off / English / Arabic),
+ *         BACK or Stop = leave the player.
  * The position is remembered per episode, so an episode resumes where you left it.
  *
  * Plain ES5 for older Tizen TVs.
  */
 var Player = (function () {
     var KEY = {
-        LEFT: 37, RIGHT: 39, ENTER: 13, SPACE: 32, BACK: 10009, ESC: 27, BACKSPACE: 8,
+        LEFT: 37, UP: 38, RIGHT: 39, ENTER: 13, SPACE: 32, BACK: 10009, ESC: 27, BACKSPACE: 8,
         PLAY: 415, PAUSE: 19, PLAY_PAUSE: 10252, STOP: 413, REWIND: 412, FAST_FORWARD: 417
     };
     var HIDE_AFTER_MS = 4000;
 
     var media, current, onClose, hideTimer, saveTimer, isOpen = false;
+    var CC_MODES = ['off', 'en', 'ar'];
+    var CC_LABELS = { off: 'Captions off', en: 'CC English', ar: 'CC العربية' };
+    var cues = null, cueIndex = -1, ccMode = 'off', ccLoading = false;
+
+    try { ccMode = localStorage.getItem('cc:mode') || 'off'; } catch (e) { /* ignore */ }
+    if (CC_MODES.indexOf(ccMode) < 0) { ccMode = 'off'; }
 
     function $(id) { return document.getElementById(id); }
 
@@ -45,11 +52,71 @@ var Player = (function () {
         try { return parseInt(localStorage.getItem(posKey()), 10) || 0; } catch (e) { return 0; }
     }
 
+    /* ---------- captions ---------- */
+
+    function renderCaption() {
+        var box = $('player-captions');
+        if (ccMode === 'off' || !cues || !media) { box.className = 'hidden'; return; }
+        var t = media.currentTime;
+        cueIndex = Captions.find(cues, t, cueIndex);
+        if (cueIndex < 0) { box.className = 'hidden'; }
+        else {
+            var cue = cues[cueIndex];
+            var text = cue.text;
+            if (ccMode === 'ar') { text = cue.ar !== undefined ? cue.ar : '…'; }
+            $('player-caption-text').textContent = text;
+            box.className = (ccMode === 'ar' ? 'rtl' : '') + ($('player-bar').className === 'faded' ? ' low' : '');
+        }
+        // Keep Arabic translated a little ahead of playback.
+        if (ccMode === 'ar') {
+            var ahead = cueIndex >= 0 ? cueIndex : Captions.find(cues, t + 30, 0);
+            for (var i = Math.max(0, ahead); i < cues.length && i < ahead + 40; i++) {
+                if (cues[i].ar === undefined) { Captions.translate(cues, i, ccError); break; }
+            }
+        }
+    }
+
+    function ccError(err) {
+        if (!err) { if (/translation|Arabic/.test($('player-status').textContent)) { status(''); } return; }
+        if (err === 'no-key') { status('Arabic captions need a translation key (see README)'); }
+        else if (err) { status('Arabic translation unavailable right now'); }
+    }
+
+    function ccLabel() {
+        $('player-cc').textContent = current && current.episode.captions ? CC_LABELS[ccMode] : '';
+    }
+
+    function loadCaptions() {
+        cues = null; cueIndex = -1;
+        ccLabel();
+        if (!current.episode.captions) { return; }
+        ccLoading = true;
+        var episodeId = current.episode.id;
+        Captions.load(current.episode.captions, function (err, list) {
+            if (!isOpen || current.episode.id !== episodeId) { return; }
+            ccLoading = false;
+            if (err) { $('player-cc').textContent = 'Captions unavailable'; return; }
+            cues = list;
+            renderCaption();
+        });
+    }
+
+    function cycleCaptions() {
+        if (!current.episode.captions) { status('No captions for this episode'); return; }
+        ccMode = CC_MODES[(CC_MODES.indexOf(ccMode) + 1) % CC_MODES.length];
+        try { localStorage.setItem('cc:mode', ccMode); } catch (e) { /* ignore */ }
+        status(ccLoading ? 'Loading captions…' : '');
+        if (ccMode === 'ar' && !Captions.hasKey()) { ccError('no-key'); }
+        ccLabel();
+        renderCaption();
+    }
+
     function render() {
         var duration = media.duration && isFinite(media.duration) ? media.duration : (current.episode.duration || 0);
         $('player-time').textContent = clock(media.currentTime) + ' / ' + (duration ? clock(duration) : '--:--');
         $('player-fill').style.width = (duration ? Math.min(100, media.currentTime / duration * 100) : 0) + '%';
         $('player-state').textContent = media.paused ? 'Paused' : 'Playing';
+        renderCaption();
     }
 
     function showBar() {
@@ -87,6 +154,8 @@ var Player = (function () {
         media.removeAttribute('src');
         media.load();
         $('player').className = 'hidden';
+        $('player-captions').className = 'hidden';
+        cues = null;
         var done = onClose;
         onClose = null;
         if (done) { done(reason); }
@@ -121,6 +190,7 @@ var Player = (function () {
 
         $('player').className = '';
         showBar();
+        loadCaptions();
 
         var resumeAt = savedPosition();
         media.onloadedmetadata = function () {
@@ -153,6 +223,7 @@ var Player = (function () {
         if (code === KEY.ENTER || code === KEY.SPACE || code === KEY.PLAY_PAUSE) { toggle(); }
         else if (code === KEY.PLAY) { media.play(); }
         else if (code === KEY.PAUSE) { media.pause(); }
+        else if (code === KEY.UP) { cycleCaptions(); }
         else if (code === KEY.LEFT) { seek(-10); }
         else if (code === KEY.RIGHT) { seek(30); }
         else if (code === KEY.REWIND) { seek(-60); }

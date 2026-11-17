@@ -230,8 +230,10 @@
         renderHome();
     }
 
-    function launched(err) {
-        if (err) { toast('Could not open YouTube. Is the YouTube app installed on this TV?'); }
+    function launched(err, method) {
+        if (err) { toast('Could not open YouTube. Is the YouTube app installed on this TV?'); return; }
+        // Remember which way of opening YouTube this TV accepted; handy when reporting problems.
+        try { localStorage.setItem('yt:lastMethod', method || ''); } catch (e) { /* ignore */ }
     }
 
     // Independent shows play inside the app.

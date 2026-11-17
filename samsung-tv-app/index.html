@@ -37,20 +37,24 @@
             <video id="media" preload="auto"></video>
             <div id="player-art" class="hidden"></div>
             <div id="player-status"></div>
+            <div id="player-captions" class="hidden"><span id="player-caption-text"></span></div>
             <div id="player-bar">
                 <div id="player-show"></div>
                 <div id="player-title"></div>
                 <div id="player-track"><div id="player-fill"></div></div>
-                <div id="player-meta"><span id="player-state"></span><span id="player-time"></span></div>
+                <div id="player-meta"><span id="player-state"></span><span id="player-time"></span><span id="player-cc"></span></div>
             </div>
         </div>
 
         <div id="toast" class="hidden"></div>
     </div>
 
+    <script src="$WEBAPIS/webapis/webapis.js"></script>
+    <script src="js/local-config.js"></script>
     <script src="js/collection.js"></script>
     <script src="js/youtube.js"></script>
     <script src="js/feeds.js"></script>
+    <script src="js/captions.js"></script>
     <script src="js/player.js"></script>
     <script src="js/app.js"></script>
 </body>
