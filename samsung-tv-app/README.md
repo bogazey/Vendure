@@ -81,5 +81,6 @@ The built-in player was tested with real feeds but stand-in media files; the sho
 MP4 / MP3 files are standard formats Samsung TVs play, but were not played on a TV.
 To open a specific video the app first uses the TV's casting service (a DIAL request to port 8080
 on the TV, the path a phone uses to cast), then falls back to a Tizen app-control deep link, which on
-a UA65DU7000 opened only YouTube's home screen. Neither method is documented by Samsung. The method
+a UA65DU7000 opened only YouTube's home screen. The casting method is confirmed to open the exact
+video on a UA65DU7000 (Tizen 9.0). Neither method is documented by Samsung. The method
 that worked last is saved as `yt:lastMethod` in the app's local storage. The code is in `js/youtube.js`.
