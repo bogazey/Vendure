@@ -21,6 +21,28 @@
  */
 var COLLECTION = [
     {
+        title: 'Sleep Stories', tab: 'Sleep',
+        items: [
+            { title: 'Nothing Much Happens', type: 'feed', url: 'https://feeds.megaphone.fm/SSM2868305742', image: 'images/logos/sleep-nothing-much-happens.jpg', note: 'Gentle stories where nothing much happens, read twice, the second time slower.' },
+            { title: 'Get Sleepy', type: 'feed', url: 'https://feeds.megaphone.fm/SGP8517078272', image: 'images/logos/sleep-get-sleepy.jpg', note: 'Calming stories with a short relaxation at the start.' },
+            { title: 'Sleep With Me', type: 'feed', url: 'https://rss.pdrl.fm/5d8327/feed.sleepwithmepodcast.com/', image: 'images/logos/sleep-sleep-with-me.jpg', note: 'Scooter\'s rambling, deliberately boring bedtime tales. A cult favourite.' },
+            { title: 'I Can\'t Sleep', type: 'feed', url: 'https://feeds.megaphone.fm/GLSS7026966538', image: 'images/logos/sleep-i-cant-sleep.jpg', note: 'Benjamin Boster reads calm facts about places and things.' },
+            { title: 'Boring Books for Bedtime', type: 'feed', url: 'https://rss.libsyn.com/shows/132502/destinations/810167.xml', image: 'images/logos/sleep-boring-books.jpg', note: 'Old, dry public-domain books, read slowly.' },
+            { title: 'Sleepy', type: 'feed', url: 'https://feeds.megaphone.fm/ARML3332065614', image: 'images/logos/sleep-sleepy-otis.jpg', note: 'Otis Gray reads classic literature in a soft voice.' },
+            { title: 'Sleepy Time Tales', type: 'feed', url: 'https://feeds.redcircle.com/43bebe85-ae7d-4fb3-a8b7-46f943e2e8b7', image: 'images/logos/sleep-sleepy-time-tales.jpg', note: 'Classic stories and travel tales read for relaxation.' }
+        ]
+    },
+    {
+        title: 'Sleep Meditation & Sounds', tab: 'Sleep',
+        items: [
+            { title: 'Sleep Cove', type: 'feed', url: 'https://feeds.megaphone.fm/ARML2818067425', image: 'images/logos/sleep-sleep-cove.jpg', note: 'Guided sleep meditation and sleep hypnosis.' },
+            { title: 'Sleep Magic', type: 'feed', url: 'https://feeds.megaphone.fm/sleepmagic', image: 'images/logos/sleep-sleep-magic.jpg', note: 'Sleep hypnosis and meditation.' },
+            { title: 'The Sleep Retreat', type: 'feed', url: 'https://feeds.megaphone.fm/thesleepretreat', image: 'images/logos/sleep-sleep-retreat.jpg', note: 'Long bedtime stories with relaxing sounds.' },
+            { title: 'Tracks To Relax', type: 'feed', url: 'https://feeds.acast.com/public/shows/60f9c4eb7dd5480012f98d21', image: 'images/logos/sleep-tracks-to-relax.jpg', note: 'Sleep meditations and bedtime stories.' },
+            { title: 'Slow Radio', type: 'feed', url: 'https://podcasts.files.bbci.co.uk/p05k5bq0.rss', image: 'images/logos/sleep-slow-radio.jpg', note: 'BBC Radio 3\'s immersive soundscapes of nature and places. Finished in 2024.' }
+        ]
+    },
+    {
         title: 'Independent Video Shows', tab: 'Independent',
         items: [
             { title: 'This Week in Tech', type: 'feed', url: 'https://feeds.twit.tv/twit_video_hd.xml', image: 'images/logos/twit.jpg', note: 'Leo Laporte and guests on the week\'s tech news. Video.' },

@@ -150,7 +150,7 @@ html, body {
 #player-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
 #player-hints { position: absolute; right: 80px; top: 56px; font-size: 22px; color: #c9ced8; text-shadow: 0 2px 8px #000; z-index: 2; }
 #player-hints > span { margin-left: 26px; }
-#player-status { position: absolute; left: 80px; top: 56px; font-size: 26px; color: #f4f5f8; text-shadow: 0 2px 8px #000; z-index: 2; }
+#player-status { position: absolute; left: 80px; top: 56px; font-size: 26px; color: #f4f5f8; text-shadow: 0 2px 8px #000; z-index: 6; }
 #player-captions { position: absolute; left: 160px; right: 160px; top: 540px; text-align: center; z-index: 2; }
 #player-captions.low { top: auto; bottom: 80px; }
 #player-caption-text {
@@ -195,3 +195,8 @@ html, body {
     padding: 22px 30px; border-radius: 16px; text-align: center; font-size: 28px;
     background: rgba(32, 35, 46, 0.96); color: #fff; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
 }
+
+/* sleep timer: the screen fades to near-black while the timer runs */
+#player-dim { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 5; background: #000; opacity: 0;
+    transition: opacity 3s; pointer-events: none; }
+#player-dim.on { opacity: 0.96; }

@@ -7,7 +7,7 @@
  */
 (function () {
     var KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, ENTER: 13, BACK: 10009, ESC: 27, BACKSPACE: 8 };
-    var TAB_ORDER = ['Home', 'Shows', 'Podcasts', 'Learn', 'Docs', 'Food & Travel', 'Independent'];
+    var TAB_ORDER = ['Home', 'Shows', 'Podcasts', 'Learn', 'Docs', 'Food & Travel', 'Sleep', 'Independent'];
     var EP_STEP = 448;        // episode card width + margin
     var SHOW_STEP = 194;      // show card width + margin
     var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

@@ -19,6 +19,16 @@ latest episodes; pick an episode and it opens in the TV's YouTube app.
 
 YouTube episodes open in the YouTube app; independent shows play in the built-in player.
 
+### Sleep
+
+The **Sleep** tab has 12 sleep podcasts that play in the app: *Sleep Stories* (Nothing Much Happens,
+Get Sleepy, Sleep With Me, I Can't Sleep, Boring Books for Bedtime, Sleepy, Sleepy Time Tales) and
+*Sleep Meditation & Sounds* (Sleep Cove, Sleep Magic, The Sleep Retreat, Tracks To Relax, BBC Slow Radio).
+
+In the player, press **DOWN** for the sleep timer: Off → 15 → 30 → 45 → 60 → 90 minutes (remembered).
+While it runs the screen fades to near-black after 20 seconds without a key press; in the last 30 seconds
+the sound fades out, then playback pauses and the position is saved. Any key wakes the screen; OK resumes.
+
 ## Change the collection
 
 Edit `js/collection.js`. Each item needs a title, a type and an ID:

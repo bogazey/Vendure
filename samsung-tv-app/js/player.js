@@ -6,6 +6,7 @@
  *
  * Remote: OK / Play-Pause = pause or resume, LEFT = back 10 s, RIGHT = forward 30 s,
  *         Rewind / Fast-forward = 1 minute, UP = captions (Off / English / Arabic),
+ *         DOWN = sleep timer (Off / 15 / 30 / 45 / 60 / 90 min),
  *         BACK or Stop = leave the player.
  * The position is remembered per episode, so an episode resumes where you left it.
  *
@@ -13,7 +14,7 @@
  */
 var Player = (function () {
     var KEY = {
-        LEFT: 37, UP: 38, RIGHT: 39, ENTER: 13, SPACE: 32, BACK: 10009, ESC: 27, BACKSPACE: 8,
+        LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, ENTER: 13, SPACE: 32, BACK: 10009, ESC: 27, BACKSPACE: 8,
         PLAY: 415, PAUSE: 19, PLAY_PAUSE: 10252, STOP: 413, REWIND: 412, FAST_FORWARD: 417
     };
     var HIDE_AFTER_MS = 4000;
@@ -145,6 +146,67 @@ var Player = (function () {
         renderCaption();
     }
 
+    /* ---------- sleep timer ----------
+     * DOWN cycles the timer. While it runs, the screen goes dark after DIM_AFTER_MS without a key press;
+     * in the last 30 s the sound fades out, then playback pauses (the position is saved).
+     */
+    var SLEEP_STEPS = [0, 15, 30, 45, 60, 90];
+    var DIM_AFTER_MS = 20000, FADE_MS = 30000;
+    var sleepMins = 0, sleepEnd = 0, sleepTimer = null, dimTimer = null;
+    try { sleepMins = parseInt(localStorage.getItem('sleep:mins'), 10) || 0; } catch (e) { sleepMins = 0; }
+    if (SLEEP_STEPS.indexOf(sleepMins) < 0) { sleepMins = 0; }
+
+    function sleepLabel() {
+        var text = 'Off';
+        if (sleepEnd) { text = Math.max(1, Math.ceil((sleepEnd - Date.now()) / 60000)) + ' min'; }
+        $('player-sleep').innerHTML = '<b>☾</b> ' + text;
+        $('player-sleep').className = 'c cc' + (sleepEnd ? ' on' : '');
+    }
+
+    function startSleep() {
+        clearInterval(sleepTimer);
+        media.volume = 1;
+        sleepEnd = sleepMins ? Date.now() + sleepMins * 60000 : 0;
+        if (sleepEnd) { sleepTimer = setInterval(sleepTick, 1000); }
+        sleepLabel();
+        scheduleDim();
+    }
+
+    function sleepTick() {
+        if (!isOpen || !sleepEnd) { return; }
+        var left = sleepEnd - Date.now();
+        if (left <= 0) {
+            clearInterval(sleepTimer);
+            sleepEnd = 0;
+            media.pause();
+            media.volume = 1;
+            savePosition();
+            status('Sleep timer ended — press OK to keep listening');
+            setDim(true);
+        } else if (left < FADE_MS) {
+            media.volume = Math.max(0, left / FADE_MS);
+        }
+        sleepLabel();
+    }
+
+    function cycleSleep() {
+        sleepMins = SLEEP_STEPS[(SLEEP_STEPS.indexOf(sleepMins) + 1) % SLEEP_STEPS.length];
+        try { localStorage.setItem('sleep:mins', String(sleepMins)); } catch (e) { /* ignore */ }
+        startSleep();
+        var message = sleepMins ? 'Sleep timer: stops in ' + sleepMins + ' min' : 'Sleep timer off';
+        status(message);
+        setTimeout(function () { if ($('player-status').textContent === message) { status(''); } }, 3000);
+    }
+
+    function setDim(on) { $('player-dim').className = on ? 'on' : ''; }
+
+    function scheduleDim() {
+        clearTimeout(dimTimer);
+        setDim(false);
+        if (!sleepEnd) { return; }
+        dimTimer = setTimeout(function () { if (isOpen && sleepEnd && !media.paused) { setDim(true); } }, DIM_AFTER_MS);
+    }
+
     function showBar() {
         $('player-bar').className = '';
         clearTimeout(hideTimer);
@@ -176,6 +238,10 @@ var Player = (function () {
         isOpen = false;
         clearTimeout(hideTimer);
         clearInterval(saveTimer);
+        clearInterval(sleepTimer);
+        clearTimeout(dimTimer);
+        setDim(false);
+        media.volume = 1;
         media.pause();
         media.removeAttribute('src');
         media.load();
@@ -248,16 +314,26 @@ var Player = (function () {
 
         clearInterval(saveTimer);
         saveTimer = setInterval(savePosition, 5000);
+        startSleep();
     }
 
     function key(code) {
         if (!isOpen) { return; }
         if (code === KEY.BACK || code === KEY.ESC || code === KEY.BACKSPACE || code === KEY.STOP) { close('back'); return; }
+        // While dark, the first key only wakes the screen (OK after the timer ended also resumes).
+        if ($('player-dim').className === 'on') {
+            scheduleDim();
+            showBar();
+            if (code === KEY.ENTER && media.paused) { status(''); startSleep(); media.play(); }
+            return;
+        }
+        scheduleDim();
         showBar();
         if (code === KEY.ENTER || code === KEY.SPACE || code === KEY.PLAY_PAUSE) { toggle(); }
         else if (code === KEY.PLAY) { media.play(); }
         else if (code === KEY.PAUSE) { media.pause(); }
         else if (code === KEY.UP) { cycleCaptions(); }
+        else if (code === KEY.DOWN) { cycleSleep(); }
         else if (code === KEY.LEFT) { seek(-10); }
         else if (code === KEY.RIGHT) { seek(30); }
         else if (code === KEY.REWIND) { seek(-60); }

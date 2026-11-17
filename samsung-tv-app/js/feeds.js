@@ -7,7 +7,7 @@
  * Plain ES5 for older Tizen TVs.
  */
 var Feeds = (function () {
-    var CACHE_MS = 30 * 60 * 1000;
+    var CACHE_MS = 6 * 60 * 60 * 1000;   // podcast feeds can be several MB; refresh every 6 hours
     var MAX_EPISODES = 50;
 
     function text(node, name) {
