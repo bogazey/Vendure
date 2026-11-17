@@ -1,7 +1,8 @@
 /*
  * YOUR COLLECTION — this is the only file you need to edit.
  *
- * Each section is one row on the home screen. Each item is one tile.
+ * Each section is one row of shows. `tab` picks the tab it appears under at the top of the
+ * screen (sections with the same tab share it). Each item is one show.
  *
  *   title  Name shown under the tile.
  *   type   'channel'  -> id is a YouTube channel ID (starts with "UC", 24 characters)
@@ -20,7 +21,7 @@
  */
 var COLLECTION = [
     {
-        title: 'Independent Shows · plays in the app',
+        title: 'Independent Video Shows', tab: 'Independent',
         items: [
             { title: 'This Week in Tech', type: 'feed', url: 'https://feeds.twit.tv/twit_video_hd.xml', image: 'images/logos/twit.jpg', note: 'Leo Laporte and guests on the week\'s tech news. Video.' },
             { title: 'Security Now', type: 'feed', url: 'https://feeds.twit.tv/sn_video_hd.xml', image: 'images/logos/security-now.jpg', note: 'Steve Gibson on security and privacy, in depth. Video.' },
@@ -31,7 +32,7 @@ var COLLECTION = [
         ]
     },
     {
-        title: 'Independent Podcasts · plays in the app',
+        title: 'Independent Podcasts', tab: 'Independent',
         items: [
             { title: 'Hardcore History', type: 'feed', url: 'https://feeds.feedburner.com/dancarlin/history', note: 'Dan Carlin\'s epic history series. Audio.' },
             { title: 'Acquired', type: 'feed', url: 'https://feeds.transistor.fm/acquired', image: 'images/logos/acquired.jpg', note: 'The stories behind great companies. Audio.' },
@@ -41,7 +42,7 @@ var COLLECTION = [
         ]
     },
     {
-        title: 'Podcasts',
+        title: 'Podcasts', tab: 'Podcasts',
         items: [
             { title: 'Lex Fridman Podcast', type: 'channel', id: 'UCSHZKyawb77ixDdsGog4iWA', image: 'images/logos/UCSHZKyawb77ixDdsGog4iWA.jpg', note: 'Long, deep conversations with scientists, founders and historians.' },
             { title: 'The Diary Of A CEO', type: 'channel', id: 'UCGq-a57w-aPwyi3pW7XLiHw', image: 'images/logos/UCGq-a57w-aPwyi3pW7XLiHw.jpg', note: 'Steven Bartlett interviews founders, doctors and experts.' },
@@ -60,7 +61,7 @@ var COLLECTION = [
         ]
     },
     {
-        title: 'TV Shows',
+        title: 'TV Shows', tab: 'Shows',
         items: [
             { title: 'Last Week Tonight', type: 'channel', id: 'UC3XTzVzaHQEd30rQbuvCtTQ', image: 'images/logos/UC3XTzVzaHQEd30rQbuvCtTQ.jpg', note: 'John Oliver\'s weekly deep dive into one big story.' },
             { title: 'The Daily Show', type: 'channel', id: 'UCwWhs_6x42TyRM4Wstoq8HA', image: 'images/logos/UCwWhs_6x42TyRM4Wstoq8HA.jpg', note: 'Daily news satire.' },
@@ -78,7 +79,7 @@ var COLLECTION = [
         ]
     },
     {
-        title: 'Documentaries',
+        title: 'Documentaries', tab: 'Docs',
         items: [
             { title: 'DW Documentary', type: 'channel', id: 'UCW39zufHfsuGgpLviKh297Q', image: 'images/logos/UCW39zufHfsuGgpLviKh297Q.jpg', note: 'Full-length documentaries from around the world.' },
             { title: 'FRONTLINE PBS', type: 'channel', id: 'UC3ScyryU9Oy9Wse3a8OAmYQ', image: 'images/logos/UC3ScyryU9Oy9Wse3a8OAmYQ.jpg', note: 'Award-winning investigative films, free in full.' },
@@ -95,7 +96,7 @@ var COLLECTION = [
         ]
     },
     {
-        title: 'Science & Learning',
+        title: 'Science & Learning', tab: 'Learn',
         items: [
             { title: 'Kurzgesagt', type: 'channel', id: 'UCsXVk37bltHxD1rDPwtNM8Q', image: 'images/logos/UCsXVk37bltHxD1rDPwtNM8Q.jpg', note: 'Beautifully animated explainers about science and life.' },
             { title: 'Veritasium', type: 'channel', id: 'UCHnyfMqiRRG1u-2MsSQLbXA', image: 'images/logos/UCHnyfMqiRRG1u-2MsSQLbXA.jpg', note: 'Science and engineering stories, deeply researched.' },
@@ -115,7 +116,7 @@ var COLLECTION = [
         ]
     },
     {
-        title: 'Tech & Engineering',
+        title: 'Tech & Engineering', tab: 'Learn',
         items: [
             { title: 'Marques Brownlee', type: 'channel', id: 'UCBJycsmduvYEL83R_U4JriQ', image: 'images/logos/UCBJycsmduvYEL83R_U4JriQ.jpg', note: 'The benchmark for tech reviews.' },
             { title: 'Mrwhosetheboss', type: 'channel', id: 'UCMiJRAwDNSNzuYeN2uWa0pA', image: 'images/logos/UCMiJRAwDNSNzuYeN2uWa0pA.jpg', note: 'Phones and gadgets, tested.' },
@@ -131,7 +132,7 @@ var COLLECTION = [
         ]
     },
     {
-        title: 'Food & Travel',
+        title: 'Food & Travel', tab: 'Food & Travel',
         items: [
             { title: 'Gordon Ramsay', type: 'channel', id: 'UCIEv3lZ_tNXHzL3ox-_uUGQ', image: 'images/logos/UCIEv3lZ_tNXHzL3ox-_uUGQ.jpg', note: 'Recipes and the best of his shows.' },
             { title: 'Bon Appétit', type: 'channel', id: 'UCbpMy0Fg74eXXkvxJrtEn3w', image: 'images/logos/UCbpMy0Fg74eXXkvxJrtEn3w.jpg', note: 'Test-kitchen cooking.' },

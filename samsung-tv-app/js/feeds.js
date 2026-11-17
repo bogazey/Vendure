@@ -20,6 +20,11 @@ var Feeds = (function () {
         return found.length ? (found[0].getAttribute(attribute) || '') : '';
     }
 
+    function plain(html) {
+        return html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#39;|&#8217;/g, "'")
+            .replace(/&quot;|&#8220;|&#8221;/g, '"').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '').substring(0, 400);
+    }
+
     // "1:02:03", "62:03" or "3723" -> seconds
     function seconds(value) {
         if (!value) { return 0; }
@@ -54,6 +59,7 @@ var Feeds = (function () {
                 video: isVideo,
                 // Audio shows often ship huge square artwork per episode; the show logo is used for those instead.
                 thumb: isVideo ? (attr(node, 'media:thumbnail', 'url') || attr(node, 'itunes:image', 'href')) : '',
+                description: plain(text(node, 'itunes:summary') || text(node, 'description')),
                 captions: captions,
                 duration: seconds(text(node, 'itunes:duration') || attr(node, 'media:content', 'duration'))
             });
@@ -74,7 +80,7 @@ var Feeds = (function () {
     }
 
     function loadEpisodes(item, cb) {
-        var key = 'rss2:' + item.url;
+        var key = 'rss3:' + item.url;
         var cached = readCache(key);
         if (cached) { cb(null, cached); return; }
 

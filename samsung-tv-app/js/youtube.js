@@ -54,7 +54,9 @@ var YT = (function () {
                 id: id,
                 title: firstText(entries[i], ['title']),
                 published: firstText(entries[i], ['published']),
-                thumb: 'https://i.ytimg.com/vi/' + id + '/mqdefault.jpg'
+                thumb: 'https://i.ytimg.com/vi/' + id + '/mqdefault.jpg',
+                backdrop: 'https://i.ytimg.com/vi/' + id + '/maxresdefault.jpg',
+                description: firstText(entries[i], ['media:description', 'description']).substring(0, 400)
             });
         }
         return out;
@@ -74,7 +76,7 @@ var YT = (function () {
 
     // cb(error, episodes)
     function loadEpisodes(item, cb) {
-        var key = 'feed2:' + item.type + ':' + item.id;
+        var key = 'feed3:' + item.type + ':' + item.id;
         var cached = readCache(key);
         if (cached) { cb(null, cached); return; }
 

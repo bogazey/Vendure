@@ -42,10 +42,30 @@ var Player = (function () {
             // Nothing worth resuming in the first 30 s or the last minute.
             if (media.currentTime > 30 && media.currentTime < media.duration - 60) {
                 localStorage.setItem(posKey(), String(Math.floor(media.currentTime)));
+                rememberContinue(Math.floor(media.currentTime), Math.floor(media.duration));
             } else {
                 localStorage.removeItem(posKey());
+                rememberContinue(0, 0);
             }
         } catch (e) { /* ignore */ }
+    }
+
+    // "Continue" row on the home screen: the last 10 episodes left part-way through.
+    function rememberContinue(pos, duration) {
+        var list = [];
+        try { list = JSON.parse(localStorage.getItem('continue')) || []; } catch (e) { list = []; }
+        var kept = [];
+        for (var i = 0; i < list.length; i++) {
+            if (list[i].episode && list[i].episode.id !== current.episode.id) { kept.push(list[i]); }
+        }
+        if (pos > 0) {
+            var it = current.item;
+            kept.unshift({
+                item: { title: it.title, type: it.type, url: it.url, id: it.id, image: it.image, note: it.note },
+                episode: current.episode, pos: pos, duration: duration
+            });
+        }
+        try { localStorage.setItem('continue', JSON.stringify(kept.slice(0, 10))); } catch (e) { /* ignore */ }
     }
 
     function savedPosition() {
@@ -56,6 +76,7 @@ var Player = (function () {
 
     function renderCaption() {
         var box = $('player-captions');
+        var low = $('player-bar').className === 'faded' ? ' low' : '';
         if (ccMode === 'off' || !cues || !media) { box.className = 'hidden'; return; }
         var t = media.currentTime;
         cueIndex = Captions.find(cues, t, cueIndex);
@@ -65,7 +86,7 @@ var Player = (function () {
             var text = cue.text;
             if (ccMode === 'ar') { text = cue.ar !== undefined ? cue.ar : '…'; }
             $('player-caption-text').textContent = text;
-            box.className = (ccMode === 'ar' ? 'rtl' : '') + ($('player-bar').className === 'faded' ? ' low' : '');
+            box.className = (ccMode === 'ar' ? 'rtl' : '') + low;
         }
         // Keep Arabic translated a little ahead of playback.
         if (ccMode === 'ar') {
@@ -83,7 +104,9 @@ var Player = (function () {
     }
 
     function ccLabel() {
-        $('player-cc').textContent = current && current.episode.captions ? CC_LABELS[ccMode] : '';
+        var has = current && current.episode.captions;
+        $('player-cc').innerHTML = has ? '<b>CC</b> ' + (ccMode === 'off' ? 'Off' : ccMode === 'en' ? 'English' : 'العربية') : '<b>CC</b> None';
+        $('player-cc').className = 'c cc' + (has && ccMode !== 'off' ? ' on' : '');
     }
 
     function loadCaptions() {
@@ -95,7 +118,7 @@ var Player = (function () {
         Captions.load(current.episode.captions, function (err, list) {
             if (!isOpen || current.episode.id !== episodeId) { return; }
             ccLoading = false;
-            if (err) { $('player-cc').textContent = 'Captions unavailable'; return; }
+            if (err) { $('player-cc').innerHTML = '<b>CC</b> Unavailable'; return; }
             cues = list;
             renderCaption();
         });
@@ -113,9 +136,12 @@ var Player = (function () {
 
     function render() {
         var duration = media.duration && isFinite(media.duration) ? media.duration : (current.episode.duration || 0);
-        $('player-time').textContent = clock(media.currentTime) + ' / ' + (duration ? clock(duration) : '--:--');
-        $('player-fill').style.width = (duration ? Math.min(100, media.currentTime / duration * 100) : 0) + '%';
-        $('player-state').textContent = media.paused ? 'Paused' : 'Playing';
+        var pct = duration ? Math.min(100, media.currentTime / duration * 100) : 0;
+        $('player-cur').textContent = clock(media.currentTime);
+        $('player-left').textContent = duration ? '-' + clock(duration - media.currentTime) : '';
+        $('player-fill').style.width = pct + '%';
+        $('player-knob').style.left = pct + '%';
+        $('player-pp').className = 'c big' + (media.paused ? ' paused' : '');
         renderCaption();
     }
 
@@ -167,11 +193,15 @@ var Player = (function () {
         onClose = closed;
         isOpen = true;
 
-        $('player-show').textContent = item.title;
+        $('player-show').textContent = item.title + ' · ' + (episode.video ? 'Video' : 'Audio');
         $('player-title').textContent = episode.title;
         $('player-fill').style.width = '0%';
-        $('player-time').textContent = '';
-        $('player-state').textContent = '';
+        $('player-knob').style.left = '0%';
+        $('player-cur').textContent = '';
+        $('player-left').textContent = '';
+        $('player-mini').src = item.image || '';
+        $('player-bg').style.backgroundImage = !episode.video && item.image ? 'url(' + item.image + ')' : 'none';
+        $('player-resume').className = 'hidden';
         status('Loading…');
 
         // Audio episodes show the show's logo instead of a picture.
@@ -194,7 +224,11 @@ var Player = (function () {
 
         var resumeAt = savedPosition();
         media.onloadedmetadata = function () {
-            if (resumeAt > 0 && resumeAt < media.duration - 60) { media.currentTime = resumeAt; }
+            if (resumeAt > 0 && resumeAt < media.duration - 60) {
+                media.currentTime = resumeAt;
+                $('player-resume').textContent = 'Resumed at ' + clock(resumeAt);
+                $('player-resume').className = 'pill';
+            }
             render();
         };
         media.onplaying = function () { status(''); render(); showBar(); };

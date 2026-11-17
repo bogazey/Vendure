@@ -8,41 +8,60 @@
 </head>
 <body>
     <div id="app">
-        <div id="header">
-            <div id="brand"><span class="dot"></span>Watchlist TV</div>
-            <div id="clock"></div>
+        <!-- Full-bleed artwork behind the top of the home and show screens -->
+        <div id="backdrop"><img id="backdrop-img" alt=""></div>
+
+        <div id="topbar">
+            <div id="brand"><span class="mark"></span>Watchlist</div>
+            <div id="tabs"></div>
+            <div id="top-right"><span id="back-hint" class="hidden"><span class="key">BACK</span>Home</span><span id="clock"></span></div>
         </div>
 
+        <!-- Home and category tabs -->
         <div id="home" class="screen">
-            <div id="rows"></div>
+            <div id="page"></div>
         </div>
 
+        <!-- One show -->
         <div id="detail" class="screen hidden">
-            <div id="detail-side">
-                <div id="detail-tile" class="tile"></div>
-                <div id="detail-kind"></div>
-                <div id="detail-title"></div>
-                <div id="detail-note"></div>
-                <div id="open-btn" class="btn">Open in YouTube</div>
-                <div class="hint">BACK to return</div>
-            </div>
-            <div id="detail-main">
-                <div id="detail-heading">Latest episodes</div>
-                <div id="status"></div>
-                <div id="grid-clip"><div id="grid"></div></div>
+            <div id="detail-page">
+                <div class="hero">
+                    <img id="detail-logo" class="dlogo" alt="">
+                    <h1 id="detail-title"></h1>
+                    <div class="meta" id="detail-meta"></div>
+                    <div class="desc" id="detail-note"></div>
+                    <div class="btns" id="detail-btns"></div>
+                </div>
+                <div class="row" id="detail-row">
+                    <div class="rowtitle"><span id="detail-heading">Episodes</span><small id="detail-count"></small></div>
+                    <div id="status"></div>
+                    <div class="clip"><div class="track" id="grid"></div></div>
+                </div>
             </div>
         </div>
 
+        <!-- Built-in player for independent shows -->
         <div id="player" class="hidden">
+            <div id="player-bg"></div>
             <video id="media" preload="auto"></video>
+            <div id="player-hints"><span><span class="key">▲</span>Captions</span><span><span class="key">◀ ▶</span>Skip</span><span><span class="key">OK</span>Pause</span><span><span class="key">BACK</span>Close</span></div>
             <div id="player-art" class="hidden"></div>
             <div id="player-status"></div>
             <div id="player-captions" class="hidden"><span id="player-caption-text"></span></div>
             <div id="player-bar">
-                <div id="player-show"></div>
-                <div id="player-title"></div>
-                <div id="player-track"><div id="player-fill"></div></div>
-                <div id="player-meta"><span id="player-state"></span><span id="player-time"></span><span id="player-cc"></span></div>
+                <div class="row1">
+                    <img id="player-mini" alt="">
+                    <div class="grow"><div id="player-title"></div><div id="player-show"></div></div>
+                    <span id="player-resume" class="hidden"></span>
+                </div>
+                <div id="player-track"><div id="player-fill"></div><div id="player-knob"></div></div>
+                <div class="times"><span id="player-cur"></span><span id="player-left"></span></div>
+                <div class="ctrls">
+                    <div class="c">−10</div>
+                    <div id="player-pp" class="c big"><span class="i-pause"></span><span class="i-play"></span></div>
+                    <div class="c">+30</div>
+                    <div id="player-cc" class="c cc"></div>
+                </div>
             </div>
         </div>
 

@@ -7,6 +7,18 @@ latest episodes; pick an episode and it opens in the TV's YouTube app.
 - Episodes come from YouTube's public feed (latest 15 per channel or playlist) — no account or API key.
 - "Open in YouTube" on each item opens the whole channel or playlist.
 
+## Using it
+
+- **Tabs** at the top: Home, Shows, Podcasts, Learn, Docs, Food & Travel, Independent. Press UP to reach
+  them and LEFT/RIGHT to switch; BACK from anywhere on a page also jumps to the tabs (BACK again exits).
+- **Featured episode**: the newest episode in the current tab, with *Watch now* and *All episodes*.
+- **Rows**: *Continue watching* (independent shows left part-way), *New from your shows*, *Your favourites*,
+  then every section as a row of show logos.
+- **Show page**: *Play latest episode*, *Open channel in YouTube*, and ♥ to add or remove a favourite.
+  Favourites and progress are stored on the TV.
+
+YouTube episodes open in the YouTube app; independent shows play in the built-in player.
+
 ## Change the collection
 
 Edit `js/collection.js`. Each item needs a title, a type and an ID:
