@@ -18,9 +18,22 @@ var YT = (function () {
 
     /* ---------- episodes ---------- */
 
-    function feedUrl(item) {
-        var key = item.type === 'playlist' ? 'playlist_id' : 'channel_id';
-        return FEED + '?' + key + '=' + encodeURIComponent(item.id);
+    // Feeds to try, in order. For a channel, "UULF" + the rest of its id is YouTube's list of
+    // full-length uploads (no Shorts, no live streams); the plain channel feed is the fallback.
+    function feedUrls(item) {
+        if (item.type === 'playlist') { return [FEED + '?playlist_id=' + encodeURIComponent(item.id)]; }
+        var urls = [];
+        if (item.id.indexOf('UC') === 0) { urls.push(FEED + '?playlist_id=' + encodeURIComponent('UULF' + item.id.substring(2))); }
+        urls.push(FEED + '?channel_id=' + encodeURIComponent(item.id));
+        return urls;
+    }
+
+    function isShort(entry) {
+        var links = entry.getElementsByTagName('link');
+        for (var i = 0; i < links.length; i++) {
+            if ((links[i].getAttribute('href') || '').indexOf('/shorts/') >= 0) { return true; }
+        }
+        return false;
     }
 
     function firstText(node, names) {
@@ -36,7 +49,7 @@ var YT = (function () {
         var out = [];
         for (var i = 0; i < entries.length; i++) {
             var id = firstText(entries[i], ['yt:videoId', 'videoId']);
-            if (!id) { continue; }
+            if (!id || isShort(entries[i])) { continue; }
             out.push({
                 id: id,
                 title: firstText(entries[i], ['title']),
@@ -61,12 +74,27 @@ var YT = (function () {
 
     // cb(error, episodes)
     function loadEpisodes(item, cb) {
-        var key = 'feed:' + item.type + ':' + item.id;
+        var key = 'feed2:' + item.type + ':' + item.id;
         var cached = readCache(key);
         if (cached) { cb(null, cached); return; }
 
+        var urls = feedUrls(item);
+        var attempt = 0;
+        function tryNext(lastError) {
+            if (attempt >= urls.length) { cb(lastError); return; }
+            fetchFeed(urls[attempt++], function (err, episodes) {
+                // An empty full-length list (e.g. a channel that only posts Shorts) also falls through.
+                if (err || (!episodes.length && attempt < urls.length)) { tryNext(err || 'not-found'); return; }
+                writeCache(key, episodes);
+                cb(null, episodes);
+            });
+        }
+        tryNext('not-found');
+    }
+
+    function fetchFeed(url, cb) {
         var xhr = new XMLHttpRequest();
-        xhr.open('GET', feedUrl(item), true);
+        xhr.open('GET', url, true);
         xhr.timeout = 15000;
         xhr.onload = function () {
             if (xhr.status === 404) { cb('not-found'); return; }
@@ -76,9 +104,7 @@ var YT = (function () {
                 try { xml = new DOMParser().parseFromString(xhr.responseText, 'text/xml'); } catch (e) { xml = null; }
             }
             if (!xml) { cb('network'); return; }
-            var episodes = parseFeed(xml);
-            writeCache(key, episodes);
-            cb(null, episodes);
+            cb(null, parseFeed(xml));
         };
         xhr.onerror = function () { cb('network'); };
         xhr.ontimeout = function () { cb('network'); };
